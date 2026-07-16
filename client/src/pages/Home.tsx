@@ -14,6 +14,63 @@ import {
   ArrowLeft, Star, Clock, TrendingUp
 } from "lucide-react";
 
+// ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
+type ChatMessage = { from: "user" | "agent"; text: string; delay: number };
+type Scenario = { id: number; label: string; icon: string; color: string; messages: ChatMessage[] };
+
+const SCENARIOS: Scenario[] = [
+  {
+    id: 1,
+    label: "إنشاء فاتورة",
+    icon: "🧾",
+    color: "bg-emerald-500",
+    messages: [
+      { from: "user",  text: "أصدر فاتورة لشركة النور بقيمة 5,000 ريال مقابل خدمات استشارية", delay: 0 },
+      { from: "agent", text: "⏳ جاري البحث عن شركة النور في النظام...", delay: 900 },
+      { from: "agent", text: "✅ تم إنشاء الفاتورة بنجاح!\n\n📄 رقم الفاتورة: SINV-2026-0042\n👤 العميل: شركة النور للتجارة\n💰 المبلغ: 5,000 ريال\n📅 تاريخ الاستحقاق: 2026-08-17\n\nهل تريد إرسال الفاتورة للعميل بالبريد الإلكتروني؟", delay: 2200 },
+      { from: "user",  text: "نعم أرسلها", delay: 3800 },
+      { from: "agent", text: "📧 تم إرسال الفاتورة إلى info@alnoor.com بنجاح ✓", delay: 5000 },
+    ],
+  },
+  {
+    id: 2,
+    label: "قيد محاسبي",
+    icon: "📒",
+    color: "bg-blue-500",
+    messages: [
+      { from: "user",  text: "سجّل قيد: مدين حساب الصندوق 3,000 ريال، دائن المبيعات 3,000 ريال", delay: 0 },
+      { from: "agent", text: "⏳ جاري التحقق من الحسابات...", delay: 800 },
+      { from: "agent", text: "✅ تم تسجيل القيد المحاسبي!\n\n📋 رقم القيد: JV-2026-0189\n📅 التاريخ: 2026-07-17\n\n┌─ مدين: الصندوق — 3,000 ريال\n└─ دائن: المبيعات — 3,000 ريال\n\nالقيد معتمد ومسجّل في دفتر الأستاذ ✓", delay: 2000 },
+    ],
+  },
+  {
+    id: 3,
+    label: "تقرير مبيعات",
+    icon: "📊",
+    color: "bg-purple-500",
+    messages: [
+      { from: "user",  text: "ما إجمالي مبيعات هذا الشهر مقارنةً بالشهر الماضي؟", delay: 0 },
+      { from: "agent", text: "⏳ جاري استخراج تقرير المبيعات...", delay: 700 },
+      { from: "agent", text: "📊 تقرير المبيعات — يوليو 2026\n\n💹 هذا الشهر: 127,450 ريال\n📉 الشهر الماضي: 98,200 ريال\n📈 نسبة النمو: +29.8%\n\n🏆 أعلى عميل: شركة الفجر (32,000 ريال)\n📦 أكثر منتج مبيعاً: خدمات الاستشارات\n\nهل تريد التقرير التفصيلي؟", delay: 1800 },
+      { from: "user",  text: "أرسله على الإيميل", delay: 3200 },
+      { from: "agent", text: "📧 تم إرسال التقرير التفصيلي بصيغة PDF إلى بريدك الإلكتروني ✓", delay: 4400 },
+    ],
+  },
+  {
+    id: 4,
+    label: "تسجيل دفعة",
+    icon: "💳",
+    color: "bg-amber-500",
+    messages: [
+      { from: "user",  text: "سجّل دفعة واردة من شركة الأمل بقيمة 12,000 ريال تحويل بنكي", delay: 0 },
+      { from: "agent", text: "⏳ جاري البحث عن الفواتير المستحقة لشركة الأمل...", delay: 900 },
+      { from: "agent", text: "🔍 وجدت فاتورتين مستحقتين:\n• SINV-2026-0035 — 8,000 ريال\n• SINV-2026-0038 — 4,000 ريال\n\nهل أوزّع الدفعة عليهما؟", delay: 2100 },
+      { from: "user",  text: "نعم", delay: 3300 },
+      { from: "agent", text: "✅ تم تسجيل الدفعة وتسوية الفاتورتين!\n\n💰 المبلغ: 12,000 ريال\n🏦 طريقة الدفع: تحويل بنكي\n📋 رقم سند القبض: RV-2026-0091\n\nرصيد شركة الأمل: 0 ريال (مسدّد بالكامل) ✓", delay: 4800 },
+    ],
+  },
+];
+
 function useInView(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
@@ -207,6 +264,179 @@ function HowItWorksSection() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+// ─── قسم المحاكاة التفاعلية لواتساب ────────────────────────────────────────
+function WhatsAppDemoSection() {
+  const { ref, inView } = useInView();
+  const [activeScenario, setActiveScenario] = useState(0);
+  const [visibleMessages, setVisibleMessages] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scenario = SCENARIOS[activeScenario];
+
+  const playScenario = () => {
+    setVisibleMessages(0);
+    setIsPlaying(true);
+    scenario.messages.forEach((msg, i) => {
+      const t = setTimeout(() => {
+        setVisibleMessages(i + 1);
+        if (i === scenario.messages.length - 1) setIsPlaying(false);
+      }, msg.delay + 400);
+      timerRef.current = t;
+    });
+  };
+
+  const switchScenario = (idx: number) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setActiveScenario(idx);
+    setVisibleMessages(0);
+    setIsPlaying(false);
+  };
+
+  // تشغيل تلقائي عند الدخول للعرض
+  useEffect(() => {
+    if (inView && visibleMessages === 0 && !isPlaying) {
+      setTimeout(() => playScenario(), 600);
+    }
+  }, [inView]);
+
+  return (
+    <section id="demo" className="py-24 bg-gray-50" ref={ref}>
+      <div className="container">
+        {/* Header */}
+        <div className={`text-center mb-14 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-100 text-green-700 text-sm font-medium mb-4">
+            <MessageCircle className="w-4 h-4" />
+            محاكاة حية
+          </div>
+          <h2 className="text-4xl font-bold text-navy mb-4">
+            شاهد الوكيل الذكي <span className="text-gold">يعمل الآن</span>
+          </h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            أرسل أمراً بالعربية عبر واتساب — الوكيل يفهمه وينفذه في النظام المحاسبي خلال ثوانٍ.
+          </p>
+        </div>
+
+        <div className={`grid lg:grid-cols-2 gap-12 items-center ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.15s" }}>
+          {/* يسار: اختيار السيناريو + شرح */}
+          <div className="space-y-6">
+            <p className="text-sm font-semibold text-navy/60 uppercase tracking-wider">اختر سيناريو لمشاهدته</p>
+            <div className="grid grid-cols-2 gap-3">
+              {SCENARIOS.map((s, i) => (
+                <button key={s.id} onClick={() => { switchScenario(i); setTimeout(() => playScenario(), 100); }}
+                  className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-right transition-all duration-200 ${
+                    activeScenario === i
+                      ? "border-navy bg-navy text-white shadow-lg scale-[1.02]"
+                      : "border-gray-200 bg-white text-navy hover:border-navy/40 hover:shadow-sm"
+                  }`}>
+                  <span className="text-2xl">{s.icon}</span>
+                  <span className="font-semibold text-sm">{s.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* القيمة المضافة */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-navy text-lg">لماذا هذا يغيّر كل شيء؟</h3>
+              {[
+                { icon: "⚡", title: "سرعة فائقة", desc: "ما كان يستغرق 15 دقيقة يتم في 5 ثوانٍ" },
+                { icon: "🎯", title: "دقة 100%", desc: "لا أخطاء إدخال يدوي، البيانات تُسجَّل مباشرة" },
+                { icon: "🌙", title: "24/7 بلا توقف", desc: "الوكيل يعمل حتى في العطل والإجازات" },
+                { icon: "💬", title: "بالعربية الفصحى والعامية", desc: "يفهم طلبك بأي أسلوب تكتب به" },
+              ].map((v, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <span className="text-xl mt-0.5">{v.icon}</span>
+                  <div>
+                    <p className="font-semibold text-navy text-sm">{v.title}</p>
+                    <p className="text-muted-foreground text-xs">{v.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* يمين: هاتف واتساب */}
+          <div className="flex justify-center">
+            <div className="relative w-[320px]">
+              {/* إطار الهاتف */}
+              <div className="bg-[#111b21] rounded-[2.5rem] p-3 shadow-2xl border-4 border-gray-800">
+                {/* شريط الحالة */}
+                <div className="bg-[#111b21] rounded-t-[2rem] px-4 pt-2 pb-1 flex items-center justify-between">
+                  <span className="text-white/50 text-[10px]">9:41</span>
+                  <div className="flex gap-1">
+                    <div className="w-3 h-1.5 bg-white/40 rounded-sm" />
+                    <div className="w-1 h-1.5 bg-white/40 rounded-sm" />
+                  </div>
+                </div>
+                {/* رأس المحادثة */}
+                <div className="bg-[#1f2c34] px-4 py-3 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-navy-gradient flex items-center justify-center text-white font-bold text-sm flex-shrink-0">AI</div>
+                  <div>
+                    <p className="text-white font-semibold text-sm">Almoaser AI Agent</p>
+                    <p className="text-green-400 text-xs flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block animate-pulse" />
+                      متصل الآن
+                    </p>
+                  </div>
+                </div>
+                {/* منطقة الرسائل */}
+                <div className="bg-[#0b141a] rounded-b-[2rem] px-3 py-4 min-h-[380px] max-h-[380px] overflow-y-auto space-y-3 flex flex-col">
+                  {/* خلفية نمط واتساب */}
+                  <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+                  }} />
+
+                  {scenario.messages.slice(0, visibleMessages).map((msg, i) => (
+                    <div key={`${activeScenario}-${i}`}
+                      className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"} animate-fade-in-up`}>
+                      <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-line shadow-sm ${
+                        msg.from === "user"
+                          ? "bg-[#005c4b] text-white rounded-tr-sm"
+                          : "bg-[#202c33] text-gray-100 rounded-tl-sm"
+                      }`}>
+                        {msg.from === "agent" && (
+                          <p className="text-green-400 text-[10px] font-semibold mb-1">Almoaser AI ✓</p>
+                        )}
+                        {msg.text}
+                        <p className={`text-[9px] mt-1 text-left ${msg.from === "user" ? "text-white/50" : "text-gray-500"}`}>
+                          {new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                          {msg.from === "user" && " ✓✓"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* مؤشر الكتابة */}
+                  {isPlaying && visibleMessages < scenario.messages.length && (
+                    <div className="flex justify-start animate-fade-in-up">
+                      <div className="bg-[#202c33] px-4 py-3 rounded-2xl rounded-tl-sm">
+                        <div className="flex gap-1 items-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* زر إعادة التشغيل */}
+              <button onClick={playScenario} disabled={isPlaying}
+                className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-5 py-2 rounded-full bg-white border border-gray-200 shadow-md text-navy text-xs font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                {isPlaying ? (
+                  <><span className="w-3 h-3 rounded-full border-2 border-navy border-t-transparent animate-spin" />جاري التنفيذ...</>
+                ) : (
+                  <><Zap className="w-3 h-3 text-gold" />إعادة التشغيل</>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -614,6 +844,7 @@ export default function Home() {
       <HeroSection />
       <ServicesSection />
       <HowItWorksSection />
+      <WhatsAppDemoSection />
       <PricingSection />
       <ContactSection />
       <Footer />
