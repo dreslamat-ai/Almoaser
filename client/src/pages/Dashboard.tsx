@@ -168,7 +168,9 @@ export default function Dashboard() {
               <h3 className="font-bold text-lg">وكيل AI جاهز لمساعدتك</h3>
               <p className="text-white/70 text-sm">أرسل أوامرك عبر واتساب وسينفذها الوكيل فوراً في Almoaser AI Powered ERP</p>
             </div>
-            <Button className="bg-gold text-white hover:bg-gold/90 flex-shrink-0">تواصل مع الوكيل</Button>
+            <a href="https://wa.me/966564677377?text=مرحباً، أريد التواصل مع وكيل Almoaser AI Powered ERP" target="_blank" rel="noopener noreferrer">
+              <Button className="bg-gold text-white hover:bg-gold/90 flex-shrink-0">تواصل عبر واتساب</Button>
+            </a>
           </div>
         </div>
       </main>

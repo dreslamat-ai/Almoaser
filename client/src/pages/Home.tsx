@@ -321,14 +321,15 @@ function ContactSection() {
             </p>
             <div className="space-y-4">
               {[
-                { icon: <Phone className="w-5 h-5" />, text: "+966 5X XXX XXXX" },
-                { icon: <Mail className="w-5 h-5" />, text: "info@almoaser.com" },
-                { icon: <MessageCircle className="w-5 h-5" />, text: "واتساب متاح 24/7" },
+                { icon: <Phone className="w-5 h-5" />, text: "+966 56 467 7377", href: "tel:+966564677377" },
+                { icon: <Mail className="w-5 h-5" />, text: "info@almoaser.com", href: "mailto:info@almoaser.com" },
+                { icon: <MessageCircle className="w-5 h-5" />, text: "واتساب متاح 24/7", href: "https://wa.me/966564677377" },
               ].map((c, i) => (
-                <div key={i} className="flex items-center gap-3 text-white/80">
-                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">{c.icon}</div>
+                <a key={i} href={c.href} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-3 text-white/80 hover:text-white transition-colors group">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 group-hover:bg-white/20 flex items-center justify-center transition-colors">{c.icon}</div>
                   <span>{c.text}</span>
-                </div>
+                </a>
               ))}
             </div>
           </div>
