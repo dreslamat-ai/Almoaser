@@ -291,6 +291,29 @@ function ContactSection() {
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", companyType: "", businessSector: "", planId: "", message: "" });
 
+  // ─── عداد تنازلي للتوجيه إلى الباقات ─────────────────────────────────
+  const [countdown, setCountdown] = useState(5);
+  useEffect(() => {
+    if (!submitted) return;
+    setCountdown(5);
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          // التمرير السلس إلى قسم الباقات
+          const pricingSection = document.getElementById("pricing");
+          if (pricingSection) {
+            pricingSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [submitted]);
+  // ─────────────────────────────────────────────────────────────────────
+
   // ─── تحقق رقم الجوال السعودي ─────────────────────────────────────────
   const saudiPhoneRegex = /^(?:(?:\+|00)966|0)5[0-9]{8}$/;
   const [phoneTouched, setPhoneTouched] = useState(false);
@@ -381,12 +404,25 @@ function ContactSection() {
                 <p className="text-gray-600 text-sm leading-relaxed mb-6 max-w-xs">
                   تم استلام طلبك بنجاح. سيتواصل معك فريق <strong>Almoaser AI</strong> خلال <strong>24 ساعة</strong> لتحديد موعد الاستشارة المجانية.
                 </p>
+                {/* شريط العداد التنازلي */}
+                <div className="w-full mb-5">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                    <span>سيتم توجيهك لاختيار الباقة خلال</span>
+                    <span className="font-bold text-navy text-sm">{countdown} ثوانٍ</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-navy-gradient rounded-full transition-all duration-1000 ease-linear"
+                      style={{ width: `${((5 - countdown) / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
                 {/* بطاقات الخطوات التالية */}
-                <div className="w-full space-y-3 mb-6">
+                <div className="w-full space-y-3 mb-5">
                   {[
                     { icon: <Phone className="w-4 h-4" />, text: "سيتصل بك مستشارنا قريباً", color: "text-blue-600 bg-blue-50" },
                     { icon: <MessageCircle className="w-4 h-4" />, text: "أو تواصل معنا عبر واتساب الآن", color: "text-green-600 bg-green-50" },
-                    { icon: <CheckCircle2 className="w-4 h-4" />, text: "سنختار معك الباقة الأنسب", color: "text-gold bg-yellow-50" },
+                    { icon: <CheckCircle2 className="w-4 h-4" />, text: "اختر الباقة المناسبة لعملك أدناه", color: "text-gold bg-yellow-50" },
                   ].map((step, i) => (
                     <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${step.color} animate-fade-in-up`}
                       style={{ animationDelay: `${0.2 + i * 0.15}s` }}>
@@ -404,9 +440,15 @@ function ContactSection() {
                       واتساب الآن
                     </Button>
                   </a>
-                  <Button variant="outline" className="flex-1 border-navy text-navy hover:bg-navy/5"
-                    onClick={() => setSubmitted(false)}>
-                    طلب آخر
+                  <Button
+                    className="flex-1 bg-navy-gradient text-white gap-2 hover:opacity-90"
+                    onClick={() => {
+                      const pricingSection = document.getElementById("pricing");
+                      if (pricingSection) pricingSection.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    اختر باقتك
                   </Button>
                 </div>
               </div>
