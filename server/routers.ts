@@ -100,6 +100,7 @@ export const appRouter = router({
         phone: z.string().min(9),
         companyName: z.string().optional(),
         companyType: z.string().optional(),
+        businessSector: z.string().optional(),
         planId: z.number().optional(),
         message: z.string().optional(),
       }))

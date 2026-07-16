@@ -8,6 +8,13 @@
       "when": 1784242644873,
       "tag": "0000_stale_jamie_braddock",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1784244966030,
+      "tag": "0001_broken_patriot",
+      "breakpoints": true
     }
   ]
 }

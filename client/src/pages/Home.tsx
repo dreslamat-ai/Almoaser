@@ -286,14 +286,17 @@ function PricingSection() {
 function ContactSection() {
   const { ref, inView } = useInView();
   const { data: plans } = trpc.plans.list.useQuery();
+  const [submitted, setSubmitted] = useState(false);
+  const [submittedName, setSubmittedName] = useState("");
   const submitMutation = trpc.register.submit.useMutation({
     onSuccess: () => {
-      toast.success("تم إرسال طلبك بنجاح! سنتواصل معك خلال 24 ساعة.");
-      setForm({ name: "", email: "", phone: "", companyName: "", companyType: "", planId: "", message: "" });
+      setSubmittedName(form.name);
+      setSubmitted(true);
+      setForm({ name: "", email: "", phone: "", companyName: "", companyType: "", businessSector: "", planId: "", message: "" });
     },
     onError: (e) => toast.error(e.message),
   });
-  const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", companyType: "", planId: "", message: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", companyType: "", businessSector: "", planId: "", message: "" });
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     submitMutation.mutate({
@@ -302,6 +305,7 @@ function ContactSection() {
       phone: form.phone,
       companyName: form.companyName || undefined,
       companyType: form.companyType || undefined,
+      businessSector: form.businessSector || undefined,
       planId: form.planId ? Number(form.planId) : undefined,
       message: form.message || undefined,
     });
@@ -334,61 +338,131 @@ function ContactSection() {
             </div>
           </div>
           <div className={`bg-white rounded-2xl p-8 shadow-2xl ${inView ? "animate-slide-in-right" : "opacity-0"}`}>
-            <h3 className="text-xl font-bold text-navy mb-6">طلب استشارة مجانية</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name" className="text-navy font-medium">الاسم الكامل *</Label>
-                  <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="محمد أحمد" required className="mt-1" />
+            {submitted ? (
+              /* ─── رسالة الترحيب المتحركة ─── */
+              <div className="flex flex-col items-center justify-center text-center py-6 animate-fade-in-up">
+                {/* دائرة النجاح المتحركة */}
+                <div className="relative mb-6">
+                  <div className="w-24 h-24 rounded-full bg-green-50 border-4 border-green-200 flex items-center justify-center animate-[bounce_0.6s_ease-out]">
+                    <CheckCircle2 className="w-12 h-12 text-green-500" strokeWidth={1.5} />
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-8 h-8 rounded-full bg-gold/20 border-2 border-gold flex items-center justify-center animate-[spin_3s_linear_infinite]">
+                    <Star className="w-4 h-4 text-gold" fill="currentColor" />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="phone" className="text-navy font-medium">رقم الجوال *</Label>
-                  <Input id="phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="05XXXXXXXX" required className="mt-1" />
+                {/* نص الترحيب */}
+                <h3 className="text-2xl font-bold text-navy mb-2">
+                  أهلاً وسهلاً، <span className="text-gold">{submittedName}</span>! 🎉
+                </h3>
+                <p className="text-gray-600 text-sm leading-relaxed mb-6 max-w-xs">
+                  تم استلام طلبك بنجاح. سيتواصل معك فريق <strong>Almoaser AI</strong> خلال <strong>24 ساعة</strong> لتحديد موعد الاستشارة المجانية.
+                </p>
+                {/* بطاقات الخطوات التالية */}
+                <div className="w-full space-y-3 mb-6">
+                  {[
+                    { icon: <Phone className="w-4 h-4" />, text: "سيتصل بك مستشارنا قريباً", color: "text-blue-600 bg-blue-50" },
+                    { icon: <MessageCircle className="w-4 h-4" />, text: "أو تواصل معنا عبر واتساب الآن", color: "text-green-600 bg-green-50" },
+                    { icon: <CheckCircle2 className="w-4 h-4" />, text: "سنختار معك الباقة الأنسب", color: "text-gold bg-yellow-50" },
+                  ].map((step, i) => (
+                    <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${step.color} animate-fade-in-up`}
+                      style={{ animationDelay: `${0.2 + i * 0.15}s` }}>
+                      <div className="flex-shrink-0">{step.icon}</div>
+                      <span className="text-sm font-medium">{step.text}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* أزرار الإجراء */}
+                <div className="flex gap-3 w-full">
+                  <a href="https://wa.me/966564677377?text=مرحباً، أريد الاستفسار عن خدمات Almoaser AI"
+                    target="_blank" rel="noopener noreferrer" className="flex-1">
+                    <Button className="w-full bg-green-500 hover:bg-green-600 text-white gap-2">
+                      <MessageCircle className="w-4 h-4" />
+                      واتساب الآن
+                    </Button>
+                  </a>
+                  <Button variant="outline" className="flex-1 border-navy text-navy hover:bg-navy/5"
+                    onClick={() => setSubmitted(false)}>
+                    طلب آخر
+                  </Button>
                 </div>
               </div>
-              <div>
-                <Label htmlFor="email" className="text-navy font-medium">البريد الإلكتروني *</Label>
-                <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="example@company.com" required className="mt-1" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="company" className="text-navy font-medium">اسم الشركة</Label>
-                  <Input id="company" value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="شركة النور" className="mt-1" />
-                </div>
-                <div>
-                  <Label className="text-navy font-medium">نوع النشاط</Label>
-                  <Select value={form.companyType} onValueChange={v => setForm(f => ({ ...f, companyType: v }))}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="اختر النشاط" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="trading">تجارة</SelectItem>
-                      <SelectItem value="services">خدمات</SelectItem>
-                      <SelectItem value="manufacturing">تصنيع</SelectItem>
-                      <SelectItem value="construction">مقاولات</SelectItem>
-                      <SelectItem value="retail">تجزئة</SelectItem>
-                      <SelectItem value="other">أخرى</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div>
-                <Label className="text-navy font-medium">الباقة المهتم بها</Label>
-                <Select value={form.planId} onValueChange={v => setForm(f => ({ ...f, planId: v }))}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="اختر الباقة" /></SelectTrigger>
-                  <SelectContent>
-                    {plans?.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nameAr} — {Number(p.price).toLocaleString("ar-SA")} ريال/شهر</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="message" className="text-navy font-medium">رسالة إضافية</Label>
-                <textarea id="message" value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
-                  placeholder="أخبرنا عن احتياجاتك..." rows={3}
-                  className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy/30" />
-              </div>
-              <Button type="submit" disabled={submitMutation.isPending} className="w-full bg-navy-gradient text-white hover:opacity-90 h-12 text-base">
-                {submitMutation.isPending ? "جاري الإرسال..." : "إرسال الطلب"}
-              </Button>
-            </form>
+            ) : (
+              /* ─── النموذج ─── */
+              <>
+                <h3 className="text-xl font-bold text-navy mb-6">طلب استشارة مجانية</h3>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="name" className="text-navy font-medium">الاسم الكامل *</Label>
+                      <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="محمد أحمد" required className="mt-1" />
+                    </div>
+                    <div>
+                      <Label htmlFor="phone" className="text-navy font-medium">رقم الجوال *</Label>
+                      <Input id="phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="05XXXXXXXX" required className="mt-1" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="email" className="text-navy font-medium">البريد الإلكتروني *</Label>
+                    <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="example@company.com" required className="mt-1" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="company" className="text-navy font-medium">اسم الشركة *</Label>
+                      <Input id="company" value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="شركة النور للتجارة" required className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-navy font-medium">نوع النشاط *</Label>
+                      <Select value={form.companyType} onValueChange={v => setForm(f => ({ ...f, companyType: v }))}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="اختر النشاط" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="trading">تجارة</SelectItem>
+                          <SelectItem value="services">خدمات</SelectItem>
+                          <SelectItem value="manufacturing">تصنيع</SelectItem>
+                          <SelectItem value="construction">مقاولات</SelectItem>
+                          <SelectItem value="retail">تجزئة</SelectItem>
+                          <SelectItem value="restaurant">مطاعم وضيافة</SelectItem>
+                          <SelectItem value="healthcare">رعاية صحية</SelectItem>
+                          <SelectItem value="education">تعليم وتدريب</SelectItem>
+                          <SelectItem value="tech">تقنية معلومات</SelectItem>
+                          <SelectItem value="real_estate">عقارات</SelectItem>
+                          <SelectItem value="other">أخرى</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="businessSector" className="text-navy font-medium">مجال العمل التفصيلي</Label>
+                    <Input id="businessSector" value={form.businessSector}
+                      onChange={e => setForm(f => ({ ...f, businessSector: e.target.value }))}
+                      placeholder="مثال: استيراد وتصدير مواد غذائية، مقاولات بنية تحتية..."
+                      className="mt-1" />
+                    <p className="text-xs text-gray-400 mt-1">اختياري — يساعدنا في تخصيص الخدمة لنشاطك</p>
+                  </div>
+                  <div>
+                    <Label className="text-navy font-medium">الباقة المهتم بها</Label>
+                    <Select value={form.planId} onValueChange={v => setForm(f => ({ ...f, planId: v }))}>
+                      <SelectTrigger className="mt-1"><SelectValue placeholder="اختر الباقة" /></SelectTrigger>
+                      <SelectContent>
+                        {plans?.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nameAr} — {Number(p.price).toLocaleString("ar-SA")} ريال/شهر</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="message" className="text-navy font-medium">رسالة إضافية</Label>
+                    <textarea id="message" value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
+                      placeholder="أخبرنا عن احتياجاتك المحاسبية..." rows={3}
+                      className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy/30" />
+                  </div>
+                  <Button type="submit" disabled={submitMutation.isPending} className="w-full bg-navy-gradient text-white hover:opacity-90 h-12 text-base">
+                    {submitMutation.isPending ? (
+                      <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />جاري الإرسال...</span>
+                    ) : (
+                      <span className="flex items-center gap-2"><ArrowLeft className="w-4 h-4" />إرسال الطلب</span>
+                    )}
+                  </Button>
+                </form>
+              </>
+            )}
           </div>
         </div>
       </div>

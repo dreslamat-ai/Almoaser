@@ -83,6 +83,7 @@ export const registrationRequests = mysqlTable("registration_requests", {
   phone: varchar("phone", { length: 20 }).notNull(),
   companyName: varchar("companyName", { length: 255 }),
   companyType: varchar("companyType", { length: 100 }),
+  businessSector: varchar("businessSector", { length: 150 }),
   planId: int("planId").references(() => plans.id),
   message: text("message"),
   status: mysqlEnum("status", ["new", "contacted", "converted", "rejected"]).default("new").notNull(),
