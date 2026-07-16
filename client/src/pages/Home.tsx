@@ -1,29 +1,19 @@
 import { useState, useEffect, useRef } from "react";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 import {
-  MessageCircle, Bot, Zap, Shield, ChevronDown, ArrowLeft,
-  CheckCircle2, Code2, Database, Layers, Network, Cpu,
-  BarChart3, ShoppingCart, Package, BookOpen, DollarSign,
-  Send, Terminal, Globe, Lock, AlertCircle, ExternalLink
+  BookOpen, Bot, CheckCircle2, ChevronDown, DollarSign, FileText,
+  BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
+  ArrowLeft, Star, Clock, TrendingUp
 } from "lucide-react";
 
-// ─── Animated counter hook ───────────────────────────────────────────────────
-function useCountUp(target: number, duration = 1500, start = false) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!start) return;
-    let startTime: number | null = null;
-    const step = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / duration, 1);
-      setCount(Math.floor(progress * target));
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [target, duration, start]);
-  return count;
-}
-
-// ─── Intersection Observer hook ──────────────────────────────────────────────
 function useInView(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
@@ -35,310 +25,146 @@ function useInView(threshold = 0.15) {
   return { ref, inView };
 }
 
-// ─── Navbar ───────────────────────────────────────────────────────────────────
 function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const [, navigate] = useLocation();
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
+    const fn = () => setScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", fn);
+    return () => window.removeEventListener("scroll", fn);
   }, []);
-
   return (
-    <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? "bg-[oklch(0.09_0.015_240/0.95)] backdrop-blur-xl border-b border-[oklch(0.22_0.025_240)]" : "bg-transparent"}`}>
+    <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? "bg-white/95 backdrop-blur-xl shadow-sm border-b border-gray-100" : "bg-transparent"}`}>
       <div className="container flex items-center justify-between h-16">
-        {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[oklch(0.75_0.18_185/0.15)] border-2 border-[oklch(0.75_0.18_185/0.6)] flex items-center justify-center animate-pulse-glow relative">
-            <img src="/manus-storage/logo_icon_ba8a6fa6.png" alt="Logo" className="w-5 h-5 object-contain" />
-            <div className="absolute inset-0 rounded-full border border-[oklch(0.75_0.18_185/0.3)] scale-125" />
+          <div className="w-10 h-10 rounded-xl bg-navy-gradient flex items-center justify-center">
+            <BookOpen className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold text-sm tracking-wide">
-            <span className="glow-text-cyan">AI</span>
-            <span className="text-[oklch(0.92_0.005_240)]"> × ERPNext</span>
-          </span>
+          <div>
+            <span className="font-bold text-lg text-navy">المعاصر</span>
+            <div className="text-[10px] text-muted-foreground leading-none">خدمات مسك الدفاتر</div>
+          </div>
         </div>
-
-        {/* Nav links */}
-        <div className="hidden md:flex items-center gap-6 text-sm text-[oklch(0.60_0.015_240)]">
-          {[
-            { label: "المعمارية", href: "#architecture" },
-            { label: "آلية العمل", href: "#workflow" },
-            { label: "الوكلاء", href: "#agents" },
-            { label: "التنفيذ", href: "#implementation" },
-          ].map(link => (
-            <a key={link.href} href={link.href}
-              className="hover:text-[oklch(0.75_0.18_185)] transition-colors duration-200">
-              {link.label}
-            </a>
+        <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+          {[{ label: "الخدمات", href: "#services" }, { label: "الباقات", href: "#pricing" }, { label: "كيف نعمل", href: "#how" }, { label: "تواصل معنا", href: "#contact" }].map(l => (
+            <a key={l.href} href={l.href} className="hover:text-navy transition-colors">{l.label}</a>
           ))}
         </div>
-
-        <a href="#implementation"
-          className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-[oklch(0.75_0.18_185/0.1)] border border-[oklch(0.75_0.18_185/0.3)] text-[oklch(0.75_0.18_185)] text-sm font-medium hover:bg-[oklch(0.75_0.18_185/0.2)] transition-all duration-200">
-          <Zap className="w-4 h-4" />
-          ابدأ التنفيذ
-        </a>
+        <div className="flex items-center gap-3">
+          {isAuthenticated ? (
+            <Button onClick={() => navigate("/dashboard")} className="bg-navy-gradient text-white hover:opacity-90">
+              لوحة التحكم
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={() => startLogin()} className="text-navy">تسجيل الدخول</Button>
+              <Button onClick={() => startLogin()} className="bg-navy-gradient text-white hover:opacity-90">ابدأ مجاناً</Button>
+            </>
+          )}
+        </div>
       </div>
     </nav>
   );
 }
 
-// ─── Hero Section ─────────────────────────────────────────────────────────────
 function HeroSection() {
-  const [typedText, setTypedText] = useState("");
-  const messages = [
-    "أصدر فاتورة لشركة النور بقيمة 5000 ريال",
-    "ما إجمالي مبيعات هذا الشهر؟",
-    "سجل قيد محاسبي: مدين الصندوق 3000",
-    "أنشئ أمر شراء من مورد الخليج",
-  ];
-  const [msgIndex, setMsgIndex] = useState(0);
-  const [charIndex, setCharIndex] = useState(0);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    const current = messages[msgIndex];
-    const timeout = setTimeout(() => {
-      if (!deleting) {
-        if (charIndex < current.length) {
-          setTypedText(current.slice(0, charIndex + 1));
-          setCharIndex(c => c + 1);
-        } else {
-          setTimeout(() => setDeleting(true), 1800);
-        }
-      } else {
-        if (charIndex > 0) {
-          setTypedText(current.slice(0, charIndex - 1));
-          setCharIndex(c => c - 1);
-        } else {
-          setDeleting(false);
-          setMsgIndex(i => (i + 1) % messages.length);
-        }
-      }
-    }, deleting ? 35 : 65);
-    return () => clearTimeout(timeout);
-  }, [charIndex, deleting, msgIndex]);
-
+  const { isAuthenticated } = useAuth();
+  const [, navigate] = useLocation();
   return (
-    <section className="relative min-h-screen flex items-center overflow-hidden">
-      {/* Background image */}
-      <div className="absolute inset-0">
-        <img src="/manus-storage/hero_bg_f4b27899.png" alt="" className="w-full h-full object-cover opacity-40" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[oklch(0.09_0.015_240/0.3)] via-transparent to-[oklch(0.09_0.015_240)]" />
+    <section className="bg-navy-hero min-h-screen flex items-center relative overflow-hidden pt-16">
+      <div className="absolute inset-0 opacity-10">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <div key={i} className="absolute w-px bg-white/20"
+            style={{ right: `${(i + 1) * 5}%`, top: 0, bottom: 0, opacity: Math.random() * 0.3 }} />
+        ))}
       </div>
-
-      {/* Grid overlay */}
-      <div className="absolute inset-0 grid-bg opacity-60" />
-
-      {/* Glow orbs */}
-      <div className="absolute top-1/4 right-1/4 w-96 h-96 rounded-full bg-[oklch(0.75_0.18_185/0.06)] blur-3xl animate-pulse-glow" />
-      <div className="absolute bottom-1/3 left-1/4 w-64 h-64 rounded-full bg-[oklch(0.72_0.17_155/0.05)] blur-3xl" style={{ animationDelay: "1.5s" }} />
-
-      <div className="container relative z-10 pt-20">
-        <div className="max-w-4xl">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[oklch(0.75_0.18_185/0.3)] bg-[oklch(0.75_0.18_185/0.08)] mb-6 animate-fade-in-up">
-            <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.72_0.17_155)] animate-pulse" />
-            <span className="text-xs font-mono-tech text-[oklch(0.75_0.18_185)]">AI AGENTS × ERPNEXT — الدليل الشامل</span>
+      <div className="absolute top-20 left-20 w-64 h-64 rounded-full bg-gold/10 blur-3xl" />
+      <div className="absolute bottom-20 right-20 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
+      <div className="container relative z-10 py-20">
+        <div className="max-w-3xl">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 mb-8 animate-fade-in-up">
+            <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
+            <span className="text-white/80 text-sm">منصة مسك الدفاتر الذكية #1 في المملكة</span>
           </div>
-
-          {/* Main heading */}
-          <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-            <span className="text-[oklch(0.92_0.005_240)]">حوّل رسالة </span>
-            <span className="glow-text-cyan">واتساب</span>
-            <br />
-            <span className="text-[oklch(0.92_0.005_240)]">إلى </span>
-            <span className="text-[oklch(0.72_0.17_155)]">فاتورة معتمدة</span>
-            <br />
-            <span className="text-[oklch(0.92_0.005_240)]">في ثوانٍ</span>
+          <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
+            وكلاء ذكاء اصطناعي<br />
+            <span className="text-gold">يمسكون دفاترك</span><br />
+            بدلاً عنك
           </h1>
-
-          <p className="text-lg text-[oklch(0.60_0.015_240)] max-w-2xl mb-10 leading-relaxed animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
-            بدلاً من موظفين يُدخلون البيانات يدوياً، وظّف <strong className="text-[oklch(0.75_0.18_185)]">وكلاء ذكاء اصطناعي</strong> متخصصين يعملون على مدار الساعة ويتحدثون مع ERPNext مباشرةً.
+          <p className="text-white/70 text-xl leading-relaxed mb-10 max-w-2xl animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
+            بدلاً من محاسب يعمل 8 ساعات، وظّف وكيل AI يعمل 24/7 — يُدخل الفواتير، يُسجّل القيود، ويُنتج التقارير عبر رسالة واتساب واحدة.
           </p>
-
-          {/* Typing demo */}
-          <div className="card-tech rounded-xl p-4 mb-8 max-w-xl animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 rounded-full bg-[oklch(0.65_0.22_25)]" />
-              <div className="w-2 h-2 rounded-full bg-[oklch(0.75_0.18_55)]" />
-              <div className="w-2 h-2 rounded-full bg-[oklch(0.72_0.17_155)]" />
-              <span className="text-xs font-mono-tech text-[oklch(0.40_0.015_240)] mr-2">WhatsApp → AI Agent → ERPNext</span>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-[oklch(0.72_0.17_155/0.2)] border border-[oklch(0.72_0.17_155/0.4)] flex items-center justify-center flex-shrink-0">
-                <MessageCircle className="w-4 h-4 text-[oklch(0.72_0.17_155)]" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-[oklch(0.92_0.005_240)]">
-                  {typedText}
-                  <span className="inline-block w-0.5 h-4 bg-[oklch(0.75_0.18_185)] animate-pulse mr-0.5 align-middle" />
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-[oklch(0.22_0.025_240)] flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[oklch(0.72_0.17_155)]" />
-              <span className="text-xs text-[oklch(0.55_0.015_240)] font-mono-tech">تم التنفيذ في ERPNext ✓</span>
-            </div>
+          <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+            {isAuthenticated ? (
+              <Button size="lg" onClick={() => navigate("/dashboard")}
+                className="bg-gold text-white hover:bg-gold/90 text-base px-8 py-4 h-auto">
+                الذهاب للوحة التحكم
+                <ArrowLeft className="w-5 h-5 mr-2" />
+              </Button>
+            ) : (
+              <Button size="lg" onClick={() => startLogin()}
+                className="bg-gold text-white hover:bg-gold/90 text-base px-8 py-4 h-auto">
+                ابدأ تجربتك المجانية
+                <ArrowLeft className="w-5 h-5 mr-2" />
+              </Button>
+            )}
+            <Button size="lg" variant="outline"
+              className="border-white/30 text-white bg-white/10 hover:bg-white/20 text-base px-8 py-4 h-auto"
+              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
+              عرض الباقات
+            </Button>
           </div>
-
-          {/* CTAs */}
-          <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
-            <a href="#architecture"
-              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-[oklch(0.75_0.18_185)] text-[oklch(0.09_0.015_240)] font-semibold hover:bg-[oklch(0.80_0.18_185)] transition-all duration-200 active:scale-95">
-              <Layers className="w-4 h-4" />
-              استكشف المعمارية
-            </a>
-            <a href="#implementation"
-              className="flex items-center gap-2 px-6 py-3 rounded-lg border border-[oklch(0.22_0.025_240)] text-[oklch(0.80_0.01_240)] hover:border-[oklch(0.75_0.18_185/0.5)] hover:text-[oklch(0.75_0.18_185)] transition-all duration-200">
-              <Terminal className="w-4 h-4" />
-              دليل التنفيذ
-            </a>
+          <div className="flex flex-wrap gap-8 mt-12 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
+            {[
+              { value: "+200", label: "عميل نشط" },
+              { value: "24/7", label: "وقت العمل" },
+              { value: "90%", label: "توفير في الوقت" },
+              { value: "5 ثوانٍ", label: "لإنشاء فاتورة" },
+            ].map((s, i) => (
+              <div key={i} className="text-center">
+                <div className="text-3xl font-bold text-gold">{s.value}</div>
+                <div className="text-white/60 text-sm">{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
-
-      {/* Scroll indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-[oklch(0.40_0.015_240)] animate-bounce">
-        <span className="text-xs font-mono-tech">اسحب للأسفل</span>
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/40 animate-bounce">
+        <span className="text-xs">اسحب للأسفل</span>
         <ChevronDown className="w-4 h-4" />
       </div>
     </section>
   );
 }
 
-// ─── Stats Section ────────────────────────────────────────────────────────────
-function StatsSection() {
+function ServicesSection() {
   const { ref, inView } = useInView();
-  const s1 = useCountUp(90, 1200, inView);
-  const s2 = useCountUp(5, 800, inView);
-  const s3 = useCountUp(24, 1000, inView);
-  const s4 = useCountUp(100, 1400, inView);
-
-  const stats = [
-    { value: s1, suffix: "%", label: "تقليل وقت إدخال البيانات", icon: <Zap className="w-5 h-5" /> },
-    { value: s2, suffix: " ثوانٍ", label: "متوسط وقت إنشاء الفاتورة", icon: <CheckCircle2 className="w-5 h-5" /> },
-    { value: s3, suffix: "/7", label: "ساعة عمل متواصل", icon: <Bot className="w-5 h-5" /> },
-    { value: s4, suffix: "+", label: "عملية ERPNext مدعومة", icon: <Database className="w-5 h-5" /> },
+  const services = [
+    { icon: <BookOpen className="w-6 h-6" />, title: "مسك الدفاتر", desc: "تسجيل جميع العمليات المالية اليومية بدقة واحترافية عبر وكيل AI متخصص.", color: "text-blue-600", bg: "bg-blue-50" },
+    { icon: <FileText className="w-6 h-6" />, title: "إدارة الفواتير", desc: "إنشاء واعتماد فواتير المبيعات والمشتريات تلقائياً عبر رسالة واتساب.", color: "text-green-600", bg: "bg-green-50" },
+    { icon: <DollarSign className="w-6 h-6" />, title: "القيود المحاسبية", desc: "تسجيل القيود اليومية والتسويات بدقة مع مراجعة فورية من الوكيل.", color: "text-yellow-600", bg: "bg-yellow-50" },
+    { icon: <BarChart3 className="w-6 h-6" />, title: "التقارير المالية", desc: "ميزانية، قائمة دخل، تقرير الذمم — جاهزة في ثوانٍ بأمر نصي.", color: "text-purple-600", bg: "bg-purple-50" },
+    { icon: <Users className="w-6 h-6" />, title: "إدارة الرواتب", desc: "حساب الرواتب والمستحقات وإنشاء قيودها المحاسبية تلقائياً.", color: "text-red-600", bg: "bg-red-50" },
+    { icon: <Shield className="w-6 h-6" />, title: "الامتثال الضريبي", desc: "احتساب ضريبة القيمة المضافة وإعداد الإقرارات الضريبية الدورية.", color: "text-teal-600", bg: "bg-teal-50" },
   ];
-
   return (
-    <section ref={ref} className="py-16 border-y border-[oklch(0.22_0.025_240)] bg-[oklch(0.11_0.018_240/0.5)] relative overflow-hidden">
-      {/* Connecting line decoration */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-full bg-gradient-to-b from-[oklch(0.75_0.18_185/0.3)] via-[oklch(0.75_0.18_185/0.1)] to-transparent pointer-events-none" />
+    <section id="services" className="py-24 bg-gray-50" ref={ref}>
       <div className="container">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {stats.map((s, i) => (
-            <div key={i} className={`text-center animate-fade-in-up relative`} style={{ animationDelay: `${i * 0.1}s` }}>
-              <div className="flex justify-center mb-3">
-                <div className="w-10 h-10 rounded-lg bg-[oklch(0.75_0.18_185/0.1)] border border-[oklch(0.75_0.18_185/0.2)] flex items-center justify-center text-[oklch(0.75_0.18_185)]">
-                  {s.icon}
-                </div>
-              </div>
-              <div className="text-3xl font-bold glow-text-cyan mb-1">
-                {s.value}{s.suffix}
-              </div>
-              <div className="text-sm text-[oklch(0.55_0.015_240)]">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── Architecture Section ─────────────────────────────────────────────────────
-function ArchitectureSection() {
-  const { ref, inView } = useInView();
-
-  const layers = [
-    {
-      icon: <MessageCircle className="w-6 h-6" />,
-      title: "طبقة قنوات التواصل",
-      subtitle: "Messaging Layer",
-      color: "oklch(0.72 0.17 155)",
-      items: [
-        { name: "WhatsApp Business API", desc: "للعملاء والمبيعات الخارجية", tag: "B2B / B2C" },
-        { name: "Telegram Bot API", desc: "للموظفين والعمليات الداخلية", tag: "Internal" },
-      ]
-    },
-    {
-      icon: <Cpu className="w-6 h-6" />,
-      title: "طبقة الذكاء الاصطناعي",
-      subtitle: "AI Orchestration Layer",
-      color: "oklch(0.75 0.18 185)",
-      items: [
-        { name: "n8n Workflow Engine", desc: "تنسيق سير العمل والربط", tag: "Middleware" },
-        { name: "GPT-4o / Claude", desc: "فهم اللغة الطبيعية واستدعاء الأدوات", tag: "LLM" },
-        { name: "Function Calling", desc: "تنفيذ العمليات في ERPNext", tag: "Tools" },
-        { name: "Window Buffer Memory", desc: "ذاكرة سياق المحادثة", tag: "Memory" },
-      ]
-    },
-    {
-      icon: <Database className="w-6 h-6" />,
-      title: "طبقة نظام ERP",
-      subtitle: "ERP Layer",
-      color: "oklch(0.75 0.18 55)",
-      items: [
-        { name: "Frappe REST API", desc: "واجهة CRUD لجميع DocTypes", tag: "API" },
-        { name: "Webhooks", desc: "إشعارات استباقية عند تغير الحالة", tag: "Events" },
-      ]
-    },
-  ];
-
-  return (
-    <section id="architecture" className="py-24 relative" ref={ref}>
-      <div className="absolute inset-0 grid-bg opacity-30" />
-      <div className="container relative z-10">
-        {/* Header */}
-        <div className={`mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 max-w-12 bg-[oklch(0.75_0.18_185/0.4)]" />
-            <span className="text-xs font-mono-tech text-[oklch(0.75_0.18_185)]">SYSTEM ARCHITECTURE</span>
+        <div className={`text-center mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-navy/10 text-navy text-sm font-medium mb-4">
+            <Zap className="w-4 h-4" />
+            خدماتنا
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-[oklch(0.92_0.005_240)] mb-4">
-            المعمارية التقنية
-            <span className="glow-text-cyan"> للنظام</span>
-          </h2>
-          <p className="text-[oklch(0.60_0.015_240)] max-w-2xl text-lg">
-            ثلاث طبقات متكاملة تعمل معاً لتحويل رسائل اللغة الطبيعية إلى عمليات فعلية في ERPNext.
-          </p>
+          <h2 className="text-4xl font-bold text-navy mb-4">كل ما تحتاجه لإدارة محاسبتك</h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">وكلاء AI متخصصون لكل قسم، يعملون بتناسق تام مع نظام ERPNext الخاص بك.</p>
         </div>
-
-        {/* Architecture visual */}
-        <div className={`mb-16 rounded-2xl overflow-hidden border border-[oklch(0.22_0.025_240)] ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.1s" }}>
-          <img src="/manus-storage/architecture_visual_6bbafc8c.png" alt="مخطط المعمارية" className="w-full object-cover" />
-        </div>
-
-        {/* Layers cards */}
-        <div className="grid md:grid-cols-3 gap-6">
-          {layers.map((layer, i) => (
-            <div key={i} className={`card-tech rounded-xl p-6 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${0.2 + i * 0.1}s` }}>
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                  style={{ background: `${layer.color}20`, border: `1px solid ${layer.color}40`, color: layer.color }}>
-                  {layer.icon}
-                </div>
-                <div>
-                  <div className="font-semibold text-[oklch(0.92_0.005_240)] text-sm">{layer.title}</div>
-                  <div className="text-xs font-mono-tech text-[oklch(0.45_0.015_240)]">{layer.subtitle}</div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {layer.items.map((item, j) => (
-                  <div key={j} className="flex items-start gap-3 p-3 rounded-lg bg-[oklch(0.09_0.015_240/0.5)]">
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-[oklch(0.85_0.005_240)]">{item.name}</div>
-                      <div className="text-xs text-[oklch(0.50_0.015_240)] mt-0.5">{item.desc}</div>
-                    </div>
-                    <span className="text-xs font-mono-tech px-2 py-0.5 rounded"
-                      style={{ background: `${layer.color}15`, color: layer.color, border: `1px solid ${layer.color}30` }}>
-                      {item.tag}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {services.map((s, i) => (
+            <div key={i} className={`card-navy p-6 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.08}s` }}>
+              <div className={`w-12 h-12 rounded-xl ${s.bg} ${s.color} flex items-center justify-center mb-4`}>{s.icon}</div>
+              <h3 className="font-bold text-lg text-navy mb-2">{s.title}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
             </div>
           ))}
         </div>
@@ -347,566 +173,246 @@ function ArchitectureSection() {
   );
 }
 
-// ─── Workflow Section ─────────────────────────────────────────────────────────
-function WorkflowSection() {
+function HowItWorksSection() {
   const { ref, inView } = useInView();
-  const [activeStep, setActiveStep] = useState(0);
-
   const steps = [
-    { icon: <MessageCircle className="w-5 h-5" />, label: "رسالة المستخدم", desc: "يرسل المستخدم أمراً بالعربية عبر واتساب أو تيليجرام", color: "oklch(0.72 0.17 155)", code: '"أصدر فاتورة لشركة النور بقيمة 5000 ريال"' },
-    { icon: <Network className="w-5 h-5" />, label: "n8n يستقبل", desc: "Webhook يستقبل الرسالة ويوجهها إلى وكيل الذكاء الاصطناعي", color: "oklch(0.75 0.18 185)", code: 'POST /webhook → n8n AI Agent Node' },
-    { icon: <Cpu className="w-5 h-5" />, label: "تحليل النية", desc: "النموذج اللغوي يستخرج: العميل، المبلغ، نوع العملية", color: "oklch(0.75 0.18 185)", code: '{ customer: "شركة النور", amount: 5000, action: "create_invoice" }' },
-    { icon: <Code2 className="w-5 h-5" />, label: "Function Calling", desc: "الوكيل يستدعي أداة create_sales_invoice بالمعاملات المستخرجة", color: "oklch(0.75 0.18 55)", code: 'create_sales_invoice(customer, amount, item)' },
-    { icon: <Database className="w-5 h-5" />, label: "ERPNext API", desc: "طلب POST لإنشاء الفاتورة كمسودة، ثم PUT للاعتماد", color: "oklch(0.65 0.18 280)", code: 'POST /api/resource/Sales Invoice → docstatus: 1' },
-    { icon: <Send className="w-5 h-5" />, label: "رد التأكيد", desc: "الوكيل يرسل تأكيداً للمستخدم برقم الفاتورة", color: "oklch(0.72 0.17 155)", code: '"✅ تم إنشاء SINV-2026-0042 بنجاح"' },
+    { num: "01", title: "مقابلة وتحليل النشاط", desc: "نفهم طبيعة عملك ومتطلباتك المحاسبية لنخصص الوكيل المناسب.", icon: <Users className="w-5 h-5" /> },
+    { num: "02", title: "تحديد الباقة المناسبة", desc: "تختار الباقة التي تناسب حجم عملياتك وميزانيتك.", icon: <Star className="w-5 h-5" /> },
+    { num: "03", title: "التعاقد والتوقيع", desc: "توقيع الاتفاقية وتحديد نطاق الخدمة وآلية التواصل.", icon: <FileText className="w-5 h-5" /> },
+    { num: "04", title: "تهيئة النظام المحاسبي", desc: "إعداد ERPNext وضبط الوكلاء وفق خطة حسابات شركتك.", icon: <Bot className="w-5 h-5" /> },
+    { num: "05", title: "البدء في التنفيذ", desc: "ترسل أوامرك عبر واتساب والوكيل ينفذها فوراً في النظام.", icon: <MessageCircle className="w-5 h-5" /> },
+    { num: "06", title: "المراجعة والتحسين", desc: "تقارير دورية ومراجعة مستمرة لضمان دقة البيانات.", icon: <TrendingUp className="w-5 h-5" /> },
   ];
-
-  useEffect(() => {
-    if (!inView) return;
-    const interval = setInterval(() => setActiveStep(s => (s + 1) % steps.length), 2000);
-    return () => clearInterval(interval);
-  }, [inView]);
-
   return (
-    <section id="workflow" className="py-24 bg-[oklch(0.11_0.018_240/0.4)]" ref={ref}>
+    <section id="how" className="py-24" ref={ref}>
       <div className="container">
-        <div className={`mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 max-w-12 bg-[oklch(0.72_0.17_155/0.4)]" />
-            <span className="text-xs font-mono-tech text-[oklch(0.72_0.17_155)]">FUNCTION CALLING WORKFLOW</span>
+        <div className={`text-center mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/10 text-gold-dark text-sm font-medium mb-4">
+            <Clock className="w-4 h-4" />
+            كيف نعمل
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-[oklch(0.92_0.005_240)] mb-4">
-            آلية العمل
-            <span className="text-[oklch(0.72_0.17_155)]"> والتدفق</span>
-          </h2>
-          <p className="text-[oklch(0.60_0.015_240)] max-w-2xl text-lg">
-            كيف تتحول رسالة واتساب بسيطة إلى فاتورة معتمدة في ERPNext خلال ثوانٍ معدودة.
-          </p>
+          <h2 className="text-4xl font-bold text-navy mb-4">ستة خطوات للبدء</h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">من أول اتصال حتى تشغيل وكيل AI خاص بشركتك في أقل من أسبوع.</p>
         </div>
-
-        <div className="grid lg:grid-cols-2 gap-12 items-start">
-          {/* Steps */}
-          <div className="space-y-3">
-            {steps.map((step, i) => (
-              <button key={i} onClick={() => setActiveStep(i)}
-                className={`w-full text-right p-4 rounded-xl border transition-all duration-300 ${activeStep === i
-                  ? "border-[oklch(0.75_0.18_185/0.5)] bg-[oklch(0.75_0.18_185/0.06)]"
-                  : "border-[oklch(0.22_0.025_240)] bg-transparent hover:border-[oklch(0.75_0.18_185/0.2)]"
-                  } ${inView ? "animate-fade-in-up" : "opacity-0"}`}
-                style={{ animationDelay: `${i * 0.08}s` }}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-300`}
-                    style={{
-                      background: activeStep === i ? `${step.color}20` : "oklch(0.17 0.025 240)",
-                      color: activeStep === i ? step.color : "oklch(0.45 0.015 240)",
-                      border: `1px solid ${activeStep === i ? step.color + "40" : "oklch(0.22 0.025 240)"}`,
-                    }}>
-                    {step.icon}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono-tech text-[oklch(0.40_0.015_240)]">{String(i + 1).padStart(2, "0")}</span>
-                      <span className={`text-sm font-semibold transition-colors ${activeStep === i ? "text-[oklch(0.92_0.005_240)]" : "text-[oklch(0.65_0.015_240)]"}`}>
-                        {step.label}
-                      </span>
-                    </div>
-                    {activeStep === i && (
-                      <p className="text-xs text-[oklch(0.55_0.015_240)] mt-1 animate-fade-in-up">{step.desc}</p>
-                    )}
-                  </div>
-                  {activeStep === i && <CheckCircle2 className="w-4 h-4 text-[oklch(0.72_0.17_155)] flex-shrink-0" />}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Code preview */}
-          <div className={`sticky top-24 ${inView ? "animate-slide-in-right" : "opacity-0"}`}>
-            <div className="card-tech rounded-xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-[oklch(0.22_0.025_240)] bg-[oklch(0.09_0.015_240/0.5)]">
-                <div className="w-2.5 h-2.5 rounded-full bg-[oklch(0.65_0.22_25)]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[oklch(0.75_0.18_55)]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[oklch(0.72_0.17_155)]" />
-                <span className="text-xs font-mono-tech text-[oklch(0.40_0.015_240)] mr-2">
-                  step_{String(activeStep + 1).padStart(2, "0")}.log
-                </span>
-              </div>
-              <div className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ background: `${steps[activeStep].color}20`, color: steps[activeStep].color, border: `1px solid ${steps[activeStep].color}40` }}>
-                    {steps[activeStep].icon}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-[oklch(0.92_0.005_240)]">{steps[activeStep].label}</div>
-                    <div className="text-xs text-[oklch(0.50_0.015_240)]">{steps[activeStep].desc}</div>
-                  </div>
-                </div>
-                <div className="bg-[oklch(0.07_0.012_240)] rounded-lg p-4 border border-[oklch(0.18_0.02_240)]">
-                  <pre className="text-sm font-mono-tech text-[oklch(0.75_0.18_185)] whitespace-pre-wrap leading-relaxed">
-                    {steps[activeStep].code}
-                  </pre>
-                </div>
-                {/* Progress bar */}
-                <div className="mt-4 flex gap-1.5">
-                  {steps.map((_, i) => (
-                    <div key={i} className="h-1 flex-1 rounded-full transition-all duration-300"
-                      style={{ background: i === activeStep ? steps[activeStep].color : "oklch(0.22 0.025 240)" }} />
-                  ))}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {steps.map((s, i) => (
+            <div key={i} className={`relative p-6 rounded-2xl border border-gray-100 bg-white hover:shadow-md transition-shadow ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.08}s` }}>
+              <div className="flex items-start gap-4">
+                <div className="text-4xl font-bold text-navy/10 leading-none">{s.num}</div>
+                <div className="flex-1">
+                  <div className="w-10 h-10 rounded-xl bg-navy-gradient text-white flex items-center justify-center mb-3">{s.icon}</div>
+                  <h3 className="font-bold text-navy mb-2">{s.title}</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
                 </div>
               </div>
             </div>
-
-            {/* ERPNext note */}
-            <div className="mt-4 p-4 rounded-xl border border-[oklch(0.75_0.18_55/0.3)] bg-[oklch(0.75_0.18_55/0.05)]">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 text-[oklch(0.75_0.18_55)] flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-sm font-semibold text-[oklch(0.75_0.18_55)] mb-1">دورة حياة المستندات في ERPNext</div>
-                  <p className="text-xs text-[oklch(0.55_0.015_240)] leading-relaxed">
-                    الفواتير والقيود تُنشأ كـ <code className="font-mono-tech text-[oklch(0.75_0.18_185)]">Draft (docstatus:0)</code> أولاً، ثم تُعتمد بـ <code className="font-mono-tech text-[oklch(0.75_0.18_185)]">Submit (docstatus:1)</code> لتُسجَّل في الحسابات.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── Agents Section ───────────────────────────────────────────────────────────
-function AgentsSection() {
-  const { ref, inView } = useInView();
-  const [activeAgent, setActiveAgent] = useState(0);
-
-  const agents = [
-    {
-      icon: <DollarSign className="w-6 h-6" />,
-      name: "وكيل المبيعات",
-      nameEn: "Sales Agent",
-      color: "oklch(0.72 0.17 155)",
-      channel: "واتساب",
-      tools: ["create_sales_invoice", "create_quotation", "get_customer_balance", "create_sales_order", "send_invoice_email"],
-      desc: "يتعامل مع العملاء مباشرةً، يُنشئ عروض الأسعار والفواتير، ويتابع حالة الطلبات.",
-      doctypes: ["Sales Invoice", "Quotation", "Sales Order", "Customer"],
-      example: "أصدر فاتورة لشركة النور بقيمة 5000 ريال مقابل خدمات استشارية",
-    },
-    {
-      icon: <BookOpen className="w-6 h-6" />,
-      name: "وكيل المحاسبة",
-      nameEn: "Finance Agent",
-      color: "oklch(0.75 0.18 185)",
-      channel: "تيليجرام",
-      tools: ["create_journal_entry", "create_payment_entry", "get_trial_balance", "get_profit_loss", "reconcile_account"],
-      desc: "يُسجّل القيود المحاسبية، يُسجّل الدفعات، ويُنتج التقارير المالية.",
-      doctypes: ["Journal Entry", "Payment Entry", "GL Entry", "Account"],
-      example: "سجّل قيد: مدين حساب الصندوق 3000، دائن المبيعات 3000",
-    },
-    {
-      icon: <ShoppingCart className="w-6 h-6" />,
-      name: "وكيل المشتريات",
-      nameEn: "Purchase Agent",
-      color: "oklch(0.75 0.18 55)",
-      channel: "تيليجرام",
-      tools: ["create_purchase_order", "create_purchase_invoice", "get_supplier_list", "approve_purchase", "track_delivery"],
-      desc: "يُنشئ أوامر الشراء، يُسجّل فواتير الموردين، ويتابع حالة التسليم.",
-      doctypes: ["Purchase Order", "Purchase Invoice", "Supplier", "Material Receipt"],
-      example: "أنشئ أمر شراء من مورد الخليج: 100 وحدة قلم بسعر 2 ريال",
-    },
-    {
-      icon: <Package className="w-6 h-6" />,
-      name: "وكيل المخزون",
-      nameEn: "Inventory Agent",
-      color: "oklch(0.65 0.18 280)",
-      channel: "تيليجرام",
-      tools: ["check_stock_level", "transfer_stock", "create_stock_entry", "get_reorder_items", "adjust_inventory"],
-      desc: "يستعلم عن مستويات المخزون، يُحوّل البضاعة بين المستودعات، وينبّه عند نقطة إعادة الطلب.",
-      doctypes: ["Stock Entry", "Delivery Note", "Material Receipt", "Warehouse"],
-      example: "كم الكمية المتاحة من صنف LAP-001 في مستودع الرياض؟",
-    },
-    {
-      icon: <BarChart3 className="w-6 h-6" />,
-      name: "وكيل التقارير",
-      nameEn: "Reports Agent",
-      color: "oklch(0.70 0.18 320)",
-      channel: "واتساب / تيليجرام",
-      tools: ["get_sales_report", "get_ar_aging", "get_ap_aging", "get_kpi_dashboard", "compare_monthly_performance"],
-      desc: "يُجيب على أسئلة الإدارة بتقارير فورية: المبيعات، الذمم، المؤشرات الرئيسية.",
-      doctypes: ["Sales Analytics", "Accounts Receivable", "Accounts Payable", "Balance Sheet"],
-      example: "ما إجمالي مبيعات هذا الشهر مقارنةً بالشهر الماضي؟",
-    },
-  ];
-
-  return (
-    <section id="agents" className="py-24 relative" ref={ref}>
-      <div className="absolute inset-0 grid-bg opacity-20" />
-      <div className="container relative z-10">
-        <div className={`mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 max-w-12 bg-[oklch(0.65_0.18_280/0.4)]" />
-            <span className="text-xs font-mono-tech text-[oklch(0.65_0.18_280)]">MULTI-AGENT SYSTEM</span>
-          </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-[oklch(0.92_0.005_240)] mb-4">
-            الوكلاء
-            <span className="text-[oklch(0.65_0.18_280)]"> المتخصصون</span>
-          </h2>
-          <p className="text-[oklch(0.60_0.015_240)] max-w-2xl text-lg">
-            بدلاً من وكيل واحد ضخم، نُوظّف وكلاء متخصصين لكل قسم — هذا يُحسّن الدقة ويُقلّل من تشتت النموذج اللغوي.
-          </p>
-        </div>
-
-        {/* Agent tabs */}
-        <div className={`flex flex-wrap gap-2 mb-8 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.15s" }}>
-          {agents.map((agent, i) => (
-            <button key={i} onClick={() => setActiveAgent(i)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${activeAgent === i ? "text-[oklch(0.09_0.015_240)]" : "text-[oklch(0.60_0.015_240)] border border-[oklch(0.22_0.025_240)] hover:border-[oklch(0.40_0.025_240)]"}`}
-              style={activeAgent === i ? { background: agents[i].color } : {}}>
-              {agent.icon}
-              {agent.name}
-            </button>
           ))}
         </div>
-
-        {/* Active agent detail */}
-        <div className={`grid md:grid-cols-2 gap-6 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.2s" }}>
-          <div className="card-tech rounded-xl p-6">
-            <div className="flex items-center gap-4 mb-5">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ background: `${agents[activeAgent].color}20`, color: agents[activeAgent].color, border: `1px solid ${agents[activeAgent].color}40` }}>
-                {agents[activeAgent].icon}
-              </div>
-              <div>
-                <div className="font-bold text-lg text-[oklch(0.92_0.005_240)]">{agents[activeAgent].name}</div>
-                <div className="text-xs font-mono-tech text-[oklch(0.45_0.015_240)]">{agents[activeAgent].nameEn}</div>
-              </div>
-              <div className="mr-auto flex items-center gap-2 px-3 py-1 rounded-full text-xs"
-                style={{ background: `${agents[activeAgent].color}15`, color: agents[activeAgent].color, border: `1px solid ${agents[activeAgent].color}30` }}>
-                <Globe className="w-3 h-3" />
-                {agents[activeAgent].channel}
-              </div>
-            </div>
-            <p className="text-[oklch(0.65_0.015_240)] text-sm leading-relaxed mb-5">{agents[activeAgent].desc}</p>
-            {/* Example message */}
-            <div className="mb-5 p-3 rounded-lg border border-[oklch(0.22_0.025_240)] bg-[oklch(0.09_0.015_240/0.5)]">
-              <div className="flex items-center gap-2 mb-2">
-                <MessageCircle className="w-3.5 h-3.5 text-[oklch(0.75_0.18_185)]" />
-                <span className="text-xs font-mono-tech text-[oklch(0.45_0.015_240)]">مثال على رسالة المستخدم</span>
-              </div>
-              <p className="text-sm text-[oklch(0.80_0.005_240)]">"{agents[activeAgent].example}"</p>
-            </div>
-            <div>
-              <div className="text-xs font-mono-tech text-[oklch(0.45_0.015_240)] mb-3">DocTypes المدعومة:</div>
-              <div className="flex flex-wrap gap-2">
-                {agents[activeAgent].doctypes.map((dt, i) => (
-                  <span key={i} className="text-xs font-mono-tech px-2.5 py-1 rounded-md bg-[oklch(0.09_0.015_240/0.5)] border border-[oklch(0.22_0.025_240)] text-[oklch(0.65_0.015_240)]">
-                    {dt}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="card-tech rounded-xl p-6">
-            <div className="text-xs font-mono-tech text-[oklch(0.45_0.015_240)] mb-4">الأدوات المتاحة (Tools):</div>
-            <div className="space-y-2">
-              {agents[activeAgent].tools.map((tool, i) => (
-                <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-[oklch(0.09_0.015_240/0.5)] border border-[oklch(0.18_0.02_240)]"
-                  style={{ animationDelay: `${i * 0.05}s` }}>
-                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: agents[activeAgent].color }} />
-                  <code className="text-sm font-mono-tech text-[oklch(0.75_0.18_185)]">{tool}</code>
-                </div>
-              ))}
-            </div>
-            {/* Status indicator */}
-            <div className="mt-4 pt-4 border-t border-[oklch(0.22_0.025_240)] flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[oklch(0.72_0.17_155)] animate-pulse" />
-              <span className="text-xs font-mono-tech text-[oklch(0.45_0.015_240)]">AGENT STATUS: ACTIVE — متصل ويعمل</span>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   );
 }
 
-// ─── Implementation Section ───────────────────────────────────────────────────
-function ImplementationSection() {
+function PricingSection() {
   const { ref, inView } = useInView();
+  const { data: plans, isLoading } = trpc.plans.list.useQuery();
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
 
-  const steps = [
-    {
-      num: "01",
-      title: "تجهيز واجهات ERPNext",
-      color: "oklch(0.72 0.17 155)",
-      items: [
-        "إنشاء مستخدم مخصص للـ API (ai_integration_user)",
-        "توليد API Key و API Secret من إعدادات المستخدم",
-        "تكوين Authorization Token: token api_key:api_secret",
-        "تحديد الصلاحيات (Roles) بدقة لتجنب العمليات غير المصرح بها",
-      ],
-      code: `curl -X GET https://your-erp.com/api/method/frappe.auth.get_logged_user \\
-  -H "Authorization: token api_key:api_secret"`,
-    },
-    {
-      num: "02",
-      title: "إعداد n8n وبناء الأدوات",
-      color: "oklch(0.75 0.18 185)",
-      items: [
-        "تثبيت n8n عبر Docker أو Coolify",
-        "إنشاء Workflow جديد مع Webhook Trigger",
-        "إضافة عقدة AI Agent مع نموذج GPT-4o",
-        "تعريف الأدوات (Tools) كـ HTTP Request Nodes",
-      ],
-      code: `// تعريف أداة في n8n
-{
-  "name": "create_sales_invoice",
-  "description": "إنشاء فاتورة مبيعات في ERPNext",
-  "parameters": {
-    "customer": "string",
-    "amount": "number",
-    "item_description": "string"
-  }
-}`,
-    },
-    {
-      num: "03",
-      title: "ربط واتساب وتيليجرام",
-      color: "oklch(0.75 0.18_55)",
-      items: [
-        "إنشاء WhatsApp Business Account وتفعيل Cloud API",
-        "إنشاء Telegram Bot عبر @BotFather",
-        "ضبط Webhook URLs لكلا القناتين في n8n",
-        "اختبار استقبال الرسائل والرد عليها",
-      ],
-      code: `// Telegram Webhook
-POST https://api.telegram.org/bot{TOKEN}/setWebhook
-{
-  "url": "https://your-n8n.com/webhook/telegram"
-}`,
-    },
-    {
-      num: "04",
-      title: "الاختبار والإطلاق",
-      color: "oklch(0.65 0.18 280)",
-      items: [
-        "اختبار السيناريوهات المختلفة باللغة العربية",
-        "معالجة الأخطاء وحالات نقص البيانات",
-        "إعداد نظام مراقبة وتسجيل العمليات",
-        "توظيف الوكلاء وتخصيص كل وكيل لقسمه",
-      ],
-      code: `// مثال: الوكيل يطلب توضيحاً
-User: "أصدر فاتورة بـ 5000"
-Agent: "لأي عميل تريد إصدار الفاتورة؟
-         وما هو البيان أو الخدمة المقدمة؟"`,
-    },
-  ];
-
-  const tools = [
-    { name: "n8n", role: "أتمتة وربط الأنظمة", type: "Open Source", color: "oklch(0.75 0.18 185)" },
-    { name: "OpenAI GPT-4o", role: "فهم اللغة الطبيعية", type: "API", color: "oklch(0.72 0.17 155)" },
-    { name: "WhatsApp Cloud API", role: "قناة العملاء", type: "Meta", color: "oklch(0.72 0.17 155)" },
-    { name: "Telegram Bot API", role: "قناة الموظفين", type: "Free", color: "oklch(0.65 0.18 280)" },
-    { name: "Frappe REST API", role: "واجهة ERPNext", type: "Built-in", color: "oklch(0.75 0.18 55)" },
-    { name: "Docker / Coolify", role: "استضافة n8n", type: "Self-hosted", color: "oklch(0.70 0.18 320)" },
-  ];
+  const planIcons = [<BookOpen className="w-6 h-6" />, <Zap className="w-6 h-6" />, <Bot className="w-6 h-6" />];
+  const planColors = ["border-gray-200", "border-navy shadow-lg scale-105", "border-gold"];
+  const planBadges = ["", "الأكثر طلباً", ""];
 
   return (
-    <section id="implementation" className="py-24 bg-[oklch(0.11_0.018_240/0.4)]" ref={ref}>
+    <section id="pricing" className="py-24 bg-gray-50" ref={ref}>
       <div className="container">
-        <div className={`mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 max-w-12 bg-[oklch(0.75_0.18_55/0.4)]" />
-            <span className="text-xs font-mono-tech text-[oklch(0.75_0.18_55)]">IMPLEMENTATION ROADMAP</span>
+        <div className={`text-center mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-navy/10 text-navy text-sm font-medium mb-4">
+            <DollarSign className="w-4 h-4" />
+            الباقات والأسعار
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-[oklch(0.92_0.005_240)] mb-4">
-            خارطة
-            <span className="text-[oklch(0.75_0.18_55)]"> التنفيذ</span>
-          </h2>
-          <p className="text-[oklch(0.60_0.015_240)] max-w-2xl text-lg">
-            أربع مراحل عملية لتحويل هذه المعمارية إلى نظام حقيقي يعمل في بيئة الإنتاج.
-          </p>
+          <h2 className="text-4xl font-bold text-navy mb-4">باقات تناسب جميع الأعمال</h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">أسعار شهرية شاملة بدون رسوم خفية. يمكنك الترقية أو الإلغاء في أي وقت.</p>
         </div>
-
-        {/* Steps */}
-        <div className="space-y-6 mb-16">
-          {steps.map((step, i) => (
-            <div key={i} className={`card-tech rounded-xl overflow-hidden ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.1}s` }}>
-              <div className="grid md:grid-cols-2">
-                <div className="p-6 border-b md:border-b-0 md:border-l border-[oklch(0.22_0.025_240)]" style={{ borderColor: "oklch(0.22 0.025 240)" }}>
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="text-3xl font-bold font-mono-tech" style={{ color: step.color }}>{step.num}</span>
-                    <h3 className="text-lg font-semibold text-[oklch(0.92_0.005_240)]">{step.title}</h3>
+        {isLoading ? (
+          <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-6 items-center">
+            {plans?.map((plan, i) => {
+              const features: string[] = plan.features ? JSON.parse(plan.features) : [];
+              const isPopular = i === 1;
+              return (
+                <div key={plan.id} className={`rounded-2xl border-2 ${planColors[i]} bg-white p-8 relative ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.1}s` }}>
+                  {planBadges[i] && (
+                    <div className="absolute -top-4 right-1/2 translate-x-1/2 bg-navy text-white text-xs font-bold px-4 py-1.5 rounded-full">
+                      {planBadges[i]}
+                    </div>
+                  )}
+                  <div className={`w-12 h-12 rounded-xl mb-4 flex items-center justify-center ${isPopular ? "bg-navy-gradient text-white" : "bg-gray-100 text-navy"}`}>
+                    {planIcons[i]}
                   </div>
-                  <ul className="space-y-2">
-                    {step.items.map((item, j) => (
-                      <li key={j} className="flex items-start gap-2 text-sm text-[oklch(0.65_0.015_240)]">
-                        <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: step.color }} />
-                        {item}
+                  <h3 className="text-xl font-bold text-navy mb-1">{plan.nameAr}</h3>
+                  <div className="flex items-baseline gap-1 mb-6">
+                    <span className="text-4xl font-bold text-navy">{Number(plan.price).toLocaleString("ar-SA")}</span>
+                    <span className="text-muted-foreground">ريال / شهر</span>
+                  </div>
+                  <ul className="space-y-3 mb-8">
+                    {features.map((f, j) => (
+                      <li key={j} className="flex items-start gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-foreground">{f}</span>
                       </li>
                     ))}
                   </ul>
+                  <Button
+                    className={`w-full ${isPopular ? "bg-navy-gradient text-white hover:opacity-90" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
+                    variant={isPopular ? "default" : "outline"}
+                    onClick={() => {
+                      setSelectedPlanId(plan.id);
+                      document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    ابدأ الآن
+                  </Button>
                 </div>
-                <div className="p-6 bg-[oklch(0.07_0.012_240/0.5)]">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Terminal className="w-3.5 h-3.5 text-[oklch(0.45_0.015_240)]" />
-                    <span className="text-xs font-mono-tech text-[oklch(0.40_0.015_240)]">code example</span>
-                  </div>
-                  <pre className="text-xs font-mono-tech text-[oklch(0.70_0.015_240)] whitespace-pre-wrap leading-relaxed overflow-x-auto">
-                    {step.code}
-                  </pre>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Tools table */}
-        <div className={`${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.4s" }}>
-          <h3 className="text-xl font-bold text-[oklch(0.92_0.005_240)] mb-6 flex items-center gap-3">
-            <Layers className="w-5 h-5 text-[oklch(0.75_0.18_185)]" />
-            الأدوات التقنية الموصى بها
-          </h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tools.map((tool, i) => (
-              <div key={i} className="card-tech rounded-xl p-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${tool.color}15`, border: `1px solid ${tool.color}30` }}>
-                  <Code2 className="w-5 h-5" style={{ color: tool.color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-[oklch(0.92_0.005_240)] truncate">{tool.name}</div>
-                  <div className="text-xs text-[oklch(0.50_0.015_240)]">{tool.role}</div>
-                </div>
-                <span className="text-xs font-mono-tech px-2 py-0.5 rounded flex-shrink-0"
-                  style={{ background: `${tool.color}15`, color: tool.color, border: `1px solid ${tool.color}30` }}>
-                  {tool.type}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
 }
 
-// ─── Security Section ─────────────────────────────────────────────────────────
-function SecuritySection() {
+function ContactSection() {
   const { ref, inView } = useInView();
-
-  const challenges = [
-    {
-      icon: <Lock className="w-5 h-5" />,
-      title: "الأمان وصلاحيات الوصول",
-      color: "oklch(0.72 0.17 155)",
-      problem: "الوكيل قد ينفذ عمليات غير مصرح بها إذا لم تُحدَّد الصلاحيات بدقة.",
-      solution: "إنشاء أدوار (Roles) مخصصة في ERPNext تمنح الإنشاء والقراءة فقط، دون صلاحية الحذف أو التعديل على مستندات معتمدة.",
+  const { data: plans } = trpc.plans.list.useQuery();
+  const submitMutation = trpc.register.submit.useMutation({
+    onSuccess: () => {
+      toast.success("تم إرسال طلبك بنجاح! سنتواصل معك خلال 24 ساعة.");
+      setForm({ name: "", email: "", phone: "", companyName: "", companyType: "", planId: "", message: "" });
     },
-    {
-      icon: <AlertCircle className="w-5 h-5" />,
-      title: "التعامل مع البيانات الناقصة",
-      color: "oklch(0.75 0.18_55)",
-      problem: "المستخدم يطلب \"أصدر فاتورة بـ 500\" دون تحديد العميل أو الصنف.",
-      solution: "برمجة الوكيل ليطرح أسئلة توضيحية (Clarifying Questions) قبل استدعاء أي أداة تتطلب بيانات ناقصة.",
-    },
-    {
-      icon: <Database className="w-5 h-5" />,
-      title: "دورة حياة المستندات",
-      color: "oklch(0.75 0.18 185)",
-      problem: "إنشاء مستند مالي بدون اعتماد لا يُسجَّل في الحسابات — يبقى مسودة.",
-      solution: "تنفيذ خطوتين تلقائياً: POST للإنشاء كمسودة، ثم PUT للاعتماد (docstatus:1)، مع خيار طلب موافقة المدير قبل الاعتماد.",
-    },
-    {
-      icon: <Zap className="w-5 h-5" />,
-      title: "أخطاء واجهة برمجة التطبيقات",
-      color: "oklch(0.65 0.18 280)",
-      problem: "ERPNext قد يُعيد خطأ (نقص مخزون، عميل غير موجود) يجب ترجمته للمستخدم.",
-      solution: "معالجة استجابات الخطأ من الـ API وإعادة صياغتها بلغة عربية مفهومة مع اقتراح الحل.",
-    },
-  ];
-
+    onError: (e) => toast.error(e.message),
+  });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", companyType: "", planId: "", message: "" });
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitMutation.mutate({
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      companyName: form.companyName || undefined,
+      companyType: form.companyType || undefined,
+      planId: form.planId ? Number(form.planId) : undefined,
+      message: form.message || undefined,
+    });
+  };
   return (
-    <section className="py-24 relative" ref={ref}>
+    <section id="contact" className="py-24 bg-navy-hero" ref={ref}>
       <div className="container">
-        <div className={`mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 max-w-12 bg-[oklch(0.65_0.22_25/0.4)]" />
-            <span className="text-xs font-mono-tech text-[oklch(0.65_0.22_25)]">CHALLENGES & SOLUTIONS</span>
-          </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-[oklch(0.92_0.005_240)] mb-4">
-            التحديات
-            <span className="text-[oklch(0.65_0.22_25)]"> والحلول</span>
-          </h2>
-          <p className="text-[oklch(0.60_0.015_240)] max-w-2xl text-lg">
-            أبرز التحديات التقنية التي ستواجهها عند بناء هذا النظام، مع الحلول العملية لكل منها.
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          {challenges.map((c, i) => (
-            <div key={i} className={`card-tech rounded-xl p-6 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.1}s` }}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                  style={{ background: `${c.color}20`, color: c.color, border: `1px solid ${c.color}40` }}>
-                  {c.icon}
-                </div>
-                <h3 className="font-semibold text-[oklch(0.92_0.005_240)]">{c.title}</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg bg-[oklch(0.65_0.22_25/0.05)] border border-[oklch(0.65_0.22_25/0.2)]">
-                  <div className="text-xs font-mono-tech text-[oklch(0.65_0.22_25)] mb-1">التحدي</div>
-                  <p className="text-sm text-[oklch(0.65_0.015_240)]">{c.problem}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-[oklch(0.72_0.17_155/0.05)] border border-[oklch(0.72_0.17_155/0.2)]">
-                  <div className="text-xs font-mono-tech text-[oklch(0.72_0.17_155)] mb-1">الحل</div>
-                  <p className="text-sm text-[oklch(0.65_0.015_240)]">{c.solution}</p>
-                </div>
-              </div>
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <div className={`${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-white/80 text-sm mb-6">
+              <MessageCircle className="w-4 h-4" />
+              تواصل معنا
             </div>
-          ))}
+            <h2 className="text-4xl font-bold text-white mb-6">ابدأ رحلتك مع المعاصر اليوم</h2>
+            <p className="text-white/70 text-lg leading-relaxed mb-8">
+              احجز استشارتك المجانية الآن مع أحد خبرائنا المحاسبيين، وسنساعدك على اختيار الباقة المناسبة لعملك.
+            </p>
+            <div className="space-y-4">
+              {[
+                { icon: <Phone className="w-5 h-5" />, text: "+966 5X XXX XXXX" },
+                { icon: <Mail className="w-5 h-5" />, text: "info@almoaser.com" },
+                { icon: <MessageCircle className="w-5 h-5" />, text: "واتساب متاح 24/7" },
+              ].map((c, i) => (
+                <div key={i} className="flex items-center gap-3 text-white/80">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">{c.icon}</div>
+                  <span>{c.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={`bg-white rounded-2xl p-8 shadow-2xl ${inView ? "animate-slide-in-right" : "opacity-0"}`}>
+            <h3 className="text-xl font-bold text-navy mb-6">طلب استشارة مجانية</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="name" className="text-navy font-medium">الاسم الكامل *</Label>
+                  <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="محمد أحمد" required className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="phone" className="text-navy font-medium">رقم الجوال *</Label>
+                  <Input id="phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="05XXXXXXXX" required className="mt-1" />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="email" className="text-navy font-medium">البريد الإلكتروني *</Label>
+                <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="example@company.com" required className="mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="company" className="text-navy font-medium">اسم الشركة</Label>
+                  <Input id="company" value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="شركة النور" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-navy font-medium">نوع النشاط</Label>
+                  <Select value={form.companyType} onValueChange={v => setForm(f => ({ ...f, companyType: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="اختر النشاط" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="trading">تجارة</SelectItem>
+                      <SelectItem value="services">خدمات</SelectItem>
+                      <SelectItem value="manufacturing">تصنيع</SelectItem>
+                      <SelectItem value="construction">مقاولات</SelectItem>
+                      <SelectItem value="retail">تجزئة</SelectItem>
+                      <SelectItem value="other">أخرى</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label className="text-navy font-medium">الباقة المهتم بها</Label>
+                <Select value={form.planId} onValueChange={v => setForm(f => ({ ...f, planId: v }))}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="اختر الباقة" /></SelectTrigger>
+                  <SelectContent>
+                    {plans?.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nameAr} — {Number(p.price).toLocaleString("ar-SA")} ريال/شهر</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="message" className="text-navy font-medium">رسالة إضافية</Label>
+                <textarea id="message" value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
+                  placeholder="أخبرنا عن احتياجاتك..." rows={3}
+                  className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy/30" />
+              </div>
+              <Button type="submit" disabled={submitMutation.isPending} className="w-full bg-navy-gradient text-white hover:opacity-90 h-12 text-base">
+                {submitMutation.isPending ? "جاري الإرسال..." : "إرسال الطلب"}
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-// ─── Footer ───────────────────────────────────────────────────────────────────
 function Footer() {
   return (
-    <footer className="border-t border-[oklch(0.22_0.025_240)] py-12 bg-[oklch(0.07_0.012_240)]">
+    <footer className="bg-navy-dark py-12 text-white/60">
       <div className="container">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[oklch(0.75_0.18_185/0.15)] border-2 border-[oklch(0.75_0.18_185/0.5)] flex items-center justify-center relative">
-              <img src="/manus-storage/logo_icon_ba8a6fa6.png" alt="Logo" className="w-5 h-5 object-contain" />
-              <div className="absolute inset-0 rounded-full border border-[oklch(0.75_0.18_185/0.2)] scale-125" />
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-gold" />
             </div>
             <div>
-              <div className="font-bold text-sm text-[oklch(0.92_0.005_240)]">
-                <span className="glow-text-cyan">AI Agents</span> × ERPNext
-              </div>
-              <div className="text-xs text-[oklch(0.45_0.015_240)]">الدليل الشامل للأتمتة الذكية</div>
+              <div className="font-bold text-white">المعاصر</div>
+              <div className="text-xs">خدمات مسك الدفاتر بالذكاء الاصطناعي</div>
             </div>
           </div>
-
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-[oklch(0.50_0.015_240)]">
-            {[
-              { label: "Frappe REST API", href: "https://docs.frappe.io/framework/user/en/api/rest" },
-              { label: "n8n AI Agents", href: "https://n8n.io" },
-              { label: "OpenAI Function Calling", href: "https://platform.openai.com/docs/guides/function-calling" },
-            ].map(link => (
-              <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 hover:text-[oklch(0.75_0.18_185)] transition-colors">
-                {link.label}
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            ))}
-          </div>
-
-          <div className="text-xs text-[oklch(0.35_0.015_240)] font-mono-tech">
-            © 2026 — AI Agents × ERPNext
+          <div className="text-sm">© 2026 المعاصر — جميع الحقوق محفوظة</div>
+          <div className="flex gap-4 text-sm">
+            <a href="https://almoaser.com" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">الموقع الرئيسي</a>
+            <a href="#contact" className="hover:text-white transition-colors">تواصل معنا</a>
           </div>
         </div>
       </div>
@@ -914,18 +420,15 @@ function Footer() {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[oklch(0.09_0.015_240)]">
+    <div className="min-h-screen">
       <Navbar />
       <HeroSection />
-      <StatsSection />
-      <ArchitectureSection />
-      <WorkflowSection />
-      <AgentsSection />
-      <ImplementationSection />
-      <SecuritySection />
+      <ServicesSection />
+      <HowItWorksSection />
+      <PricingSection />
+      <ContactSection />
       <Footer />
     </div>
   );
