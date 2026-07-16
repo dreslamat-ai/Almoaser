@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
-type ChatMessage = { from: "user" | "agent"; text: string; delay: number };
+type ChatMessage = { from: "user" | "agent"; text: string; delay: number; type?: "text" | "pdf"; pdfName?: string; pdfSize?: string };
 type Scenario = { id: number; label: string; icon: string; color: string; messages: ChatMessage[] };
 
 const SCENARIOS: Scenario[] = [
@@ -27,9 +27,10 @@ const SCENARIOS: Scenario[] = [
     messages: [
       { from: "user",  text: "أصدر فاتورة لشركة النور بقيمة 5,000 ريال مقابل خدمات استشارية", delay: 0 },
       { from: "agent", text: "⏳ جاري البحث عن شركة النور في النظام...", delay: 900 },
-      { from: "agent", text: "✅ تم إنشاء الفاتورة بنجاح!\n\n📄 رقم الفاتورة: SINV-2026-0042\n👤 العميل: شركة النور للتجارة\n💰 المبلغ: 5,000 ريال\n📅 تاريخ الاستحقاق: 2026-08-17\n\nهل تريد إرسال الفاتورة للعميل بالبريد الإلكتروني؟", delay: 2200 },
-      { from: "user",  text: "نعم أرسلها", delay: 3800 },
-      { from: "agent", text: "📧 تم إرسال الفاتورة إلى info@alnoor.com بنجاح ✓", delay: 5000 },
+      { from: "agent", text: "✅ تم إنشاء الفاتورة بنجاح!\n\n📄 رقم الفاتورة: SINV-2026-0042\n👤 العميل: شركة النور للتجارة\n💰 المبلغ: 5,000 ريال\n📅 تاريخ الاستحقاق: 2026-08-17\n\nهل أرسل الفاتورة هنا في المحادثة؟", delay: 2200 },
+      { from: "user",  text: "نعم أرسلها هنا", delay: 3800 },
+      { from: "agent", text: "⏳ جاري تحويل الفاتورة إلى PDF...", delay: 4800 },
+      { from: "agent", text: "تفضل، الفاتورة جاهزة 👆", delay: 6000, type: "pdf", pdfName: "SINV-2026-0042 — شركة النور.pdf", pdfSize: "142 KB" },
     ],
   },
   {
@@ -394,20 +395,65 @@ function WhatsAppDemoSection() {
                   {scenario.messages.slice(0, visibleMessages).map((msg, i) => (
                     <div key={`${activeScenario}-${i}`}
                       className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"} animate-fade-in-up`}>
-                      <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-line shadow-sm ${
-                        msg.from === "user"
-                          ? "bg-[#005c4b] text-white rounded-tr-sm"
-                          : "bg-[#202c33] text-gray-100 rounded-tl-sm"
-                      }`}>
-                        {msg.from === "agent" && (
-                          <p className="text-green-400 text-[10px] font-semibold mb-1">Almoaser AI ✓</p>
-                        )}
-                        {msg.text}
-                        <p className={`text-[9px] mt-1 text-left ${msg.from === "user" ? "text-white/50" : "text-gray-500"}`}>
-                          {new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
-                          {msg.from === "user" && " ✓✓"}
-                        </p>
-                      </div>
+                      {msg.type === "pdf" ? (
+                        /* ─── بطاقة PDF ─── */
+                        <div className="max-w-[88%] bg-[#202c33] rounded-2xl rounded-tl-sm shadow-sm overflow-hidden">
+                          <p className="text-green-400 text-[10px] font-semibold px-3 pt-2">Almoaser AI ✓</p>
+                          {/* معاينة PDF */}
+                          <div className="mx-3 my-2 bg-[#111b21] rounded-xl overflow-hidden border border-white/10">
+                            {/* شريط PDF أحمر */}
+                            <div className="bg-red-600 px-3 py-2 flex items-center gap-2">
+                              <div className="bg-white/20 rounded px-1.5 py-0.5 text-white text-[9px] font-bold tracking-wider">PDF</div>
+                              <span className="text-white text-[10px] font-medium truncate flex-1">{msg.pdfName}</span>
+                            </div>
+                            {/* معاينة مصغرة للفاتورة */}
+                            <div className="bg-white p-2 text-[7px] leading-relaxed text-gray-700 font-mono" dir="rtl">
+                              <div className="flex justify-between items-start mb-1">
+                                <div>
+                                  <p className="font-bold text-[8px] text-navy">Almoaser AI ERP</p>
+                                  <p className="text-gray-400">فاتورة ضريبية</p>
+                                </div>
+                                <div className="text-left">
+                                  <p className="font-bold text-red-600">SINV-2026-0042</p>
+                                  <p className="text-gray-400">2026-07-17</p>
+                                </div>
+                              </div>
+                              <div className="border-t border-gray-200 pt-1 mt-1">
+                                <div className="flex justify-between"><span>شركة النور للتجارة</span><span className="font-bold">5,000 ر.س</span></div>
+                                <div className="flex justify-between text-gray-400"><span>خدمات استشارية</span><span>+ 750 ضريبة</span></div>
+                              </div>
+                              <div className="border-t border-gray-200 pt-1 mt-1 flex justify-between font-bold text-[8px]">
+                                <span>الإجمالي شامل الضريبة</span><span className="text-green-700">5,750 ر.س</span>
+                              </div>
+                            </div>
+                            {/* شريط أسفل */}
+                            <div className="bg-[#1a2530] px-3 py-1.5 flex items-center justify-between">
+                              <span className="text-gray-400 text-[9px]">{msg.pdfSize}</span>
+                              <span className="text-blue-400 text-[9px] font-medium">اضغط للفتح ↓</span>
+                            </div>
+                          </div>
+                          <p className="text-gray-100 text-xs px-3 pb-1">{msg.text}</p>
+                          <p className="text-[9px] text-gray-500 px-3 pb-2 text-left">
+                            {new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      ) : (
+                        /* ─── رسالة نصية عادية ─── */
+                        <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-line shadow-sm ${
+                          msg.from === "user"
+                            ? "bg-[#005c4b] text-white rounded-tr-sm"
+                            : "bg-[#202c33] text-gray-100 rounded-tl-sm"
+                        }`}>
+                          {msg.from === "agent" && (
+                            <p className="text-green-400 text-[10px] font-semibold mb-1">Almoaser AI ✓</p>
+                          )}
+                          {msg.text}
+                          <p className={`text-[9px] mt-1 text-left ${msg.from === "user" ? "text-white/50" : "text-gray-500"}`}>
+                            {new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                            {msg.from === "user" && " ✓✓"}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))}
 
