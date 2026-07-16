@@ -288,17 +288,41 @@ function ContactSection() {
   const { data: plans } = trpc.plans.list.useQuery();
   const [submitted, setSubmitted] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
+
+  const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", companyType: "", businessSector: "", planId: "", message: "" });
+
+  // ─── تحقق رقم الجوال السعودي ─────────────────────────────────────────
+  const saudiPhoneRegex = /^(?:(?:\+|00)966|0)5[0-9]{8}$/;
+  const [phoneTouched, setPhoneTouched] = useState(false);
+
+  const getPhoneError = (value: string): string => {
+    if (!value) return "رقم الجوال مطلوب";
+    const cleaned = value.replace(/[\s\-]/g, "");
+    if (cleaned.length < 10) return "رقم الجوال قصير جداً — يجب أن يكون 10 أرقام على الأقل";
+    if (!cleaned.startsWith("05") && !cleaned.startsWith("+9665") && !cleaned.startsWith("009665"))
+      return "يجب أن يبدأ الرقم بـ 05 أو +9665";
+    if (!saudiPhoneRegex.test(cleaned))
+      return "صيغة رقم الجوال السعودي غير صحيحة (مثال: 0512345678)";
+    return "";
+  };
+
+  const phoneError = phoneTouched ? getPhoneError(form.phone) : "";
+  const isPhoneValid = saudiPhoneRegex.test(form.phone.replace(/[\s\-]/g, ""));
+  // ─────────────────────────────────────────────────────────────────────
+
   const submitMutation = trpc.register.submit.useMutation({
     onSuccess: () => {
       setSubmittedName(form.name);
       setSubmitted(true);
       setForm({ name: "", email: "", phone: "", companyName: "", companyType: "", businessSector: "", planId: "", message: "" });
+      setPhoneTouched(false);
     },
     onError: (e) => toast.error(e.message),
   });
-  const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", companyType: "", businessSector: "", planId: "", message: "" });
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setPhoneTouched(true);
+    if (!isPhoneValid) return;
     submitMutation.mutate({
       name: form.name,
       email: form.email,
@@ -398,7 +422,53 @@ function ContactSection() {
                     </div>
                     <div>
                       <Label htmlFor="phone" className="text-navy font-medium">رقم الجوال *</Label>
-                      <Input id="phone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="05XXXXXXXX" required className="mt-1" />
+                      <div className="relative mt-1">
+                        <Input
+                          id="phone"
+                          value={form.phone}
+                          onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                          onBlur={() => setPhoneTouched(true)}
+                          placeholder="0512345678"
+                          dir="ltr"
+                          maxLength={15}
+                          className={`pl-9 transition-all duration-200 ${
+                            phoneTouched
+                              ? isPhoneValid
+                                ? "border-green-400 focus-visible:ring-green-300 bg-green-50/40"
+                                : form.phone
+                                  ? "border-red-400 focus-visible:ring-red-300 bg-red-50/40"
+                                  : "border-red-400 focus-visible:ring-red-300"
+                              : ""
+                          }`}
+                        />
+                        {phoneTouched && form.phone && (
+                          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                            {isPhoneValid ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+                              </svg>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className={`transition-all duration-300 overflow-hidden ${phoneError ? "max-h-8 mt-1" : "max-h-0"}`}>
+                        <p className="text-xs text-red-500 flex items-center gap-1">
+                          <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+                          </svg>
+                          {phoneError}
+                        </p>
+                      </div>
+                      {!phoneTouched && (
+                        <p className="text-xs text-gray-400 mt-1">الصيغ المقبولة: 0512345678 أو +966512345678</p>
+                      )}
+                      {phoneTouched && isPhoneValid && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> رقم جوال سعودي صحيح ✓
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div>
