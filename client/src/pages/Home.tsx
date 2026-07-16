@@ -42,7 +42,7 @@ function Navbar() {
             <BookOpen className="w-5 h-5 text-white" />
           </div>
           <div>
-            <span className="font-bold text-lg text-navy">المعاصر</span>
+            <span className="font-bold text-lg text-navy">Almoaser <span className="text-gold font-light text-sm">AI Powered ERP</span></span>
             <div className="text-[10px] text-muted-foreground leading-none">خدمات مسك الدفاتر</div>
           </div>
         </div>
@@ -157,7 +157,7 @@ function ServicesSection() {
             خدماتنا
           </div>
           <h2 className="text-4xl font-bold text-navy mb-4">كل ما تحتاجه لإدارة محاسبتك</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">وكلاء AI متخصصون لكل قسم، يعملون بتناسق تام مع نظام ERPNext الخاص بك.</p>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">وكلاء AI متخصصون لكل قسم، يعملون بتناسق تام مع نظام Almoaser AI Powered ERP الخاص بك.</p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {services.map((s, i) => (
@@ -179,7 +179,7 @@ function HowItWorksSection() {
     { num: "01", title: "مقابلة وتحليل النشاط", desc: "نفهم طبيعة عملك ومتطلباتك المحاسبية لنخصص الوكيل المناسب.", icon: <Users className="w-5 h-5" /> },
     { num: "02", title: "تحديد الباقة المناسبة", desc: "تختار الباقة التي تناسب حجم عملياتك وميزانيتك.", icon: <Star className="w-5 h-5" /> },
     { num: "03", title: "التعاقد والتوقيع", desc: "توقيع الاتفاقية وتحديد نطاق الخدمة وآلية التواصل.", icon: <FileText className="w-5 h-5" /> },
-    { num: "04", title: "تهيئة النظام المحاسبي", desc: "إعداد ERPNext وضبط الوكلاء وفق خطة حسابات شركتك.", icon: <Bot className="w-5 h-5" /> },
+    { num: "04", title: "تهيئة النظام المحاسبي", desc: "إعداد Almoaser AI Powered ERP وضبط الوكلاء وفق خطة حسابات شركتك.", icon: <Bot className="w-5 h-5" /> },
     { num: "05", title: "البدء في التنفيذ", desc: "ترسل أوامرك عبر واتساب والوكيل ينفذها فوراً في النظام.", icon: <MessageCircle className="w-5 h-5" /> },
     { num: "06", title: "المراجعة والتحسين", desc: "تقارير دورية ومراجعة مستمرة لضمان دقة البيانات.", icon: <TrendingUp className="w-5 h-5" /> },
   ];
@@ -315,7 +315,7 @@ function ContactSection() {
               <MessageCircle className="w-4 h-4" />
               تواصل معنا
             </div>
-            <h2 className="text-4xl font-bold text-white mb-6">ابدأ رحلتك مع المعاصر اليوم</h2>
+            <h2 className="text-4xl font-bold text-white mb-6">ابدأ رحلتك مع <span className="text-gold">Almoaser AI</span> اليوم</h2>
             <p className="text-white/70 text-lg leading-relaxed mb-8">
               احجز استشارتك المجانية الآن مع أحد خبرائنا المحاسبيين، وسنساعدك على اختيار الباقة المناسبة لعملك.
             </p>
@@ -405,11 +405,11 @@ function Footer() {
               <BookOpen className="w-5 h-5 text-gold" />
             </div>
             <div>
-              <div className="font-bold text-white">المعاصر</div>
+              <div className="font-bold text-white">Almoaser <span className="text-gold text-sm font-light">AI Powered ERP</span></div>
               <div className="text-xs">خدمات مسك الدفاتر بالذكاء الاصطناعي</div>
             </div>
           </div>
-          <div className="text-sm">© 2026 المعاصر — جميع الحقوق محفوظة</div>
+          <div className="text-sm">© 2026 Almoaser AI Powered ERP — جميع الحقوق محفوظة</div>
           <div className="flex gap-4 text-sm">
             <a href="https://almoaser.com" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">الموقع الرئيسي</a>
             <a href="#contact" className="hover:text-white transition-colors">تواصل معنا</a>
