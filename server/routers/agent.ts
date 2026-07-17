@@ -540,34 +540,75 @@ function isSimilar(a: string, b: string): boolean {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
+// توليد متغيرات الهمزات لكلمة البحث حتى يجد فلتر like في ERPNext الأسماء
+// المكتوبة بهمزات مختلفة (اسلام/إسلام/أسلام كلها نفس الاسم)
+function buildSearchVariants(word: string): string[] {
+  const variants = new Set<string>();
+  const add = (w: string) => { if (w) variants.add(w); };
+  add(word);
+  // توحيد كل الألفات إلى ألف مجردة كأساس
+  const base = word.replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه");
+  add(base);
+  // متغيرات أول حرف إذا كان ألفاً بأي شكل
+  if (/^[اأإآ]/.test(base)) {
+    for (const alef of ["ا", "أ", "إ", "آ"]) add(alef + base.slice(1));
+  }
+  // متغيرات آخر حرف (ه/ة و ي/ى)
+  const expanded = Array.from(variants);
+  for (const v of expanded) {
+    if (v.endsWith("ه")) add(v.slice(0, -1) + "ة");
+    if (v.endsWith("ة")) add(v.slice(0, -1) + "ه");
+    if (v.endsWith("ي")) add(v.slice(0, -1) + "ى");
+    if (v.endsWith("ى")) add(v.slice(0, -1) + "ي");
+  }
+  return Array.from(variants).slice(0, 8);
+}
+
+// بحث like متعدد المتغيرات في ERPNext: يجرب كل متغير همزات ويدمج النتائج
+async function erpSearchByField<T extends { name: string }>(
+  doctype: string,
+  searchField: string,
+  query: string,
+  fields: string[],
+): Promise<T[]> {
+  const firstWord = query.trim().split(/\s+/)[0] ?? query;
+  const variants = buildSearchVariants(firstWord);
+  const fieldsParam = encodeURIComponent(JSON.stringify(fields));
+  const merged = new Map<string, T>();
+  await Promise.all(variants.map(async v => {
+    try {
+      const filters = encodeURIComponent(JSON.stringify([[searchField, "like", `%${v}%`]]));
+      const data = await erpGET(`/api/resource/${encodeURIComponent(doctype)}?limit=50&fields=${fieldsParam}&filters=${filters}`) as { data?: T[] };
+      for (const row of data?.data ?? []) merged.set(row.name, row);
+    } catch {
+      // تجاهل فشل متغير واحد — بقية المتغيرات تكفي
+    }
+  }));
+  return Array.from(merged.values());
+}
+
 // البحث عن عملاء مطابقين/مشابهين بالاسم
 async function findSimilarCustomers(name: string): Promise<Array<{ name: string; customer_name: string }>> {
-  const fields = encodeURIComponent(JSON.stringify(["name", "customer_name"]));
-  // بحث like بأول كلمة من الاسم لتوسيع النتائج، ثم فلترة تقريبية محلياً
-  const firstWord = name.trim().split(/\s+/)[0] ?? name;
-  const filters = encodeURIComponent(JSON.stringify([["customer_name", "like", `%${firstWord}%`]]));
-  const data = await erpGET(`/api/resource/Customer?limit=50&fields=${fields}&filters=${filters}`) as { data?: Array<{ name: string; customer_name: string }> };
-  const all = data?.data ?? [];
+  // بحث like بكل متغيرات الهمزات لأول كلمة، ثم فلترة تقريبية محلياً
+  const all = await erpSearchByField<{ name: string; customer_name: string }>(
+    "Customer", "customer_name", name, ["name", "customer_name"],
+  );
   return all.filter(c => isSimilar(c.customer_name, name) || isSimilar(c.name, name));
 }
 
 // البحث عن أصناف مطابقة/مشابهة بالاسم أو الكود
 async function findSimilarItems(name: string): Promise<Array<{ name: string; item_name: string; standard_rate?: number }>> {
-  const fields = encodeURIComponent(JSON.stringify(["name", "item_name", "standard_rate"]));
-  const firstWord = name.trim().split(/\s+/)[0] ?? name;
-  const filters = encodeURIComponent(JSON.stringify([["item_name", "like", `%${firstWord}%`]]));
-  const data = await erpGET(`/api/resource/Item?limit=50&fields=${fields}&filters=${filters}`) as { data?: Array<{ name: string; item_name: string; standard_rate?: number }> };
-  const all = data?.data ?? [];
+  const all = await erpSearchByField<{ name: string; item_name: string; standard_rate?: number }>(
+    "Item", "item_name", name, ["name", "item_name", "standard_rate"],
+  );
   return all.filter(i => isSimilar(i.item_name, name) || isSimilar(i.name, name));
 }
 
 // البحث عن موردين مطابقين/مشابهين بالاسم
 async function findSimilarSuppliers(name: string): Promise<Array<{ name: string; supplier_name: string }>> {
-  const fields = encodeURIComponent(JSON.stringify(["name", "supplier_name"]));
-  const firstWord = name.trim().split(/\s+/)[0] ?? name;
-  const filters = encodeURIComponent(JSON.stringify([["supplier_name", "like", `%${firstWord}%`]]));
-  const data = await erpGET(`/api/resource/Supplier?limit=50&fields=${fields}&filters=${filters}`) as { data?: Array<{ name: string; supplier_name: string }> };
-  const all = data?.data ?? [];
+  const all = await erpSearchByField<{ name: string; supplier_name: string }>(
+    "Supplier", "supplier_name", name, ["name", "supplier_name"],
+  );
   return all.filter(s => isSimilar(s.supplier_name, name) || isSimilar(s.name, name));
 }
 
@@ -635,6 +676,11 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       let path = `/api/resource/Customer?limit=${limit}&fields=${fields}`;
       if (args.search) path += `&filters=${encodeURIComponent(JSON.stringify([["customer_name", "like", `%${args.search}%`]]))}`;
       const data = await erpGET(path) as { data: unknown[] };
+      // إذا كان بحثاً ولم يجد نتائج like، جرّب البحث التقريبي المعرَّب (كل أشكال الهمزات)
+      if (args.search && (!data?.data || data.data.length === 0)) {
+        const similar = await findSimilarCustomers(args.search as string);
+        if (similar.length > 0) return { result: similar, display: `__CUSTOMERS__${JSON.stringify(similar)}` };
+      }
       return { result: data?.data ?? [], display: `__CUSTOMERS__${JSON.stringify(data?.data ?? [])}` };
     }
     case "get_items": {
@@ -1156,6 +1202,7 @@ export const agentRouter = router({
    - **ممنوع منعاً باتاً** إنشاء عميل أو صنف دون البحث عنه أولاً
    - قبل أي create_customer → ابحث بـ get_customers(search) — إن وُجد مطابق أو مشابه → **استخدم الموجود** ولا تنشئ نسخة مكررة
    - قبل أي create_item → ابحث بـ get_items(search) — إن وُجد مطابق أو مشابه → **استخدم الموجود**
+   - **اختلاف الهمزات لا يعني سجلاً مختلفاً**: "اسلام" و"إسلام" و"أسلام" هم نفس العميل، وكذلك التاء المربوطة/الهاء (ة/ه) والألف المقصورة/الياء (ى/ي) — عاملها كنفس الاسم دائماً واستخدم السجل الموجود مهما اختلف الرسم الإملائي
    - إن وُجدت عدة نتائج مشابهة → **اعرضها على المستخدم واسأله أيها يقصد** قبل المتابعة
    - فقط إذا لم تجد أي تطابق → أنشئ الجديد ثم أكمل العملية الأصلية
 5. **سير إنشاء الفاتورة الصحيح**:

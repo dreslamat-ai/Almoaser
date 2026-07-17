@@ -22,6 +22,54 @@ function isSimilar(a: string, b: string): boolean {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
+// نسخة مطابقة لدالة buildSearchVariants في agent.ts
+function buildSearchVariants(word: string): string[] {
+  const variants = new Set<string>();
+  const add = (w: string) => { if (w) variants.add(w); };
+  add(word);
+  const base = word.replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه");
+  add(base);
+  if (/^[اأإآ]/.test(base)) {
+    for (const alef of ["ا", "أ", "إ", "آ"]) add(alef + base.slice(1));
+  }
+  const expanded = Array.from(variants);
+  for (const v of expanded) {
+    if (v.endsWith("ه")) add(v.slice(0, -1) + "ة");
+    if (v.endsWith("ة")) add(v.slice(0, -1) + "ه");
+    if (v.endsWith("ي")) add(v.slice(0, -1) + "ى");
+    if (v.endsWith("ى")) add(v.slice(0, -1) + "ي");
+  }
+  return Array.from(variants).slice(0, 8);
+}
+
+describe("buildSearchVariants — متغيرات الهمزات للبحث في ERPNext", () => {
+  it("اسلام تولد إسلام وأسلام وآسلام", () => {
+    const variants = buildSearchVariants("اسلام");
+    expect(variants).toContain("اسلام");
+    expect(variants).toContain("إسلام");
+    expect(variants).toContain("أسلام");
+    expect(variants).toContain("آسلام");
+  });
+  it("العكس: إسلام تولد اسلام وأسلام", () => {
+    const variants = buildSearchVariants("إسلام");
+    expect(variants).toContain("اسلام");
+    expect(variants).toContain("أسلام");
+  });
+  it("أحمد تولد احمد", () => {
+    expect(buildSearchVariants("أحمد")).toContain("احمد");
+  });
+  it("خدمة تولد خدمه", () => {
+    expect(buildSearchVariants("خدمة")).toContain("خدمه");
+  });
+  it("مصطفى تولد مصطفي", () => {
+    expect(buildSearchVariants("مصطفى")).toContain("مصطفي");
+  });
+  it("اسم بلا همزات يبقى ضمن المتغيرات ولا يتجاوز العدد 8", () => {
+    expect(buildSearchVariants("محمود")).toContain("محمود");
+    expect(buildSearchVariants("إسلامة").length).toBeLessThanOrEqual(8);
+  });
+});
+
 describe("normalizeArabic", () => {
   it("توحيد الهمزات والألف", () => {
     expect(normalizeArabic("أحمد")).toBe(normalizeArabic("احمد"));
