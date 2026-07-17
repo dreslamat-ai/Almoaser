@@ -33,6 +33,25 @@ function currentErpConfig(): ErpConfig {
   };
 }
 
+// ─── Quick Replies: استخراج أزرار الإجابات السريعة من رد الوكيل ─────────────
+// الوكيل يُنهي أسئلته بسطر: [QUICK_REPLIES: خيار 1 | خيار 2 | ...]
+// نستخرج الخيارات ونحذف السطر من النص المعروض للمستخدم
+export function extractQuickReplies(raw: string): { text: string; quickReplies: string[] } {
+  if (!raw) return { text: raw, quickReplies: [] };
+  const regex = /\[QUICK_REPLIES:\s*([^\]]+)\]/gi;
+  let quickReplies: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(raw)) !== null) {
+    quickReplies = match[1]
+      .split("|")
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+      .slice(0, 6);
+  }
+  const text = raw.replace(/\s*\[QUICK_REPLIES:[^\]]*\]\s*/gi, "\n").trim();
+  return { text, quickReplies };
+}
+
 async function getSession(): Promise<string> {
   return getErpSession(currentErpConfig());
 }
@@ -1268,6 +1287,19 @@ export const agentRouter = router({
 - **لإنشاء فاتورة**: أكّد رقمها وتاريخها وإجماليها، ذكّر بضرورة الاعتماد (Submit) لتسجيلها في الحسابات
 - **لإنشاء عميل/صنف**: أكّد الإنشاء واذكر التفاصيل، ثم أكمل العملية الأصلية إن وُجدت
 
+## أزرار الإجابات السريعة (Quick Replies) — إلزامي
+كلما طرحت على المستخدم سؤالاً (تأكيد، استيضاح، اختيار بين مرشحين، اعتماد مستند، حذف/إلغاء...) يجب أن تُنهي ردّك بسطر أخير منفصل بهذه الصيغة بالضبط:
+[QUICK_REPLIES: خيار 1 | خيار 2 | خيار 3]
+قواعده:
+- الخيارات نصوص قصيرة (كلمة إلى 4 كلمات) يستطيع المستخدم إرسالها كما هي دون كتابة، بنفس لغة المحادثة
+- من 2 إلى 4 خيارات، ورتّب الإجابة الأرجح أولاً
+- أمثلة: سؤال اعتماد فاتورة → [QUICK_REPLIES: نعم، اعتمدها | لا، اتركها مسودة]
+  سؤال تأكيد حذف → [QUICK_REPLIES: نعم، احذفها نهائياً | لا، تراجع]
+  اختيار بين عملاء متشابهين → [QUICK_REPLIES: شركة النور للتجارة | شركة النور للمقاولات | عميل جديد]
+  سؤال عن بيانات ناقصة بخيارات محتملة → اقترح قيماً منطقية كخيارات
+- لا تضع السطر إذا كان ردّك خبرياً لا يتطلب إجابة من المستخدم
+- لا تذكر هذا السطر أو صيغته في نص الرد أبداً — هو للواجهة فقط
+
 ## تاريخ اليوم
 اليوم هو ${new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. استخدمه عند حساب التواريخ والفترات.`;
 
@@ -1312,18 +1344,21 @@ export const agentRouter = router({
         }
 
         if (!msg.tool_calls || msg.tool_calls.length === 0) {
-          const replyText = typeof msg.content === "string"
+          const rawReply = typeof msg.content === "string"
             ? msg.content
             : Array.isArray(msg.content)
               ? msg.content.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text ?? "" : "").join("")
               : "";
+          const { text: replyText, quickReplies } = extractQuickReplies(rawReply);
           if (conversationId && replyText) {
             try {
               await dbHelpers.addMessage(conversationId, "assistant", replyText,
-                toolResults.length ? JSON.stringify(toolResults) : undefined);
+                toolResults.length || quickReplies.length
+                  ? JSON.stringify({ toolResults, quickReplies })
+                  : undefined);
             } catch { /* non-blocking */ }
           }
-          return { reply: replyText, toolResults, conversationId };
+          return { reply: replyText, toolResults, quickReplies, conversationId };
         }
 
         llmMessages.push({
@@ -1358,10 +1393,10 @@ export const agentRouter = router({
       if (conversationId) {
         try {
           await dbHelpers.addMessage(conversationId, "assistant", "تم تنفيذ الطلب.",
-            toolResults.length ? JSON.stringify(toolResults) : undefined);
+            toolResults.length ? JSON.stringify({ toolResults, quickReplies: [] }) : undefined);
         } catch { /* non-blocking */ }
       }
-      return { reply: "تم تنفيذ الطلب.", toolResults, conversationId };
+      return { reply: "تم تنفيذ الطلب.", toolResults, quickReplies: [] as string[], conversationId };
       });
     }),
 

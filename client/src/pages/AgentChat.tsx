@@ -22,7 +22,29 @@ type Message = {
   content: string;
   ts: number;
   toolResults?: ToolResult[];
+  quickReplies?: string[];
 };
+
+// تفكيك عمود toolResults المخزَّن: يدعم الصيغة القديمة (مصفوفة ToolResult[])
+// والصيغة الجديدة (كائن { toolResults, quickReplies })
+function parseStoredToolResults(raw: string | null | undefined): {
+  toolResults?: ToolResult[];
+  quickReplies?: string[];
+} {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return { toolResults: parsed as ToolResult[] };
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as { toolResults?: ToolResult[]; quickReplies?: string[] };
+      return {
+        toolResults: Array.isArray(obj.toolResults) ? obj.toolResults : undefined,
+        quickReplies: Array.isArray(obj.quickReplies) ? obj.quickReplies : undefined,
+      };
+    }
+  } catch { /* ignore */ }
+  return {};
+}
 
 // ─── ERPNext Data Types ───────────────────────────────────────────────────────
 interface Invoice {
@@ -454,12 +476,16 @@ export default function AgentChat() {
     setLoadingConvId(id);
     try {
       const data = await utils.agent.getConversationMessages.fetch({ conversationId: id });
-      setMessages(data.messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        ts: new Date(m.createdAt).getTime(),
-        toolResults: m.toolResults ? (JSON.parse(m.toolResults) as ToolResult[]) : undefined,
-      })));
+      setMessages(data.messages.map(m => {
+        const stored = parseStoredToolResults(m.toolResults);
+        return {
+          role: m.role,
+          content: m.content,
+          ts: new Date(m.createdAt).getTime(),
+          toolResults: stored.toolResults,
+          quickReplies: stored.quickReplies,
+        };
+      }));
       setConversationId(id);
       setHistoryOpen(false);
     } catch {
@@ -520,6 +546,7 @@ export default function AgentChat() {
         content: result.reply,
         ts: Date.now(),
         toolResults: result.toolResults,
+        quickReplies: (result as { quickReplies?: string[] }).quickReplies,
       }]);
       void utils.agent.listConversations.invalidate();
     } catch (err) {
@@ -751,6 +778,23 @@ export default function AgentChat() {
                         tr.display ? (
                           <ToolResultRenderer key={j} display={tr.display} onDownload={(name) => void downloadPdf(name)} />
                         ) : null
+                      ))}
+                    </div>
+                  )}
+                  {/* Quick Replies — أزرار إجابات سريعة تظهر فقط تحت آخر رسالة من الوكيل */}
+                  {msg.role === "assistant" &&
+                    i === messages.length - 1 &&
+                    !chatMutation.isPending &&
+                    msg.quickReplies && msg.quickReplies.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2 animate-in fade-in slide-in-from-bottom-1 duration-300">
+                      {msg.quickReplies.map((qr, j) => (
+                        <button
+                          key={j}
+                          onClick={() => void send(qr)}
+                          className="px-3.5 py-1.5 rounded-full border border-primary/40 bg-primary/5 text-primary text-sm font-medium hover:bg-primary hover:text-primary-foreground active:scale-95 transition-all duration-150"
+                        >
+                          {qr}
+                        </button>
                       ))}
                     </div>
                   )}
