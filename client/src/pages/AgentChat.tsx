@@ -296,7 +296,7 @@ function CreatedInvoiceCard({ inv, onDownload }: { inv: CreatedInvoice; onDownlo
       </div>
       <div className="p-3">
         <p className="text-emerald-800"><span className="font-medium">رقم الفاتورة:</span> <span className="font-mono font-bold">{inv.name}</span></p>
-        <p className="text-emerald-700 text-xs mt-1">الفاتورة محفوظة كمسودة في ERPNext. يمكنك اعتمادها من النظام.</p>
+        <p className="text-emerald-700 text-xs mt-1">الفاتورة محفوظة كمسودة في Almoaser AI ERP. يمكنك اعتمادها من النظام أو أطلب مني اعتمادها.</p>
       </div>
     </div>
   );
@@ -378,7 +378,7 @@ export default function AgentChat() {
       a.href = url; a.download = result.filename; a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert("تعذّر تحميل PDF — تحقق من صلاحيات الطباعة في ERPNext");
+      alert("تعذّر تحميل PDF — تحقق من صلاحيات الطباعة في Almoaser AI ERP");
     }
   };
 
@@ -416,14 +416,16 @@ export default function AgentChat() {
     <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-6rem)] max-w-4xl mx-auto gap-3">
         {/* Header */}
-        <div className="flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
-              <Bot className="w-5 h-5 text-violet-600" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">وكيل الذكاء الاصطناعي</h1>
-              <p className="text-xs text-muted-foreground">متصل بـ ERPNext · ينفذ العمليات مباشرة</p>
+       <div className="flex items-center justify-between shrink-0">
+         <div className="flex items-center gap-3">
+            <img
+              src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
+              alt="المعاصر AI"
+              className="w-10 h-10 rounded-xl object-contain bg-white border border-border"
+            />
+           <div>
+              <h1 className="text-lg font-bold text-foreground">المعاصر AI — المحاسب الذكي</h1>
+             <p className="text-xs text-muted-foreground">متصل بـ Almoaser AI ERP · ينفذ العمليات مباشرة</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -450,9 +452,9 @@ export default function AgentChat() {
                   <Sparkles className="w-8 h-8 text-white" />
                 </div>
                 <div className="text-center">
-                  <h2 className="text-lg font-bold text-foreground mb-1">مرحباً! أنا وكيل ERPNext الذكي</h2>
+                  <h2 className="text-lg font-bold text-foreground mb-1">مرحباً! أنا محاسب المعاصر الذكي</h2>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    أنفّذ طلباتك مباشرة على ERPNext — أنشئ الفواتير، اجلب التقارير، استعرض العملاء والأصناف.
+                    أنفّذ طلباتك مباشرة على Almoaser AI ERP — أنشئ الفواتير والعملاء والأصناف، اجلب التقارير، وأعالج أي نقص تلقائياً.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 w-full max-w-lg">
@@ -511,7 +513,7 @@ export default function AgentChat() {
                 </div>
                 <div className="bg-muted/60 border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">الوكيل يتصل بـ ERPNext...</span>
+                  <span className="text-sm text-muted-foreground">الوكيل يتصل بـ Almoaser AI ERP...</span>
                 </div>
               </div>
             )}
@@ -541,7 +543,7 @@ export default function AgentChat() {
             </div>
             <p className="text-xs text-muted-foreground mt-1.5 text-center">
               <MessageSquare className="w-3 h-3 inline ml-1" />
-              Enter للإرسال · Shift+Enter لسطر جديد · الوكيل ينفذ العمليات مباشرة على ERPNext
+              Enter للإرسال · Shift+Enter لسطر جديد · الوكيل ينفذ العمليات مباشرة على Almoaser AI ERP
             </p>
           </div>
         </Card>

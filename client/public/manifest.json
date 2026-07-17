@@ -1,23 +1,23 @@
 {
   "name": "Almoaser AI ERP",
-  "short_name": "AI ERP",
-  "description": "نظام ERP ذكي مدعوم بالذكاء الاصطناعي",
+  "short_name": "المعاصر AI",
+  "description": "المعاصر — نظام ERP ذكي مدعوم بالذكاء الاصطناعي · حساباتك في أمان",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#22335a",
+  "theme_color": "#1B75BB",
   "orientation": "portrait-primary",
   "lang": "ar",
   "dir": "rtl",
   "icons": [
     {
-      "src": "/manus-storage/icon-192x192_927fd7ea.png",
+      "src": "/manus-storage/almoaser-icon-192_bc4dbf5e.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/manus-storage/icon-512x512_bc4fd9f8.png",
+      "src": "/manus-storage/almoaser-icon-512_ddf6c2d1.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -29,7 +29,7 @@
       "url": "/",
       "icons": [
         {
-          "src": "/manus-storage/icon-192x192_927fd7ea.png",
+          "src": "/manus-storage/almoaser-icon-192_bc4dbf5e.png",
           "sizes": "192x192"
         }
       ]
@@ -39,7 +39,7 @@
       "url": "/agent",
       "icons": [
         {
-          "src": "/manus-storage/icon-192x192_927fd7ea.png",
+          "src": "/manus-storage/almoaser-icon-192_bc4dbf5e.png",
           "sizes": "192x192"
         }
       ]

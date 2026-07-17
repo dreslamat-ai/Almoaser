@@ -172,6 +172,58 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_customer",
+      description: "إنشاء عميل جديد في النظام. استخدمها عند طلب المستخدم إضافة عميل، أو تلقائياً عند إنشاء فاتورة لعميل غير موجود",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "اسم العميل" },
+          customer_type: { type: "string", enum: ["Company", "Individual"], description: "نوع العميل: شركة أو فرد (الافتراضي Company)" },
+          mobile_no: { type: "string", description: "رقم الجوال (اختياري)" },
+          email_id: { type: "string", description: "البريد الإلكتروني (اختياري)" },
+        },
+        required: ["customer_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_item",
+      description: "إنشاء صنف/خدمة جديدة في النظام. استخدمها عند طلب المستخدم إضافة صنف، أو تلقائياً عند إنشاء فاتورة بصنف غير موجود",
+      parameters: {
+        type: "object",
+        properties: {
+          item_name: { type: "string", description: "اسم الصنف أو الخدمة" },
+          item_code: { type: "string", description: "كود الصنف (اختياري — يُستخدم الاسم إذا لم يُحدد)" },
+          standard_rate: { type: "number", description: "سعر البيع الافتراضي (اختياري)" },
+          is_service: { type: "boolean", description: "true إذا كان خدمة (غير مخزنية)، false إذا كان منتجاً مخزنياً. الافتراضي true" },
+          item_group: { type: "string", description: "مجموعة الصنف (اختياري — الافتراضي: All Item Groups)" },
+        },
+        required: ["item_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "submit_invoice",
+      description: "اعتماد فاتورة مبيعات (Submit) لتسجيلها رسمياً في الحسابات. تُستخدم بعد إنشاء الفاتورة أو عند طلب المستخدم اعتماد فاتورة مسودة",
+      parameters: {
+        type: "object",
+        properties: {
+          invoice_name: { type: "string", description: "رقم الفاتورة مثل ACC-SINV-2026-00001" },
+        },
+        required: ["invoice_name"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ─── Tool Executor ────────────────────────────────────────────────────────────
@@ -249,6 +301,63 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       const report = { period: (args.period as string) ?? "this_month", fromDate, toDate, totalInvoices: invoices.length, totalRevenue: total, paidRevenue: paid, unpaidRevenue: total - paid };
       return { result: report, display: `__REPORT__${JSON.stringify(report)}` };
     }
+    case "create_customer": {
+      // جلب المجموعة والإقليم الجذر ديناميكياً (قد تكون أسماؤها معرّبة)
+      const cgData = await erpGET(`/api/resource/Customer%20Group?limit=1&filters=${encodeURIComponent(JSON.stringify([["is_group", "=", 1]]))}`) as { data: Array<{ name: string }> };
+      const terData = await erpGET(`/api/resource/Territory?limit=1&filters=${encodeURIComponent(JSON.stringify([["is_group", "=", 1]]))}`) as { data: Array<{ name: string }> };
+      const customerDoc = {
+        customer_name: args.customer_name,
+        customer_type: (args.customer_type as string) ?? "Company",
+        customer_group: cgData?.data?.[0]?.name ?? "All Customer Groups",
+        territory: terData?.data?.[0]?.name ?? "All Territories",
+        ...(args.mobile_no ? { mobile_no: args.mobile_no } : {}),
+        ...(args.email_id ? { email_id: args.email_id } : {}),
+      };
+      const data = await erpPOST("/api/resource/Customer", customerDoc) as { data: { name: string; customer_name: string; customer_type: string } };
+      return {
+        result: data?.data,
+        display: `__CUSTOMER_CREATED__${JSON.stringify({ name: data?.data?.name, customer_name: data?.data?.customer_name, customer_type: data?.data?.customer_type })}`,
+      };
+    }
+    case "create_item": {
+      const isService = (args.is_service as boolean) ?? true;
+      // جلب مجموعة الأصناف الجذر ووحدة القياس ديناميكياً
+      const igData = await erpGET(`/api/resource/Item%20Group?limit=1&filters=${encodeURIComponent(JSON.stringify([["is_group", "=", 1]]))}`) as { data: Array<{ name: string }> };
+      const uomData = await erpGET(`/api/resource/UOM?limit=1`) as { data: Array<{ name: string }> };
+      const itemDoc = {
+        item_code: (args.item_code as string) ?? (args.item_name as string),
+        item_name: args.item_name,
+        item_group: (args.item_group as string) ?? igData?.data?.[0]?.name ?? "All Item Groups",
+        stock_uom: uomData?.data?.[0]?.name ?? "Nos",
+        is_stock_item: isService ? 0 : 1,
+        ...(args.standard_rate ? { standard_rate: args.standard_rate } : {}),
+      };
+      const data = await erpPOST("/api/resource/Item", itemDoc) as { data: { name: string; item_name: string; standard_rate: number; is_stock_item: number } };
+      return {
+        result: data?.data,
+        display: `__ITEM_CREATED__${JSON.stringify({ name: data?.data?.name, item_name: data?.data?.item_name, standard_rate: data?.data?.standard_rate, is_stock_item: data?.data?.is_stock_item })}`,
+      };
+    }
+    case "submit_invoice": {
+      const invName = args.invoice_name as string;
+      // Frappe submit: PUT with docstatus=1
+      const url = process.env.ERPNEXT_URL ?? "";
+      const sid = await getSession();
+      const res = await fetch(`${url}/api/resource/Sales%20Invoice/${encodeURIComponent(invName)}`, {
+        method: "PUT",
+        headers: { Cookie: `sid=${sid}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ docstatus: 1 }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`فشل اعتماد الفاتورة: ${errText.slice(0, 300)}`);
+      }
+      const data = await res.json() as { data: { name: string; status: string; grand_total: number } };
+      return {
+        result: data?.data,
+        display: `__INVOICE_SUBMITTED__${JSON.stringify({ name: data?.data?.name, status: data?.data?.status, grand_total: data?.data?.grand_total })}`,
+      };
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -270,12 +379,12 @@ export const agentRouter = router({
       })),
     }))
     .mutation(async ({ input }) => {
-      const SYSTEM = `أنت محاسب قانوني خبير ومساعد ذكاء اصطناعي متخصص في نظام ERPNext / Frappe. اسمك "المعاصر AI".
+      const SYSTEM = `أنت محاسب قانوني خبير ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). اسمك "المعاصر AI".
 
 ## هويتك المهنية
-لديك خبرة 15 عاماً في المحاسبة المالية والإدارية، وأنت خبير معتمد في ERPNext. تتقن:
+لديك خبرة 15 عاماً في المحاسبة المالية والإدارية، وأنت خبير معتمد في Almoaser AI ERP. تتقن:
 - معايير المحاسبة الدولية (IFRS) والمحاسبة العربية
-- دورة حياة المستندات في ERPNext (Draft → Submitted → Cancelled)
+- دورة حياة المستندات (Draft → Submitted → Cancelled)
 - جميع DocTypes الرئيسية: Sales Invoice, Purchase Invoice, Journal Entry, Payment Entry, Customer, Supplier, Item, Account, Stock Entry
 - مبدأ القيد المزدوج (Double Entry): كل عملية لها مدين ودائن متساويان
 - الميزانية العمومية، قائمة الدخل، التدفقات النقدية، ميزان المراجعة
@@ -287,11 +396,16 @@ export const agentRouter = router({
 1. **نفّذ أولاً، اشرح ثانياً**: عند أي طلب يتعلق بفواتير/عملاء/أصناف/تقارير → استدعِ الأداة المناسبة فوراً ثم علّق على النتائج
 2. **لا تعطِ إجابات نظرية**: إذا كان لديك أداة تنفذ الطلب، استخدمها مباشرة
 3. **بعد تنفيذ الأداة**: لخّص النتائج بأسلوب محاسب محترف — أبرز الأرقام المهمة، نبّه على المتأخرات، اقترح الإجراء التالي
-4. **عند إنشاء فاتورة**: إذا نقصت بيانات (عميل/صنف/كمية/سعر) → اسأل عنها بوضوح قبل الاستدعاء
+4. **معالجة النواقص تلقائياً (مهم جداً)**: أنت خبير تحلّ المشاكل بنفسك:
+   - عند إنشاء فاتورة لعميل غير موجود → تحقق بـ get_customers، وإن لم تجده → أنشئه فوراً بـ create_customer ثم أكمل الفاتورة
+   - عند إنشاء فاتورة بصنف غير موجود → تحقق بـ get_items، وإن لم تجده → أنشئه فوراً بـ create_item (بسعر الفاتورة) ثم أكمل
+   - إذا فشل create_invoice بسبب عميل/صنف مفقود → أنشئ الناقص ثم أعد المحاولة تلقائياً — لا تسأل المستخدم عن أشياء يمكنك حلها بنفسك
+   - اسأل المستخدم فقط عن بيانات لا يمكنك استنتاجها (مثل المبلغ إذا لم يُذكر)
 5. **استرجاع فاتورة**: "اعرض فاتورة SINV-XXX" → get_invoice_detail | "آخر الفواتير" → get_invoices
 6. **الردود**: عربية فصيحة واضحة، مختصرة ومهنية. استخدم المصطلحات المحاسبية الصحيحة
+7. **الاعتماد**: بعد إنشاء الفاتورة اعرض اعتمادها — إن وافق المستخدم أو طلبها معتمدة → استدعِ submit_invoice
 
-## خبرتك في ERPNext
+## خبرتك في Almoaser AI ERP
 - **Sales Invoice**: فاتورة المبيعات — تُنشأ Draft ثم Submit لتسجّل في الحسابات. الحالات: Draft/Unpaid/Paid/Overdue/Cancelled
 - **Purchase Invoice**: فاتورة المشتريات من الموردين
 - **Journal Entry**: قيد محاسبي يدوي — يستخدم للتسويات والتحويلات
@@ -308,6 +422,7 @@ export const agentRouter = router({
 - **للتقارير**: قارن بالفترة السابقة إذا أمكن، أبرز نسبة التحصيل
 - **للعملاء**: نبّه على العملاء ذوي الأرصدة المرتفعة
 - **لإنشاء فاتورة**: أكّد رقمها وتاريخها وإجماليها، ذكّر بضرورة الاعتماد (Submit) لتسجيلها في الحسابات
+- **لإنشاء عميل/صنف**: أكّد الإنشاء واذكر التفاصيل، ثم أكمل العملية الأصلية إن وُجدت
 
 ## تاريخ اليوم
 اليوم هو ${new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. استخدمه عند حساب التواريخ والفترات.`;

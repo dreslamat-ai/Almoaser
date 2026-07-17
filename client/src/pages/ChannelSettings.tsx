@@ -247,7 +247,7 @@ export default function ChannelSettings() {
               <p className="text-sm font-semibold text-amber-800">ملاحظة أمنية</p>
               <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
                 يتم تشفير جميع الرموز وتخزينها بشكل آمن. لا تشارك رموز الوصول مع أي طرف آخر.
-                تأكد من تحديد صلاحيات محدودة للمستخدم في ERPNext.
+                تأكد من تحديد صلاحيات محدودة للمستخدم في Almoaser AI ERP.
               </p>
             </div>
           </CardContent>

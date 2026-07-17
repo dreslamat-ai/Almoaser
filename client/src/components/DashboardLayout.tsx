@@ -216,13 +216,23 @@ function DashboardLayoutContent({
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
-              {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-bold tracking-tight truncate text-foreground">
-                    AI × ERPNext
-                  </span>
-                </div>
-              ) : null}
+             {!isCollapsed ? (
+               <div className="flex items-center gap-2 min-w-0">
+                  <img
+                    src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
+                    alt="المعاصر"
+                    className="h-8 w-8 rounded-lg shrink-0 object-contain bg-white"
+                  />
+                  <div className="flex flex-col min-w-0 leading-tight">
+                    <span className="font-bold tracking-tight truncate text-foreground text-sm">
+                      Almoaser AI ERP
+                    </span>
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      حساباتك في أمان
+                    </span>
+                  </div>
+               </div>
+             ) : null}
             </div>
           </SidebarHeader>
 

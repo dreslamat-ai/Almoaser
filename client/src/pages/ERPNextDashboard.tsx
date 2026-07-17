@@ -138,7 +138,7 @@ export default function ERPNextDashboard() {
             <CardContent className="flex items-center gap-3 p-4">
               <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
               <div>
-                <p className="font-medium text-destructive text-sm">تعذّر الاتصال بـ ERPNext</p>
+                <p className="font-medium text-destructive text-sm">تعذّر الاتصال بـ Almoaser AI ERP</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{statsError.message}</p>
               </div>
               <Button variant="outline" size="sm" className="mr-auto" onClick={handleRefresh}>إعادة المحاولة</Button>
