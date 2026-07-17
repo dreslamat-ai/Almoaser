@@ -9,6 +9,8 @@ import { notifyOwner } from "./_core/notification";
 import { agentRouter } from "./routers/agent";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, testErpConnection, encryptPassword } from "./erpConnection";
 import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
+import { notifyUser, notifyAdmins, maybeNotifyTrialEnding } from "./notifications";
+import { notificationsRouter } from "./routers/notificationsRouter";
 import { sdk } from "./_core/sdk";
 import { erpnextConnections } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -156,6 +158,13 @@ export const appRouter = router({
         });
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
+        // إشعار الأدمن بتسجيل مستخدم جديد (داخل الموقع + push)
+        notifyAdmins({
+          type: "new_user",
+          title: "مستخدم جديد سجّل في المنصة",
+          body: `${result.result.fullName} (${result.result.email}) سجّل حساباً جديداً وبدأ التجربة المجانية.`,
+          link: "/admin",
+        }).catch(() => {});
         return {
           success: true,
           name: result.result.fullName,
@@ -179,7 +188,12 @@ export const appRouter = router({
     get: protectedProcedure.query(async ({ ctx }) => {
       // إن انتهت فترة التجربة تُفعَّل الباقة المختارة تلقائياً قبل الإرجاع
       await activateTrialIfExpired(ctx.user.id);
-      return getSubscriptionByUserId(ctx.user.id);
+      const sub = await getSubscriptionByUserId(ctx.user.id);
+      // إشعار اقتراب انتهاء التجربة (آخر 24 ساعة، بلا تكرار يومي)
+      if (sub?.status === "trial" && sub.endDate) {
+        maybeNotifyTrialEnding(ctx.user.id, sub.endDate).catch(() => {});
+      }
+      return sub;
     }),
     create: protectedProcedure
       .input(z.object({
@@ -230,10 +244,21 @@ export const appRouter = router({
         status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
       }))
       .mutation(async ({ ctx, input }) => {
+        const task = await getTaskById(input.id);
         await updateTask(input.id, ctx.user.id, {
           status: input.status,
           completedAt: input.status === "completed" ? new Date() : undefined,
         });
+        // إشعار المستخدم عند اكتمال المهمة
+        if (input.status === "completed" && task) {
+          notifyUser({
+            userId: ctx.user.id,
+            type: "task_completed",
+            title: "اكتملت المهمة",
+            body: `المهمة «${task.title}» اكتملت بنجاح.`,
+            link: "/tasks",
+          }).catch(() => {});
+        }
         return { success: true };
       }),
     comments: protectedProcedure
@@ -598,6 +623,7 @@ export const appRouter = router({
   }),
 
   agent: agentRouter,
+  notifications: notificationsRouter,
   channels: router({
     saveSettings: protectedProcedure
       .input(z.object({

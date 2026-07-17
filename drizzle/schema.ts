@@ -144,3 +144,33 @@ export type TaskComment = typeof taskComments.$inferSelect;
 export type ErpnextConnection = typeof erpnextConnections.$inferSelect;
 export type AgentConversation = typeof agentConversations.$inferSelect;
 export type AgentMessage = typeof agentMessages.$inferSelect;
+
+// ─── نظام الإشعارات المخصصة ──────────────────────────────────────────────────
+// إشعارات المستخدم داخل الموقع (مركز الإشعارات — جرس + عدّاد غير المقروء)
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  // نوع الحدث: invoice_created | invoice_submitted | task_completed | trial_ending | new_user | general
+  type: varchar("type", { length: 40 }).default("general").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  body: text("body"),
+  // رابط داخلي يُفتح عند النقر مثل /erp/invoices
+  link: varchar("link", { length: 300 }),
+  // وقت القراءة، null = غير مقروء
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// اشتراكات Web Push لأجهزة المستخدمين (جهاز/متصفح لكل صف)
+export const pushSubscriptions = mysqlTable("push_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  endpoint: varchar("endpoint", { length: 500 }).notNull(),
+  p256dh: varchar("p256dh", { length: 200 }).notNull(),
+  auth: varchar("auth", { length: 100 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;

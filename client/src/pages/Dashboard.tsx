@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { InstallAppButton } from "@/components/InstallAppButton";
+import NotificationBell from "@/components/NotificationBell";
 import { useState } from "react";
 import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu } from "lucide-react";
 
@@ -76,17 +77,20 @@ function Sidebar({ active }: { active: string }) {
           </div>
           <span className="font-bold text-white text-sm">Almoaser <span className="text-gold text-xs font-light">AI ERP</span></span>
         </div>
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" aria-label="فتح القائمة">
-              <Menu className="w-6 h-6" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="p-0 w-72 border-0 bg-navy-hero [&>button]:text-white">
-            <SheetTitle className="sr-only">القائمة</SheetTitle>
-            <SidebarContent active={active} onNavigate={() => setOpen(false)} />
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center gap-1 [&_button]:text-white [&_button:hover]:bg-white/10">
+          <NotificationBell />
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" aria-label="فتح القائمة">
+                <Menu className="w-6 h-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="p-0 w-72 border-0 bg-navy-hero [&>button]:text-white">
+              <SheetTitle className="sr-only">القائمة</SheetTitle>
+              <SidebarContent active={active} onNavigate={() => setOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
       {/* مساحة للشريط العلوي على الجوال */}
       <div className="md:hidden h-14" aria-hidden="true" />
@@ -134,9 +138,14 @@ export default function Dashboard() {
     <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
       <Sidebar active="/dashboard" />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-navy">مرحباً، {user?.name ?? "عزيزي العميل"} 👋</h1>
-          <p className="text-muted-foreground mt-1">هذا ملخص حسابك في Almoaser AI ERP</p>
+        <div className="mb-8 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-navy">مرحباً، {user?.name ?? "عزيزي العميل"} 👋</h1>
+            <p className="text-muted-foreground mt-1">هذا ملخص حسابك في Almoaser AI ERP</p>
+          </div>
+          <div className="hidden md:block">
+            <NotificationBell />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

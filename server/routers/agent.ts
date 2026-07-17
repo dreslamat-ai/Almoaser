@@ -7,6 +7,7 @@ import { invokeLLM } from "../_core/llm";
 import { storagePut, storageGetSignedUrl } from "../storage";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
+import { notifyUser } from "../notifications";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
@@ -1380,6 +1381,28 @@ export const agentRouter = router({
             const { result, display } = await executeTool(tc.function.name, args);
             toolResult = JSON.stringify(result);
             displayData = display;
+            // إشعار داخل الموقع + push عند إنشاء/اعتماد فاتورة عبر الوكيل
+            try {
+              if (displayData.startsWith("__INVOICE_CREATED__")) {
+                const inv = JSON.parse(displayData.slice("__INVOICE_CREATED__".length)) as { name?: string; customer?: string; grand_total?: number };
+                notifyUser({
+                  userId: ctx.user.id,
+                  type: "invoice_created",
+                  title: "فاتورة جديدة",
+                  body: `أنشأ الوكيل الفاتورة ${inv.name ?? ""} للعميل ${inv.customer ?? ""} بقيمة ${inv.grand_total ?? ""}.`,
+                  link: "/invoices",
+                }).catch(() => {});
+              } else if (displayData.startsWith("__INVOICE_SUBMITTED__")) {
+                const inv = JSON.parse(displayData.slice("__INVOICE_SUBMITTED__".length)) as { name?: string; grand_total?: number };
+                notifyUser({
+                  userId: ctx.user.id,
+                  type: "invoice_submitted",
+                  title: "تم اعتماد فاتورة",
+                  body: `اعتُمدت الفاتورة ${inv.name ?? ""} بقيمة ${inv.grand_total ?? ""} في النظام.`,
+                  link: "/invoices",
+                }).catch(() => {});
+              }
+            } catch { /* الإشعار لا يوقف التنفيذ */ }
           } catch (e) {
             const rawErr = e instanceof Error ? e.message : "Tool execution failed";
             console.error(`[agent.chat] tool ${tc.function.name} failed:`, rawErr);

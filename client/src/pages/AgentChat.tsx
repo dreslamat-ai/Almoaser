@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Streamdown } from "streamdown";
 import { toast } from "sonner";
+import NotificationBell from "@/components/NotificationBell";
 import {
   Bot, Send, User, Sparkles, Loader2, Trash2,
   FileText, BarChart3, Users, Package, MessageSquare,
@@ -736,6 +737,7 @@ export default function AgentChat() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <Badge variant="outline" className="text-xs gap-1 text-emerald-600 border-emerald-200 bg-emerald-50">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               متصل
