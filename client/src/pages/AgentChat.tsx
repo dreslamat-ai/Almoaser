@@ -441,6 +441,7 @@ export default function AgentChat() {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [pendingQuickReply, setPendingQuickReply] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -555,6 +556,8 @@ export default function AgentChat() {
         content: `⚠️ حدث خطأ: ${err instanceof Error ? err.message : "تعذّر الاتصال بالوكيل"}`,
         ts: Date.now(),
       }]);
+    } finally {
+      setPendingQuickReply(null);
     }
   };
 
@@ -784,15 +787,24 @@ export default function AgentChat() {
                   {/* Quick Replies — أزرار إجابات سريعة تظهر فقط تحت آخر رسالة من الوكيل */}
                   {msg.role === "assistant" &&
                     i === messages.length - 1 &&
-                    !chatMutation.isPending &&
                     msg.quickReplies && msg.quickReplies.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2 animate-in fade-in slide-in-from-bottom-1 duration-300">
                       {msg.quickReplies.map((qr, j) => (
                         <button
                           key={j}
-                          onClick={() => void send(qr)}
-                          className="px-3.5 py-1.5 rounded-full border border-primary/40 bg-primary/5 text-primary text-sm font-medium hover:bg-primary hover:text-primary-foreground active:scale-95 transition-all duration-150"
+                          onClick={() => { setPendingQuickReply(qr); void send(qr); }}
+                          disabled={chatMutation.isPending}
+                          className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 inline-flex items-center gap-1.5 ${
+                            pendingQuickReply === qr && chatMutation.isPending
+                              ? "border-primary bg-primary text-primary-foreground cursor-wait"
+                              : chatMutation.isPending
+                                ? "border-border bg-muted/40 text-muted-foreground opacity-50 cursor-not-allowed"
+                                : "border-primary/40 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground active:scale-95"
+                          }`}
                         >
+                          {pendingQuickReply === qr && chatMutation.isPending && (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          )}
                           {qr}
                         </button>
                       ))}
@@ -810,7 +822,9 @@ export default function AgentChat() {
                 </div>
                 <div className="bg-muted/60 border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">الوكيل يتصل بـ Almoaser AI ERP...</span>
+                  <span className="text-sm text-muted-foreground">
+                    {pendingQuickReply ? `جاري التنفيذ: «${pendingQuickReply}»...` : "الوكيل يتصل بـ Almoaser AI ERP..."}
+                  </span>
                 </div>
               </div>
             )}
