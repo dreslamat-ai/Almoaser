@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { InstallAppButton } from "@/components/InstallAppButton";
 import { useState } from "react";
 import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu } from "lucide-react";
 
@@ -45,6 +46,7 @@ function SidebarContent({ active, onNavigate }: { active: string; onNavigate?: (
         ))}
       </nav>
       <div className="p-4 border-t border-white/10 space-y-1">
+        <InstallAppButton />
         <button onClick={() => go("/settings")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${active === "/settings" ? "bg-white/15 text-white font-medium" : "text-white/60 hover:bg-white/10 hover:text-white"}`}>
           <Settings className="w-5 h-5" />
           الإعدادات
