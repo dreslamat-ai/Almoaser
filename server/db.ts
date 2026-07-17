@@ -1,6 +1,6 @@
 import { eq, desc, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, plans, subscriptions, tasks, serviceInvoices, registrationRequests, taskComments } from "../drizzle/schema";
+import { InsertUser, users, plans, subscriptions, tasks, serviceInvoices, registrationRequests, taskComments, agentConversations, agentMessages } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -297,4 +297,61 @@ export async function setUserActive(userId: number, isActive: boolean) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ isActive }).where(eq(users.id, userId));
+}
+
+// ─── سجل محادثات الوكيل ───────────────────────────────────────────────────────
+export async function getConversationsByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(agentConversations).where(eq(agentConversations.userId, userId)).orderBy(desc(agentConversations.updatedAt));
+}
+
+export async function getConversationById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(agentConversations)
+    .where(and(eq(agentConversations.id, id), eq(agentConversations.userId, userId))).limit(1);
+  return result[0];
+}
+
+export async function createConversation(userId: number, title: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(agentConversations).values({ userId, title });
+  return Number((result as unknown as [{ insertId: number }])[0].insertId);
+}
+
+export async function updateConversationTitle(id: number, userId: number, title: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(agentConversations).set({ title })
+    .where(and(eq(agentConversations.id, id), eq(agentConversations.userId, userId)));
+}
+
+export async function touchConversation(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(agentConversations).set({ updatedAt: new Date() }).where(eq(agentConversations.id, id));
+}
+
+export async function deleteConversation(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conv = await getConversationById(id, userId);
+  if (!conv) throw new Error("المحادثة غير موجودة");
+  await db.delete(agentMessages).where(eq(agentMessages.conversationId, id));
+  await db.delete(agentConversations).where(and(eq(agentConversations.id, id), eq(agentConversations.userId, userId)));
+}
+
+export async function getMessagesByConversationId(conversationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(agentMessages).where(eq(agentMessages.conversationId, conversationId)).orderBy(agentMessages.createdAt);
+}
+
+export async function addMessage(conversationId: number, role: "user" | "assistant", content: string, toolResults?: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(agentMessages).values({ conversationId, role, content, toolResults: toolResults ?? null });
+  await touchConversation(conversationId);
 }

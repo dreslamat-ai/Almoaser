@@ -36,6 +36,20 @@
       "when": 1784259794185,
       "tag": "0004_broken_sebastian_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1784266051067,
+      "tag": "0005_real_maximus",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1784266407431,
+      "tag": "0006_damp_big_bertha",
+      "breakpoints": true
     }
   ]
 }

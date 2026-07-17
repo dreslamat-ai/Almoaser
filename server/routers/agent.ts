@@ -1169,6 +1169,7 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
 export const agentRouter = router({
   chat: protectedProcedure
     .input(z.object({
+      conversationId: z.number().optional(),
       messages: z.array(z.object({
         role: z.enum(["user", "assistant", "tool"]),
         content: z.string(),
@@ -1181,6 +1182,26 @@ export const agentRouter = router({
       })),
     }))
     .mutation(async ({ input, ctx }) => {
+      // ─── حفظ سجل المحادثة: إنشاء محادثة جديدة إن لم تُمرَّر، وحفظ رسالة المستخدم ───
+      const dbHelpers = await import("../db");
+      const lastUserMsg = [...input.messages].reverse().find(m => m.role === "user");
+      let conversationId = input.conversationId;
+      try {
+        if (conversationId) {
+          const conv = await dbHelpers.getConversationById(conversationId, ctx.user.id);
+          if (!conv) conversationId = undefined;
+        }
+        if (!conversationId && lastUserMsg) {
+          const title = lastUserMsg.content.slice(0, 80) || "محادثة جديدة";
+          conversationId = await dbHelpers.createConversation(ctx.user.id, title);
+        }
+        if (conversationId && lastUserMsg) {
+          await dbHelpers.addMessage(conversationId, "user", lastUserMsg.content);
+        }
+      } catch (e) {
+        console.warn("[agent.chat] failed to persist conversation:", e instanceof Error ? e.message : e);
+      }
+
       const SYSTEM = `أنت محاسب قانوني خبير ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). اسمك "المعاصر AI".
 
 ## هويتك المهنية
@@ -1296,7 +1317,13 @@ export const agentRouter = router({
             : Array.isArray(msg.content)
               ? msg.content.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text ?? "" : "").join("")
               : "";
-          return { reply: replyText, toolResults };
+          if (conversationId && replyText) {
+            try {
+              await dbHelpers.addMessage(conversationId, "assistant", replyText,
+                toolResults.length ? JSON.stringify(toolResults) : undefined);
+            } catch { /* non-blocking */ }
+          }
+          return { reply: replyText, toolResults, conversationId };
         }
 
         llmMessages.push({
@@ -1328,8 +1355,54 @@ export const agentRouter = router({
         }
       }
 
-      return { reply: "تم تنفيذ الطلب.", toolResults };
+      if (conversationId) {
+        try {
+          await dbHelpers.addMessage(conversationId, "assistant", "تم تنفيذ الطلب.",
+            toolResults.length ? JSON.stringify(toolResults) : undefined);
+        } catch { /* non-blocking */ }
+      }
+      return { reply: "تم تنفيذ الطلب.", toolResults, conversationId };
       });
+    }),
+
+  // ─── سجل المحادثات ────────────────────────────────────────────────────────
+  listConversations: protectedProcedure.query(async ({ ctx }) => {
+    const dbHelpers = await import("../db");
+    return dbHelpers.getConversationsByUserId(ctx.user.id);
+  }),
+
+  createConversation: protectedProcedure
+    .input(z.object({ title: z.string().min(1).max(255).default("محادثة جديدة") }).optional())
+    .mutation(async ({ input, ctx }) => {
+      const dbHelpers = await import("../db");
+      const id = await dbHelpers.createConversation(ctx.user.id, input?.title ?? "محادثة جديدة");
+      return { conversationId: id };
+    }),
+
+  getConversationMessages: protectedProcedure
+    .input(z.object({ conversationId: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const dbHelpers = await import("../db");
+      const conv = await dbHelpers.getConversationById(input.conversationId, ctx.user.id);
+      if (!conv) throw new TRPCError({ code: "NOT_FOUND", message: "المحادثة غير موجودة" });
+      const messages = await dbHelpers.getMessagesByConversationId(input.conversationId);
+      return { conversation: conv, messages };
+    }),
+
+  renameConversation: protectedProcedure
+    .input(z.object({ conversationId: z.number(), title: z.string().min(1).max(255) }))
+    .mutation(async ({ input, ctx }) => {
+      const dbHelpers = await import("../db");
+      await dbHelpers.updateConversationTitle(input.conversationId, ctx.user.id, input.title);
+      return { success: true };
+    }),
+
+  deleteConversation: protectedProcedure
+    .input(z.object({ conversationId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const dbHelpers = await import("../db");
+      await dbHelpers.deleteConversation(input.conversationId, ctx.user.id);
+      return { success: true };
     }),
 
   getInvoicePdf: protectedProcedure

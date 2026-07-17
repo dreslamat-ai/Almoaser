@@ -115,6 +115,26 @@ export const erpnextConnections = mysqlTable("erpnext_connections", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// ─── سجل محادثات الوكيل الذكي ─────────────────────────────────────────────────
+// كل محادثة مرتبطة بمستخدم، والرسائل (user/assistant) تُحفظ تلقائياً أثناء agent.chat
+export const agentConversations = mysqlTable("agent_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  title: varchar("title", { length: 255 }).default("محادثة جديدة").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const agentMessages = mysqlTable("agent_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull().references(() => agentConversations.id),
+  role: mysqlEnum("role", ["user", "assistant"]).notNull(),
+  content: text("content").notNull(),
+  // نتائج الأدوات (جداول الفواتير/العملاء/التقارير) محفوظة JSON لإعادة عرضها عند فتح المحادثة
+  toolResults: text("toolResults"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type Plan = typeof plans.$inferSelect;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
@@ -122,3 +142,5 @@ export type ServiceInvoice = typeof serviceInvoices.$inferSelect;
 export type RegistrationRequest = typeof registrationRequests.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type ErpnextConnection = typeof erpnextConnections.$inferSelect;
+export type AgentConversation = typeof agentConversations.$inferSelect;
+export type AgentMessage = typeof agentMessages.$inferSelect;

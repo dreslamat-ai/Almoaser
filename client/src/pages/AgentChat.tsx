@@ -12,6 +12,7 @@ import {
   FileText, BarChart3, Users, Package, MessageSquare,
   Download, CheckCircle2, AlertCircle, TrendingUp,
   Mic, Square, ImagePlus, Camera,
+  History, Plus, X,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -412,6 +413,9 @@ const DOC_TYPE_LABEL: Record<string, string> = {
 export default function AgentChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [conversationId, setConversationId] = useState<number | undefined>(undefined);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [loadingConvId, setLoadingConvId] = useState<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -424,6 +428,57 @@ export default function AgentChat() {
   const pdfMutation = trpc.agent.getInvoicePdf.useMutation();
   const transcribeMutation = trpc.agent.transcribeVoice.useMutation();
   const extractMutation = trpc.agent.extractDocument.useMutation();
+  const utils = trpc.useUtils();
+  const conversationsQuery = trpc.agent.listConversations.useQuery(undefined, { enabled: historyOpen });
+  const createConvMutation = trpc.agent.createConversation.useMutation();
+  const deleteConvMutation = trpc.agent.deleteConversation.useMutation({
+    onSuccess: () => { void utils.agent.listConversations.invalidate(); },
+  });
+
+  const startNewConversation = (createInDb = false) => {
+    setMessages([]);
+    setConversationId(undefined);
+    setHistoryOpen(false);
+    if (createInDb) {
+      createConvMutation.mutate(undefined, {
+        onSuccess: (data) => {
+          setConversationId(data.conversationId);
+          void utils.agent.listConversations.invalidate();
+        },
+      });
+    }
+  };
+
+  const openConversation = async (id: number) => {
+    if (loadingConvId) return;
+    setLoadingConvId(id);
+    try {
+      const data = await utils.agent.getConversationMessages.fetch({ conversationId: id });
+      setMessages(data.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        ts: new Date(m.createdAt).getTime(),
+        toolResults: m.toolResults ? (JSON.parse(m.toolResults) as ToolResult[]) : undefined,
+      })));
+      setConversationId(id);
+      setHistoryOpen(false);
+    } catch {
+      toast.error("تعذّر تحميل المحادثة");
+    } finally {
+      setLoadingConvId(null);
+    }
+  };
+
+  const handleDeleteConversation = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await deleteConvMutation.mutateAsync({ conversationId: id });
+      if (conversationId === id) startNewConversation();
+      toast.success("حُذفت المحادثة");
+    } catch {
+      toast.error("تعذّر حذف المحادثة");
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -454,14 +509,19 @@ export default function AgentChat() {
     setMessages(newMessages);
     try {
       const result = await chatMutation.mutateAsync({
+        conversationId,
         messages: newMessages.map(m => ({ role: m.role, content: m.content })),
       });
+      if (result.conversationId && result.conversationId !== conversationId) {
+        setConversationId(result.conversationId);
+      }
       setMessages(prev => [...prev, {
         role: "assistant",
         content: result.reply,
         ts: Date.now(),
         toolResults: result.toolResults,
       }]);
+      void utils.agent.listConversations.invalidate();
     } catch (err) {
       setMessages(prev => [...prev, {
         role: "assistant",
@@ -573,14 +633,67 @@ export default function AgentChat() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               متصل
             </Badge>
+            <Button variant="outline" size="sm" className="text-xs gap-1"
+              onClick={() => setHistoryOpen(o => !o)}>
+              <History className="w-3.5 h-3.5" /> السجل
+            </Button>
+            <Button variant="outline" size="sm" className="text-xs gap-1"
+              onClick={() => startNewConversation(true)}
+              disabled={createConvMutation.isPending}>
+              <Plus className="w-3.5 h-3.5" /> محادثة جديدة
+            </Button>
             {messages.length > 0 && (
               <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground"
-                onClick={() => setMessages([])}>
+                onClick={() => startNewConversation()}>
                 <Trash2 className="w-3.5 h-3.5" /> مسح
               </Button>
             )}
           </div>
         </div>
+
+        {/* History panel */}
+        {historyOpen && (
+          <Card className="shrink-0 max-h-64 overflow-hidden flex flex-col shadow-sm">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/40">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <History className="w-4 h-4 text-primary" /> المحادثات السابقة
+              </div>
+              <button onClick={() => setHistoryOpen(false)} className="p-1 rounded hover:bg-muted text-muted-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-2 space-y-1">
+              {conversationsQuery.isLoading && (
+                <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحميل...
+                </div>
+              )}
+              {!conversationsQuery.isLoading && (conversationsQuery.data?.length ?? 0) === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد محادثات محفوظة بعد — ابدأ محادثة وستُحفظ تلقائياً</p>
+              )}
+              {conversationsQuery.data?.map(conv => (
+                <div key={conv.id}
+                  onClick={() => void openConversation(conv.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
+                    conversationId === conv.id ? "bg-primary/10 border border-primary/30" : "hover:bg-muted/60 border border-transparent"
+                  }`}>
+                  {loadingConvId === conv.id
+                    ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+                    : <MessageSquare className="w-4 h-4 text-muted-foreground shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-medium text-foreground">{conv.title}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(conv.updatedAt).toLocaleString("ar", { dateStyle: "medium", timeStyle: "short" })}</p>
+                  </div>
+                  <button onClick={e => void handleDeleteConversation(conv.id, e)}
+                    className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors shrink-0"
+                    title="حذف المحادثة">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Chat area */}
         <Card className="flex-1 overflow-hidden shadow-sm flex flex-col">
