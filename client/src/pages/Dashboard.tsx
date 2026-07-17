@@ -3,7 +3,7 @@ import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle } from "lucide-react";
+import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database } from "lucide-react";
 
 function Sidebar({ active }: { active: string }) {
   const { logout } = useAuth();
@@ -13,6 +13,7 @@ function Sidebar({ active }: { active: string }) {
     { path: "/tasks", label: "المهام", icon: <CheckCircle2 className="w-5 h-5" /> },
     { path: "/invoices", label: "الفواتير", icon: <FileText className="w-5 h-5" /> },
     { path: "/subscription", label: "الاشتراك", icon: <DollarSign className="w-5 h-5" /> },
+    { path: "/erp", label: "نظام ERP", icon: <Database className="w-5 h-5" /> },
   ];
   return (
     <aside className="w-64 bg-navy-hero min-h-screen flex flex-col">

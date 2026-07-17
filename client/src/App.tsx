@@ -10,6 +10,7 @@ import Tasks from "./pages/Tasks";
 import Invoices from "./pages/Invoices";
 import Subscription from "./pages/Subscription";
 import AdminPanel from "./pages/AdminPanel";
+import ERPNextDashboard from "./pages/ERPNextDashboard";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/invoices" component={Invoices} />
       <Route path="/subscription" component={Subscription} />
       <Route path="/admin" component={AdminPanel} />
+      <Route path="/erp" component={ERPNextDashboard} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

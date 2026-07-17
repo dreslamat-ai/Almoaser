@@ -45,11 +45,21 @@
 
 ## الاختبارات
 - [x] اختبار auth.logout يمر بنجاح
+- [x] اختبارات ERPNext connection (5/5 tests passed)
 
-## مستقبلية
+## ربط ERPNext (مكتمل)
+- [x] حفظ بيانات الاتصال كـ Secrets (ERPNEXT_URL, ERPNEXT_USERNAME, ERPNEXT_PASSWORD)
+- [x] بناء Backend proxy مع session caching (erpnext router في server/routers.ts)
+- [x] إجراءات tRPC: testConnection, getCompanyInfo, getAccounts, getItems, getJournalEntries
+- [x] صفحة ERPNextDashboard.tsx تعرض بيانات حقيقية من demo.almoaser.cloud
+- [x] إضافة Route /erp في App.tsx
+- [x] إضافة رابط "نظام ERP" في Sidebar لوحة التحكم
+
 ## Backlog (مرحلة لاحقة)
 - [ ] ربط نظام دفع (Stripe/Moyasar) — يتطلب تكاملاً خارجياً
 - [ ] إشعارات بريد إلكتروني للمسؤول عند تسجيل عميل جديد
 - [ ] صفحة إعدادات حساب العميل
 - [ ] تصدير الفواتير كـ PDF
 - [ ] تعليقات المحاسب على المهام
+- [ ] إضافة أدوار Customer/Sales Invoice للمستخدم ai في ERPNext
+- [ ] عرض فواتير المبيعات والعملاء عند توفر الصلاحيات
