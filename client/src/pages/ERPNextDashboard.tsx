@@ -1,453 +1,369 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { useLocation } from "wouter";
-import {
-  CheckCircle2, XCircle, RefreshCw, Building2, DollarSign, Globe,
-  BookOpen, FileText, BarChart3, Settings, LogOut, Database,
-  Package, Layers, TrendingUp, AlertCircle, ChevronRight, Activity
-} from "lucide-react";
-import { useState } from "react";
-import { startLogin } from "@/const";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
+import {
+  TrendingUp, TrendingDown, Users, FileText, Package,
+  DollarSign, AlertCircle, ArrowUpRight, Bot, Settings,
+  RefreshCw, ShoppingCart, CheckCircle2,
+} from "lucide-react";
+import { useLocation } from "wouter";
+import { useState } from "react";
 
-// ─── Sidebar (reused from Dashboard) ─────────────────────────────────────────
-function Sidebar({ active }: { active: string }) {
-  const { logout } = useAuth();
-  const [, navigate] = useLocation();
-  const navItems = [
-    { path: "/dashboard", label: "الرئيسية", icon: <BarChart3 className="w-5 h-5" /> },
-    { path: "/tasks", label: "المهام", icon: <CheckCircle2 className="w-5 h-5" /> },
-    { path: "/invoices", label: "الفواتير", icon: <FileText className="w-5 h-5" /> },
-    { path: "/subscription", label: "الاشتراك", icon: <DollarSign className="w-5 h-5" /> },
-    { path: "/erp", label: "نظام ERP", icon: <Database className="w-5 h-5" /> },
-  ];
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; className: string }> = {
+    Paid: { label: "مدفوعة", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    Unpaid: { label: "غير مدفوعة", className: "bg-red-100 text-red-700 border-red-200" },
+    Overdue: { label: "متأخرة", className: "bg-orange-100 text-orange-700 border-orange-200" },
+    Draft: { label: "مسودة", className: "bg-gray-100 text-gray-600 border-gray-200" },
+    Cancelled: { label: "ملغاة", className: "bg-gray-100 text-gray-500 border-gray-200" },
+    Return: { label: "مرتجع", className: "bg-purple-100 text-purple-700 border-purple-200" },
+  };
+  const cfg = map[status] ?? { label: status, className: "bg-gray-100 text-gray-600 border-gray-200" };
   return (
-    <aside className="w-64 bg-navy-hero min-h-screen flex flex-col">
-      <div className="p-6 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-gold" />
-          </div>
-          <div>
-            <div className="font-bold text-white">Almoaser <span className="text-gold text-xs font-light">AI ERP</span></div>
-            <div className="text-xs text-white/50">لوحة التحكم</div>
-          </div>
-        </div>
-      </div>
-      <nav className="flex-1 p-4 space-y-1">
-        {navItems.map(item => (
-          <button key={item.path} onClick={() => navigate(item.path)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${active === item.path ? "bg-white/15 text-white font-medium" : "text-white/60 hover:bg-white/10 hover:text-white"}`}>
-            {item.icon}
-            {item.label}
-          </button>
-        ))}
-      </nav>
-      <div className="p-4 border-t border-white/10 space-y-1">
-        <button onClick={() => navigate("/")} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white/60 hover:bg-white/10 hover:text-white transition-all">
-          <Settings className="w-5 h-5" />
-          الإعدادات
-        </button>
-        <button onClick={() => logout()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-all">
-          <LogOut className="w-5 h-5" />
-          تسجيل الخروج
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-// ─── Status Badge ─────────────────────────────────────────────────────────────
-function StatusBadge({ connected }: { connected: boolean }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${connected ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-      {connected ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-      {connected ? "متصل" : "غير متصل"}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cfg.className}`}>
+      {cfg.label}
     </span>
   );
 }
 
-// ─── Account Row ──────────────────────────────────────────────────────────────
-function AccountRow({ account }: { account: Record<string, unknown> }) {
-  const isGroup = account.is_group === 1;
-  const rootType = account.root_type as string;
-  const rootColors: Record<string, string> = {
-    Asset: "text-blue-600 bg-blue-50",
-    Liability: "text-red-600 bg-red-50",
-    Equity: "text-purple-600 bg-purple-50",
-    Income: "text-green-600 bg-green-50",
-    Expense: "text-orange-600 bg-orange-50",
-  };
-  const colorClass = rootColors[rootType] ?? "text-gray-600 bg-gray-50";
-
+function KpiCard({
+  title, value, subtitle, icon: Icon, color, loading, onClick,
+}: {
+  title: string; value: string | number; subtitle?: string;
+  icon: React.ElementType; color: string; loading?: boolean; onClick?: () => void;
+}) {
   return (
-    <tr className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-2">
-          {isGroup ? <Layers className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />}
-          <span className={`text-sm ${isGroup ? "font-semibold text-gray-800" : "text-gray-600"}`}>
-            {account.account_name as string || account.name as string}
-          </span>
+    <Card
+      className={`relative overflow-hidden border shadow-sm transition-all ${onClick ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""}`}
+      onClick={onClick}
+    >
+      <div className={`absolute top-0 right-0 w-24 h-24 rounded-full -translate-y-8 translate-x-8 opacity-10 ${color}`} />
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">{title}</p>
+            {loading ? (
+              <Skeleton className="h-7 w-20 mb-1" />
+            ) : (
+              <p className="text-2xl font-bold text-foreground leading-none">{value}</p>
+            )}
+            {subtitle && !loading && (
+              <p className="text-xs text-muted-foreground mt-1.5">{subtitle}</p>
+            )}
+          </div>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color} shrink-0`}>
+            <Icon className="w-5 h-5 text-white" />
+          </div>
         </div>
-      </td>
-      <td className="py-3 px-4">
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colorClass}`}>
-          {rootType || "—"}
-        </span>
-      </td>
-      <td className="py-3 px-4 text-xs text-gray-500">
-        {account.account_type as string || "—"}
-      </td>
-      <td className="py-3 px-4 text-xs text-gray-400 font-mono">
-        {account.account_currency as string || "—"}
-      </td>
-    </tr>
+      </CardContent>
+    </Card>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
+      <p className="font-medium text-foreground mb-1">{label}</p>
+      <p className="text-primary font-semibold">{(payload[0]?.value ?? 0).toLocaleString("ar-SA")} ر.ع</p>
+    </div>
+  );
+}
+
 export default function ERPNextDashboard() {
-  const { user, isAuthenticated, loading } = useAuth();
-  const [, navigate] = useLocation();
+  const [, setLocation] = useLocation();
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Queries
-  const { data: connectionData, isLoading: connLoading, refetch: refetchConn } = trpc.erpnext.testConnection.useQuery(undefined, {
-    retry: 1,
-    staleTime: 60_000,
-  });
+  const { data: stats, isLoading: statsLoading, error: statsError, refetch } =
+    trpc.erpnext.getDashboardStats.useQuery(undefined, { staleTime: 3 * 60 * 1000, retry: 1 });
 
-  const { data: accounts, isLoading: accountsLoading } = trpc.erpnext.getAccounts.useQuery(
-    { limit: 50 },
-    { enabled: connectionData?.connected === true, staleTime: 120_000 }
-  );
+  const { data: invoicesData, isLoading: invoicesLoading } =
+    trpc.erpnext.getSalesInvoices.useQuery({ limit: 6 }, { staleTime: 3 * 60 * 1000 });
 
-  const { data: items, isLoading: itemsLoading } = trpc.erpnext.getItems.useQuery(
-    { limit: 20 },
-    { enabled: connectionData?.connected === true, staleTime: 120_000 }
-  );
+  const { data: customersData, isLoading: customersLoading } =
+    trpc.erpnext.getCustomers.useQuery({ limit: 5 }, { staleTime: 3 * 60 * 1000 });
 
-  const { data: journalData, isLoading: journalLoading } = trpc.erpnext.getJournalEntries.useQuery(
-    { limit: 10 },
-    { enabled: connectionData?.connected === true, staleTime: 60_000 }
-  );
+  const invoices = (invoicesData?.data ?? []) as Array<{
+    name: string; customer: string; posting_date: string;
+    grand_total: number; outstanding_amount: number; status: string; currency: string;
+  }>;
 
-  // Auth guard
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-3 border-navy-hero border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-gray-500">جارٍ التحميل...</span>
-        </div>
-      </div>
-    );
-  }
+  const customers = (customersData?.data ?? []) as Array<{
+    name: string; customer_name: string; customer_type: string; mobile_no: string; email_id: string;
+  }>;
 
-  if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-navy-hero mb-2">يجب تسجيل الدخول</h2>
-          <p className="text-gray-500 mb-4">للوصول إلى لوحة نظام ERP</p>
-          <Button onClick={() => startLogin()}>تسجيل الدخول</Button>
-        </div>
-      </div>
-    );
-  }
-
-  const company = connectionData?.connected ? connectionData.company : null;
-  const journalEntries = journalData?.data ?? [];
-  const journalError = journalData?.error;
+  const pieData = stats ? [
+    { name: "مدفوعة", value: stats.paidInvoices, color: "#10b981" },
+    { name: "غير مدفوعة", value: stats.unpaidInvoices, color: "#ef4444" },
+    { name: "أخرى", value: Math.max(0, stats.totalInvoices - stats.paidInvoices - stats.unpaidInvoices), color: "#94a3b8" },
+  ].filter(d => d.value > 0) : [];
 
   const handleRefresh = () => {
     setRefreshKey(k => k + 1);
-    refetchConn();
+    void refetch();
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50" dir="rtl">
-      <Sidebar active="/erp" />
+    <DashboardLayout>
+      <div className="space-y-5 max-w-7xl mx-auto" key={refreshKey}>
 
-      <main className="flex-1 overflow-auto">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-8 py-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-navy-hero flex items-center gap-3">
-                <Database className="w-6 h-6 text-gold" />
-                نظام ERP المتصل
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">بيانات حقيقية من demo.almoaser.cloud</p>
-            </div>
-            <div className="flex items-center gap-3">
-              {connLoading ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  جارٍ الاتصال...
-                </span>
-              ) : (
-                <StatusBadge connected={connectionData?.connected ?? false} />
-              )}
-              <button
-                onClick={handleRefresh}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
-                تحديث
-              </button>
-            </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">لوحة التحكم</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">نظرة عامة على أداء الشركة · demo.almoaser.cloud</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-1.5 h-8 text-xs">
+              <RefreshCw className="w-3.5 h-3.5" />
+              تحديث
+            </Button>
+            <Button size="sm" onClick={() => setLocation("/agent")} className="gap-1.5 h-8 text-xs">
+              <Bot className="w-3.5 h-3.5" />
+              الوكيل الذكي
+            </Button>
           </div>
         </div>
 
-        <div className="p-8 space-y-8">
-
-          {/* Company Info Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
-              <Building2 className="w-5 h-5 text-navy-hero" />
-              <h2 className="font-semibold text-gray-800">معلومات الشركة</h2>
-            </div>
-            {connLoading ? (
-              <div className="p-6 flex gap-4">
-                {[1,2,3,4].map(i => (
-                  <div key={i} className="flex-1 h-16 bg-gray-100 rounded-xl animate-pulse" />
-                ))}
-              </div>
-            ) : company ? (
-              <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-navy-hero/5 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Building2 className="w-4 h-4 text-navy-hero" />
-                    <span className="text-xs text-gray-500">اسم الشركة</span>
-                  </div>
-                  <div className="font-bold text-navy-hero text-lg">{company.name}</div>
-                  <div className="text-xs text-gray-400 mt-1">اختصار: {company.abbr}</div>
-                </div>
-                <div className="bg-gold/5 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <DollarSign className="w-4 h-4 text-gold" />
-                    <span className="text-xs text-gray-500">العملة الافتراضية</span>
-                  </div>
-                  <div className="font-bold text-gold text-lg">{company.defaultCurrency}</div>
-                  <div className="text-xs text-gray-400 mt-1">ريال عُماني</div>
-                </div>
-                <div className="bg-green-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Globe className="w-4 h-4 text-green-600" />
-                    <span className="text-xs text-gray-500">الدولة</span>
-                  </div>
-                  <div className="font-bold text-green-700 text-lg">{company.country}</div>
-                  <div className="text-xs text-gray-400 mt-1">مسجلة في النظام</div>
-                </div>
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Activity className="w-4 h-4 text-blue-600" />
-                    <span className="text-xs text-gray-500">حالة الاتصال</span>
-                  </div>
-                  <div className="font-bold text-blue-700 text-lg">نشط</div>
-                  <div className="text-xs text-gray-400 mt-1">demo.almoaser.cloud</div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 flex items-center gap-3 text-red-600">
-                <XCircle className="w-5 h-5" />
-                <span className="text-sm">{connectionData?.error ?? "تعذّر الاتصال بنظام ERPNext"}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Accounts Table */}
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <TrendingUp className="w-5 h-5 text-navy-hero" />
-                <h2 className="font-semibold text-gray-800">شجرة الحسابات</h2>
-              </div>
-              {accounts && (
-                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
-                  {(accounts as unknown[]).length} حساب
-                </span>
-              )}
-            </div>
-            {accountsLoading ? (
-              <div className="p-6 space-y-2">
-                {[1,2,3,4,5].map(i => (
-                  <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />
-                ))}
-              </div>
-            ) : accounts && (accounts as unknown[]).length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-right">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="py-3 px-4 text-xs font-semibold text-gray-500">اسم الحساب</th>
-                      <th className="py-3 px-4 text-xs font-semibold text-gray-500">النوع الجذري</th>
-                      <th className="py-3 px-4 text-xs font-semibold text-gray-500">نوع الحساب</th>
-                      <th className="py-3 px-4 text-xs font-semibold text-gray-500">العملة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(accounts as Record<string, unknown>[]).map((account, i) => (
-                      <AccountRow key={i} account={account} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="p-8 text-center text-gray-400">
-                <Layers className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">لا توجد حسابات متاحة</p>
-              </div>
-            )}
-          </div>
-
-          {/* Items & Journal Entries in 2 columns */}
-          <div className="grid md:grid-cols-2 gap-6">
-
-            {/* Items */}
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Package className="w-5 h-5 text-navy-hero" />
-                  <h2 className="font-semibold text-gray-800">الأصناف والخدمات</h2>
-                </div>
-                {items && (
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
-                    {(items as unknown[]).length} صنف
-                  </span>
-                )}
-              </div>
-              {itemsLoading ? (
-                <div className="p-4 space-y-2">
-                  {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}
-                </div>
-              ) : items && (items as unknown[]).length > 0 ? (
-                <div className="divide-y divide-gray-50">
-                  {(items as Record<string, unknown>[]).map((item, i) => (
-                    <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                      <div>
-                        <div className="text-sm font-medium text-gray-800">
-                          {item.item_name as string || item.name as string}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          {item.item_group as string} · {item.stock_uom as string}
-                        </div>
-                      </div>
-                      <div className="text-left">
-                        {(item.standard_rate as number) > 0 && (
-                          <div className="text-sm font-semibold text-navy-hero">
-                            {(item.standard_rate as number).toFixed(2)}
-                          </div>
-                        )}
-                        <div className="flex gap-1 mt-0.5">
-                          {item.is_sales_item === 1 && (
-                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">مبيعات</span>
-                          )}
-                          {item.is_purchase_item === 1 && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">مشتريات</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-8 text-center text-gray-400">
-                  <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">لا توجد أصناف متاحة</p>
-                </div>
-              )}
-            </div>
-
-            {/* Journal Entries */}
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-navy-hero" />
-                  <h2 className="font-semibold text-gray-800">القيود المحاسبية</h2>
-                </div>
-                {journalEntries.length > 0 && (
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
-                    {journalEntries.length} قيد
-                  </span>
-                )}
-              </div>
-              {journalLoading ? (
-                <div className="p-4 space-y-2">
-                  {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}
-                </div>
-              ) : journalError ? (
-                <div className="p-6 flex items-start gap-3 text-amber-700 bg-amber-50">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-sm">صلاحيات محدودة</div>
-                    <p className="text-xs mt-1 text-amber-600">
-                      يحتاج المستخدم دور "Accounts Manager" للوصول للقيود المحاسبية.
-                    </p>
-                  </div>
-                </div>
-              ) : journalEntries.length > 0 ? (
-                <div className="divide-y divide-gray-50">
-                  {(journalEntries as Record<string, unknown>[]).map((entry, i) => (
-                    <div key={i} className="px-5 py-3 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="font-mono text-xs text-navy-hero font-semibold">{entry.name as string}</div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${entry.docstatus === 1 ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                          {entry.docstatus === 1 ? "معتمد" : "مسودة"}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-600 mt-0.5">{entry.title as string || entry.voucher_type as string}</div>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-gray-400">{entry.posting_date as string}</span>
-                        <span className="text-xs font-medium text-navy-hero">
-                          {(entry.total_debit as number)?.toFixed(2)} OMR
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-8 text-center text-gray-400">
-                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">لا توجد قيود محاسبية بعد</p>
-                  <p className="text-xs mt-1 text-gray-300">ستظهر القيود هنا عند إنشائها في النظام</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Permissions Info */}
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        {/* Error */}
+        {statsError && (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="flex items-center gap-3 p-4">
+              <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
               <div>
-                <div className="font-semibold text-amber-800 mb-2">ملاحظة حول الصلاحيات</div>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs font-medium text-green-700 mb-1">✅ البيانات المتاحة حالياً:</div>
-                    <ul className="text-xs text-gray-600 space-y-0.5">
-                      <li>• معلومات الشركة (Company)</li>
-                      <li>• شجرة الحسابات (Account)</li>
-                      <li>• الأصناف والخدمات (Item)</li>
-                      <li>• القيود المحاسبية (Journal Entry)</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-red-600 mb-1">⚠️ يحتاج أدواراً إضافية:</div>
-                    <ul className="text-xs text-gray-600 space-y-0.5">
-                      <li>• العملاء (Customer) — Accounts Receivable User</li>
-                      <li>• فواتير المبيعات (Sales Invoice) — Sales User</li>
-                      <li>• الدفعات (Payment Entry) — Accounts Manager</li>
-                    </ul>
+                <p className="font-medium text-destructive text-sm">تعذّر الاتصال بـ ERPNext</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{statsError.message}</p>
+              </div>
+              <Button variant="outline" size="sm" className="mr-auto" onClick={handleRefresh}>إعادة المحاولة</Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiCard
+            title="إجمالي الإيرادات"
+            value={stats ? `${stats.totalRevenue.toLocaleString("ar-SA")}` : "—"}
+            subtitle={`${stats?.paidRevenue?.toLocaleString("ar-SA") ?? "—"} ر.ع محصّل`}
+            icon={DollarSign} color="bg-emerald-500" loading={statsLoading}
+          />
+          <KpiCard
+            title="الفواتير"
+            value={stats?.totalInvoices ?? "—"}
+            subtitle={`${stats?.unpaidInvoices ?? "—"} غير مدفوعة`}
+            icon={FileText} color="bg-blue-500" loading={statsLoading}
+            onClick={() => setLocation("/erp/invoices")}
+          />
+          <KpiCard
+            title="العملاء"
+            value={stats?.totalCustomers ?? "—"}
+            subtitle="إجمالي العملاء المسجلين"
+            icon={Users} color="bg-violet-500" loading={statsLoading}
+            onClick={() => setLocation("/erp/customers")}
+          />
+          <KpiCard
+            title="الموردون / الأصناف"
+            value={stats ? `${stats.totalSuppliers} / ${stats.totalItems}` : "—"}
+            subtitle="موردون / أصناف مسجلة"
+            icon={Package} color="bg-amber-500" loading={statsLoading}
+          />
+        </div>
+
+        {/* Charts */}
+        <div className="grid lg:grid-cols-3 gap-4">
+          {/* Area Chart */}
+          <Card className="lg:col-span-2 shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                الإيرادات الشهرية
+              </CardTitle>
+              <CardDescription className="text-xs">آخر 6 أشهر (ر.ع)</CardDescription>
+            </CardHeader>
+            <CardContent className="px-5 pb-4">
+              {statsLoading ? (
+                <Skeleton className="h-44 w-full rounded-lg" />
+              ) : stats?.monthlyRevenue?.length ? (
+                <ResponsiveContainer width="100%" height={176}>
+                  <AreaChart data={stats.monthlyRevenue} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#22335a" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#22335a" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Area type="monotone" dataKey="amount" stroke="#22335a" strokeWidth={2.5} fill="url(#grad)" dot={{ r: 3, fill: "#22335a" }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-44 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                  <TrendingDown className="w-8 h-8 opacity-30" />
+                  <p className="text-sm">لا توجد بيانات إيرادات بعد</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pie Chart */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+                حالة الفواتير
+              </CardTitle>
+              <CardDescription className="text-xs">توزيع الفواتير حسب الحالة</CardDescription>
+            </CardHeader>
+            <CardContent className="px-5 pb-4">
+              {statsLoading ? (
+                <Skeleton className="h-44 w-full rounded-lg" />
+              ) : pieData.length > 0 ? (
+                <div className="flex flex-col items-center">
+                  <ResponsiveContainer width="100%" height={140}>
+                    <PieChart>
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={62} paddingAngle={3} dataKey="value">
+                        {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => [`${v} فاتورة`, ""]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap justify-center gap-3 mt-1">
+                    {pieData.map((d, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                        <span>{d.name}</span>
+                        <span className="font-semibold text-foreground">{d.value}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-
+              ) : (
+                <div className="h-44 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                  <FileText className="w-8 h-8 opacity-30" />
+                  <p className="text-sm">لا توجد فواتير بعد</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-      </main>
-    </div>
+
+        {/* Tables Row */}
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* Recent Invoices */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">آخر الفواتير</CardTitle>
+                <Button variant="ghost" size="sm" className="text-xs h-7 gap-1 text-primary px-2" onClick={() => setLocation("/erp/invoices")}>
+                  عرض الكل <ArrowUpRight className="w-3 h-3" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-4">
+              {invoicesLoading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}</div>
+              ) : invoices.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-6 text-center">
+                  <FileText className="w-9 h-9 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">لا توجد فواتير بعد</p>
+                  <Button size="sm" variant="outline" onClick={() => setLocation("/agent")} className="gap-1.5 mt-1 text-xs">
+                    <Bot className="w-3.5 h-3.5" /> إنشاء فاتورة عبر الوكيل
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {invoices.map(inv => (
+                    <div key={inv.name} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-medium text-foreground truncate max-w-[120px]">{inv.customer || inv.name}</p>
+                          <StatusBadge status={inv.status} />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{inv.name} · {inv.posting_date}</p>
+                      </div>
+                      <div className="text-right shrink-0 mr-2">
+                        <p className="text-sm font-semibold">{(inv.grand_total ?? 0).toLocaleString("ar-SA")}</p>
+                        <p className="text-xs text-muted-foreground">{inv.currency ?? "OMR"}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Customers */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">العملاء</CardTitle>
+                <Button variant="ghost" size="sm" className="text-xs h-7 gap-1 text-primary px-2" onClick={() => setLocation("/erp/customers")}>
+                  عرض الكل <ArrowUpRight className="w-3 h-3" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-4">
+              {customersLoading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}</div>
+              ) : customers.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-6 text-center">
+                  <Users className="w-9 h-9 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">لا يوجد عملاء بعد</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {customers.map(c => (
+                    <div key={c.name} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold text-primary">{(c.customer_name || c.name).charAt(0)}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{c.customer_name || c.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{c.mobile_no || c.email_id || "—"}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {c.customer_type === "Company" ? "شركة" : c.customer_type === "Individual" ? "فرد" : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { icon: Bot, label: "وكيل الذكاء الاصطناعي", desc: "محادثة وإنشاء فواتير", path: "/agent", bg: "bg-violet-50 hover:bg-violet-100", iconBg: "bg-violet-500", text: "text-violet-700" },
+            { icon: FileText, label: "الفواتير", desc: "عرض وإدارة الفواتير", path: "/erp/invoices", bg: "bg-blue-50 hover:bg-blue-100", iconBg: "bg-blue-500", text: "text-blue-700" },
+            { icon: ShoppingCart, label: "التقارير", desc: "مبيعات ومشتريات", path: "/erp/reports", bg: "bg-emerald-50 hover:bg-emerald-100", iconBg: "bg-emerald-500", text: "text-emerald-700" },
+            { icon: Settings, label: "إعدادات القنوات", desc: "واتساب وتيليجرام", path: "/channels", bg: "bg-amber-50 hover:bg-amber-100", iconBg: "bg-amber-500", text: "text-amber-700" },
+          ].map((a, i) => (
+            <button key={i} onClick={() => setLocation(a.path)}
+              className={`flex items-center gap-3 p-3.5 rounded-xl border border-transparent ${a.bg} transition-all text-right group`}>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${a.iconBg} group-hover:scale-105 transition-transform`}>
+                <a.icon className="w-4.5 h-4.5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className={`text-sm font-semibold ${a.text}`}>{a.label}</p>
+                <p className="text-xs text-muted-foreground truncate">{a.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+
+      </div>
+    </DashboardLayout>
   );
 }

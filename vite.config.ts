@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+import { VitePWA } from "vite-plugin-pwa";
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -150,7 +151,67 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+const plugins = [
+  react(),
+  tailwindcss(),
+  jsxLocPlugin(),
+  vitePluginManusRuntime(),
+  vitePluginManusDebugCollector(),
+  VitePWA({
+    registerType: "autoUpdate",
+    includeAssets: ["favicon.ico", "icons/*.png"],
+    manifest: {
+      name: "Almoaser AI ERP",
+      short_name: "AI ERP",
+      description: "نظام ERP ذكي مدعوم بالذكاء الاصطناعي - Almoaser",
+      theme_color: "#22335a",
+      background_color: "#f8f9fc",
+      display: "standalone",
+      orientation: "portrait-primary",
+      scope: "/",
+      start_url: "/erp",
+      lang: "ar",
+      dir: "rtl",
+      categories: ["business", "finance", "productivity"],
+      icons: [
+        { src: "/icons/icon-72x72.png", sizes: "72x72", type: "image/png" },
+        { src: "/icons/icon-96x96.png", sizes: "96x96", type: "image/png" },
+        { src: "/icons/icon-128x128.png", sizes: "128x128", type: "image/png" },
+        { src: "/icons/icon-144x144.png", sizes: "144x144", type: "image/png" },
+        { src: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png" },
+        { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+        { src: "/icons/icon-384x384.png", sizes: "384x384", type: "image/png" },
+        { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+      ],
+      shortcuts: [
+        { name: "وكيل الذكاء الاصطناعي", short_name: "الوكيل", description: "محادثة مع الوكيل", url: "/agent", icons: [{ src: "/icons/icon-96x96.png", sizes: "96x96" }] },
+        { name: "الداشبورد", short_name: "الداشبورد", description: "لوحة التحكم", url: "/erp", icons: [{ src: "/icons/icon-96x96.png", sizes: "96x96" }] },
+      ],
+    },
+    workbox: {
+      globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+      runtimeCaching: [
+        {
+          urlPattern: /^https:\/\/demo\.almoaser\.cloud\/.*/i,
+          handler: "NetworkFirst",
+          options: {
+            cacheName: "erpnext-api-cache",
+            expiration: { maxEntries: 50, maxAgeSeconds: 300 },
+          },
+        },
+        {
+          urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+          handler: "CacheFirst",
+          options: {
+            cacheName: "google-fonts-cache",
+            expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+          },
+        },
+      ],
+    },
+    devOptions: { enabled: false },
+  }),
+];
 
 export default defineConfig({
   plugins,

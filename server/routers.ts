@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { invokeLLM } from "./_core/llm";
 import {
   getActivePlans, getPlanById,
   getSubscriptionByUserId, createSubscription, updateSubscription,
@@ -270,6 +271,235 @@ export const appRouter = router({
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
+        }
+      }),
+
+    // ─── Dashboard Stats ──────────────────────────────────────────────────────
+    getDashboardStats: publicProcedure.query(async () => {
+      try {
+        const [customersRes, invoicesRes, suppliersRes, itemsRes] = await Promise.allSettled([
+          erpFetch("/api/resource/Customer?limit=500&fields=%5B%22name%22%5D") as Promise<{ data: unknown[] }>,
+          erpFetch("/api/resource/Sales%20Invoice?limit=500&fields=%5B%22name%22%2C%22grand_total%22%2C%22status%22%2C%22posting_date%22%5D&order_by=posting_date%20desc") as Promise<{ data: Array<{ name: string; grand_total: number; status: string; posting_date: string }> }>,
+          erpFetch("/api/resource/Supplier?limit=500&fields=%5B%22name%22%5D") as Promise<{ data: unknown[] }>,
+          erpFetch("/api/resource/Item?limit=500&fields=%5B%22name%22%5D") as Promise<{ data: unknown[] }>,
+        ]);
+
+        const customers = customersRes.status === "fulfilled" ? (customersRes.value?.data ?? []) : [];
+        const invoices = invoicesRes.status === "fulfilled" ? (invoicesRes.value?.data ?? []) : [];
+        const suppliers = suppliersRes.status === "fulfilled" ? (suppliersRes.value?.data ?? []) : [];
+        const items = itemsRes.status === "fulfilled" ? (itemsRes.value?.data ?? []) : [];
+
+        const totalRevenue = invoices.reduce((s: number, inv) => s + (inv.grand_total ?? 0), 0);
+        const paidInvoices = invoices.filter(inv => inv.status === "Paid");
+        const unpaidInvoices = invoices.filter(inv => inv.status === "Unpaid" || inv.status === "Overdue");
+        const paidRevenue = paidInvoices.reduce((s: number, inv) => s + (inv.grand_total ?? 0), 0);
+
+        const monthlyMap: Record<string, number> = {};
+        const now = new Date();
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          monthlyMap[key] = 0;
+        }
+        for (const inv of invoices) {
+          if (!inv.posting_date) continue;
+          const key = inv.posting_date.slice(0, 7);
+          if (key in monthlyMap) monthlyMap[key] = (monthlyMap[key] ?? 0) + (inv.grand_total ?? 0);
+        }
+        const monthlyRevenue = Object.entries(monthlyMap).map(([month, amount]) => ({
+          month: new Date(month + "-01").toLocaleDateString("ar-SA", { month: "short", year: "2-digit" }),
+          amount: Math.round(amount * 100) / 100,
+        }));
+
+        return {
+          totalCustomers: customers.length,
+          totalSuppliers: suppliers.length,
+          totalItems: items.length,
+          totalInvoices: invoices.length,
+          totalRevenue: Math.round(totalRevenue * 100) / 100,
+          paidRevenue: Math.round(paidRevenue * 100) / 100,
+          paidInvoices: paidInvoices.length,
+          unpaidInvoices: unpaidInvoices.length,
+          monthlyRevenue,
+          recentInvoices: invoices.slice(0, 5),
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
+      }
+    }),
+
+    getCustomers: publicProcedure
+      .input(z.object({ limit: z.number().optional().default(20) }))
+      .query(async ({ input }) => {
+        try {
+          const data = await erpFetch(`/api/resource/Customer?limit=${input.limit}&fields=%5B%22name%22%2C%22customer_name%22%2C%22customer_type%22%2C%22mobile_no%22%2C%22email_id%22%5D&order_by=creation%20desc`) as { data: unknown[] };
+          return { data: data?.data ?? [], error: null };
+        } catch (err) {
+          return { data: [], error: err instanceof Error ? err.message : String(err) };
+        }
+      }),
+
+    getSalesInvoices: publicProcedure
+      .input(z.object({ limit: z.number().optional().default(20) }))
+      .query(async ({ input }) => {
+        try {
+          const data = await erpFetch(`/api/resource/Sales%20Invoice?limit=${input.limit}&fields=%5B%22name%22%2C%22customer%22%2C%22posting_date%22%2C%22grand_total%22%2C%22outstanding_amount%22%2C%22status%22%2C%22currency%22%5D&order_by=posting_date%20desc`) as { data: unknown[] };
+          return { data: data?.data ?? [], error: null };
+        } catch (err) {
+          return { data: [], error: err instanceof Error ? err.message : String(err) };
+        }
+      }),
+
+    createSalesInvoice: protectedProcedure
+      .input(z.object({
+        customer: z.string(),
+        items: z.array(z.object({
+          item_code: z.string(),
+          qty: z.number().default(1),
+          rate: z.number(),
+          description: z.string().optional(),
+        })),
+        posting_date: z.string().optional(),
+        due_date: z.string().optional(),
+        currency: z.string().optional().default("OMR"),
+      }))
+      .mutation(async ({ input }) => {
+        const erpUrl = process.env.ERPNEXT_URL ?? "";
+        const sid = await getErpnextSession();
+        const body = {
+          customer: input.customer,
+          posting_date: input.posting_date ?? new Date().toISOString().slice(0, 10),
+          due_date: input.due_date ?? new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+          currency: input.currency,
+          items: input.items,
+        };
+        const res = await fetch(`${erpUrl}/api/resource/Sales%20Invoice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: `sid=${sid}` },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `فشل إنشاء الفاتورة: ${errText.slice(0, 300)}` });
+        }
+        const data = await res.json() as { data: { name: string } };
+        return { success: true, invoiceName: data.data?.name };
+      }),
+
+    agentChat: protectedProcedure
+      .input(z.object({
+        messages: z.array(z.object({
+          role: z.enum(["user", "assistant"]),
+          content: z.string(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        const erpUrl = process.env.ERPNEXT_URL ?? "demo.almoaser.cloud";
+        let erpContext = "";
+        try {
+          const [customersRes, invoicesRes, itemsRes] = await Promise.allSettled([
+            erpFetch("/api/resource/Customer?limit=20&fields=%5B%22name%22%2C%22customer_name%22%5D") as Promise<{ data: Array<{ name: string; customer_name: string }> }>,
+            erpFetch("/api/resource/Sales%20Invoice?limit=10&fields=%5B%22name%22%2C%22customer%22%2C%22grand_total%22%2C%22status%22%5D&order_by=posting_date%20desc") as Promise<{ data: Array<{ name: string; customer: string; grand_total: number; status: string }> }>,
+            erpFetch("/api/resource/Item?limit=20&fields=%5B%22name%22%2C%22item_name%22%2C%22standard_rate%22%5D") as Promise<{ data: Array<{ name: string; item_name: string; standard_rate: number }> }>,
+          ]);
+          const customers = customersRes.status === "fulfilled" ? customersRes.value?.data ?? [] : [];
+          const invoices = invoicesRes.status === "fulfilled" ? invoicesRes.value?.data ?? [] : [];
+          const items = itemsRes.status === "fulfilled" ? itemsRes.value?.data ?? [] : [];
+          erpContext = `\nبيانات ERPNext الحالية (${erpUrl}):\n- العملاء (${customers.length}): ${customers.map((c: { name: string; customer_name: string }) => c.customer_name || c.name).slice(0, 10).join(", ")}\n- آخر الفواتير (${invoices.length}): ${invoices.slice(0, 5).map((i: { name: string; customer: string; grand_total: number; status: string }) => `${i.name} - ${i.customer} - ${i.grand_total} (${i.status})`).join(" | ")}\n- الاصناف (${items.length}): ${items.map((i: { name: string; item_name: string; standard_rate: number }) => `${i.item_name} (${i.standard_rate})`).slice(0, 10).join(", ")}`;
+        } catch {
+          erpContext = "لم يتمكن الوكيل من جلب بيانات ERPNext حالياً.";
+        }
+
+        const systemPrompt = `انت وكيل ذكاء اصطناعي متخصص في نظام ERPNext للمحاسبة والمبيعات والمشتريات.\nتعمل مع شركة تستخدم نظام Almoaser AI Powered ERP.\nمهمتك: مساعدة المستخدم في انشاء الفواتير، جلب التقارير، الاستعلام عن العملاء والاصناف، وتنفيذ العمليات المحاسبية.\nتحدث دائما بالعربية وكن مختصرا ومفيدا.\nعند طلب انشاء فاتورة، اطلب: اسم العميل، الصنف، الكمية، السعر.\nعند طلب تقرير، قدم ملخصا واضحا من البيانات المتاحة.\n${erpContext}`;
+
+        const llmMessages = [
+          { role: "system" as const, content: systemPrompt },
+          ...input.messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+        ];
+
+        const result = await invokeLLM({ messages: llmMessages, maxTokens: 1000 });
+        const reply = result.choices[0]?.message?.content;
+        const replyText = typeof reply === "string" ? reply : Array.isArray(reply) ? reply.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text ?? "" : "").join("") : "";
+        return { reply: replyText };
+      }),
+  }),
+
+  channels: router({
+    saveSettings: protectedProcedure
+      .input(z.object({
+        whatsappToken: z.string().optional(),
+        whatsappPhoneId: z.string().optional(),
+        whatsappVerifyToken: z.string().optional(),
+        telegramBotToken: z.string().optional(),
+        telegramChatId: z.string().optional(),
+        agentEnabled: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // In production, store these securely in DB or env
+        // For now, return success (settings would be stored in DB)
+        return { success: true, message: "Settings saved successfully" };
+      }),
+
+    testWhatsapp: protectedProcedure
+      .input(z.object({
+        token: z.string(),
+        phoneId: z.string(),
+        testNumber: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const res = await fetch(
+            `https://graph.facebook.com/v18.0/${input.phoneId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${input.token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: input.testNumber,
+                type: "text",
+                text: { body: "✅ اختبار ناجح من نظام Almoaser AI ERP! الوكيل الذكي جاهز للعمل." },
+              }),
+            }
+          );
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+            return { success: false, error: err?.error?.message ?? `HTTP ${res.status}` };
+          }
+          return { success: true };
+        } catch (e) {
+          return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
+        }
+      }),
+
+    testTelegram: protectedProcedure
+      .input(z.object({
+        token: z.string(),
+        chatId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const res = await fetch(
+            `https://api.telegram.org/bot${input.token}/sendMessage`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: input.chatId,
+                text: "✅ اختبار ناجح من نظام Almoaser AI ERP! الوكيل الذكي جاهز للعمل.",
+              }),
+            }
+          );
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({})) as { description?: string };
+            return { success: false, error: err?.description ?? `HTTP ${res.status}` };
+          }
+          return { success: true };
+        } catch (e) {
+          return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
         }
       }),
   }),

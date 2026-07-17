@@ -11,17 +11,22 @@ import Invoices from "./pages/Invoices";
 import Subscription from "./pages/Subscription";
 import AdminPanel from "./pages/AdminPanel";
 import ERPNextDashboard from "./pages/ERPNextDashboard";
+import AgentChat from "./pages/AgentChat";
+import ChannelSettings from "./pages/ChannelSettings";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={ERPNextDashboard} />
+      <Route path="/home" component={Home} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/tasks" component={Tasks} />
       <Route path="/invoices" component={Invoices} />
       <Route path="/subscription" component={Subscription} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/erp" component={ERPNextDashboard} />
+      <Route path="/agent" component={AgentChat} />
+      <Route path="/channels" component={ChannelSettings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
