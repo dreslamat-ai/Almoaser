@@ -352,14 +352,15 @@ export const agentRouter = router({
         llmMessages.push({
           role: "assistant" as const,
           content: "",
-          tool_calls: msg.tool_calls.map((tc: { id: string; function: { name: string; arguments: string } }) => ({
-            id: tc.id,
+          tool_calls: msg.tool_calls.map((tc: { id?: string; index?: number; function: { name: string; arguments: string } }) => ({
+            id: tc.id ?? `call_${tc.index ?? Math.random().toString(36).slice(2)}`,
             type: "function" as const,
             function: { name: tc.function.name, arguments: tc.function.arguments },
           })),
         });
 
-        for (const tc of msg.tool_calls as Array<{ id: string; function: { name: string; arguments: string } }>) {
+        for (const tc of msg.tool_calls as Array<{ id?: string; index?: number; function: { name: string; arguments: string } }>) {
+          const tcId = tc.id ?? `call_${tc.index ?? Math.random().toString(36).slice(2)}`;
           let toolResult: string;
           let displayData = "";
           try {
@@ -370,8 +371,8 @@ export const agentRouter = router({
           } catch (e) {
             toolResult = JSON.stringify({ error: e instanceof Error ? e.message : "Tool execution failed" });
           }
-          toolResults.push({ tool_call_id: tc.id, tool_name: tc.function.name, display: displayData });
-          llmMessages.push({ role: "tool", content: toolResult, tool_call_id: tc.id });
+          toolResults.push({ tool_call_id: tcId, tool_name: tc.function.name, display: displayData });
+          llmMessages.push({ role: "tool", content: toolResult, tool_call_id: tcId });
         }
       }
 
