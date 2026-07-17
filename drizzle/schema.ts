@@ -7,6 +7,7 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -99,9 +100,25 @@ export const taskComments = mysqlTable("task_comments", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ─── اتصالات ERPNext لكل مستخدم ───────────────────────────────────────────────
+// كل عميل يسجّل رابط نظامه واسم المستخدم وكلمة المرور من صفحة الإعدادات،
+// ويعمل الوكيل وجميع استدعاءات ERPNext على نظامه هو (fallback لاتصال المالك الافتراضي)
+export const erpnextConnections = mysqlTable("erpnext_connections", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  url: varchar("url", { length: 500 }).notNull(),
+  username: varchar("username", { length: 255 }).notNull(),
+  // كلمة المرور مشفرة AES-256-GCM (iv:tag:ciphertext) بمفتاح مشتق من JWT_SECRET
+  passwordEnc: text("passwordEnc").notNull(),
+  lastVerifiedAt: timestamp("lastVerifiedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type Plan = typeof plans.$inferSelect;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type ServiceInvoice = typeof serviceInvoices.$inferSelect;
 export type RegistrationRequest = typeof registrationRequests.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
+export type ErpnextConnection = typeof erpnextConnections.$inferSelect;

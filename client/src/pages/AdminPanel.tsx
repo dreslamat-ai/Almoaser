@@ -5,6 +5,7 @@ import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const taskTypeLabels: Record<string, string> = {
   bookkeeping: "مسك الدفاتر", invoice: "فاتورة", journal_entry: "قيد محاسبي",
@@ -25,6 +26,22 @@ export default function AdminPanel() {
   const { data: subscriptions } = trpc.admin.subscriptions.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: tasks } = trpc.admin.tasks.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: plans } = trpc.plans.list.useQuery();
+  const { data: allUsers } = trpc.admin.users.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
+  const utils = trpc.useUtils();
+  const setRoleMutation = trpc.admin.setUserRole.useMutation({
+    onSuccess: () => {
+      toast.success("تم تحديث دور المستخدم");
+      utils.admin.users.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const setActiveMutation = trpc.admin.setUserActive.useMutation({
+    onSuccess: () => {
+      toast.success("تم تحديث حالة المستخدم");
+      utils.admin.users.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>;
   if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => startLogin()} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
@@ -63,7 +80,7 @@ export default function AdminPanel() {
         </div>
 
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["tasks", "المهام"]].map(([v, l]) => (
+          {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["tasks", "المهام"], ["users", "المستخدمون"]].map(([v, l]) => (
             <button key={v} onClick={() => setTab(v)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
               {l}
@@ -174,6 +191,80 @@ export default function AdminPanel() {
                   ))}
                   {(tasks?.length ?? 0) === 0 && (
                     <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">لا توجد مهام بعد</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {tab === "users" && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead className="bg-gray-50 border-b">
+                  <tr>{["الاسم", "البريد الإلكتروني", "الدور", "آخر دخول", "تاريخ التسجيل", "إجراءات"].map(h => (
+                    <th key={h} className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {allUsers?.map(u => (
+                    <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-navy text-sm">
+                        <span className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-full bg-navy/10 text-navy flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {(u.name ?? "؟").charAt(0)}
+                          </span>
+                          {u.name ?? "بدون اسم"}
+                          {u.id === user?.id && <span className="text-xs text-muted-foreground">(أنت)</span>}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {u.email ? (
+                          <a href={`mailto:${u.email}`} className="hover:text-navy flex items-center gap-1 transition-colors">
+                            <Mail className="w-3 h-3 flex-shrink-0" />{u.email}
+                          </a>
+                        ) : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.role === "admin" ? "badge-completed" : "badge-trial"}`}>
+                          {u.role === "admin" ? "مسؤول" : "عميل"}
+                        </span>
+                        {!u.isActive && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium badge-cancelled mr-1">معطّل</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(u.lastSignedIn).toLocaleDateString("ar-SA")}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3 flex-shrink-0" />{new Date(u.createdAt).toLocaleDateString("ar-SA")}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {u.id !== user?.id ? (
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7"
+                              disabled={setRoleMutation.isPending}
+                              onClick={() => setRoleMutation.mutate({ userId: u.id, role: u.role === "admin" ? "user" : "admin" })}
+                            >
+                              {u.role === "admin" ? "تحويل إلى عميل" : "ترقية إلى مسؤول"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={`text-xs h-7 ${u.isActive ? "text-red-600 border-red-200 hover:bg-red-50" : "text-green-600 border-green-200 hover:bg-green-50"}`}
+                              disabled={setActiveMutation.isPending}
+                              onClick={() => setActiveMutation.mutate({ userId: u.id, isActive: !u.isActive })}
+                            >
+                              {u.isActive ? "تعطيل" : "إعادة تفعيل"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {(allUsers?.length ?? 0) === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد مستخدمون بعد</td></tr>
                   )}
                 </tbody>
               </table>

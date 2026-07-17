@@ -17,6 +17,11 @@ const requireUser = t.middleware(async opts => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
+  // المستخدمون المعطلون من لوحة الإدارة لا يمكنهم استخدام النظام
+  if ((ctx.user as { isActive?: boolean }).isActive === false) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "تم تعطيل حسابك. يرجى التواصل مع الإدارة." });
+  }
+
   return next({
     ctx: {
       ...ctx,

@@ -7,6 +7,9 @@ import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
 import { agentRouter } from "./routers/agent";
+import { getErpConfigForUser, getErpSession, invalidateErpSession, testErpConnection, encryptPassword } from "./erpConnection";
+import { erpnextConnections } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
 import {
   getActivePlans, getPlanById,
   getSubscriptionByUserId, createSubscription, updateSubscription,
@@ -16,62 +19,24 @@ import {
   getAllRegistrationRequests, getAllSubscriptions, getAllTasks,
   getTaskCommentsByTaskId, createTaskComment, getTaskById,
   updateUserProfile,
+  getAllUsers, setUserRole,
+  setUserActive,
 } from "./db";
 
-// ─── ERPNext Session Cache ────────────────────────────────────────────────────
-let erpnextSid: string | null = null;
-let erpnextSidExpiry: number = 0;
-
-async function getErpnextSession(): Promise<string> {
-  const now = Date.now();
-  // Reuse session if still valid (expires in 6 hours)
-  if (erpnextSid && now < erpnextSidExpiry) {
-    return erpnextSid;
-  }
-
-  const erpUrl = process.env.ERPNEXT_URL ?? "";
-  const erpUser = process.env.ERPNEXT_USERNAME ?? "";
-  const erpPass = process.env.ERPNEXT_PASSWORD ?? "";
-
-  if (!erpUrl || !erpUser || !erpPass) {
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "ERPNext credentials not configured" });
-  }
-
-  const loginRes = await fetch(`${erpUrl}/api/method/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ usr: erpUser, pwd: erpPass }),
-  });
-
-  if (!loginRes.ok) {
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `ERPNext login failed: ${loginRes.status}` });
-  }
-
-  // Extract SID from Set-Cookie header
-  const setCookie = loginRes.headers.get("set-cookie") ?? "";
-  const sidMatch = setCookie.match(/sid=([^;]+)/);
-  if (!sidMatch || sidMatch[1] === "Guest") {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "ERPNext login returned Guest session" });
-  }
-
-  erpnextSid = sidMatch[1];
-  erpnextSidExpiry = now + 6 * 60 * 60 * 1000; // 6 hours
-  return erpnextSid;
-}
-
-async function erpFetch(path: string): Promise<unknown> {
-  const erpUrl = process.env.ERPNEXT_URL ?? "";
-  const sid = await getErpnextSession();
-  const res = await fetch(`${erpUrl}${path}`, {
+// ─── ERPNext Per-User Fetch ───────────────────────────────────────────────────
+// كل مستخدم يتصل بنظامه الخاص (من إعداداته) أو باتصال النظام الافتراضي
+async function erpFetch(path: string, userId: number): Promise<unknown> {
+  const config = await getErpConfigForUser(userId);
+  const sid = await getErpSession(config);
+  const res = await fetch(`${config.url}${path}`, {
     headers: { Cookie: `sid=${sid}` },
   });
   if (!res.ok) {
     // If unauthorized, clear cached session and retry once
     if (res.status === 403 || res.status === 401) {
-      erpnextSid = null;
-      erpnextSidExpiry = 0;
-      const sid2 = await getErpnextSession();
-      const res2 = await fetch(`${erpUrl}${path}`, {
+      invalidateErpSession(config);
+      const sid2 = await getErpSession(config);
+      const res2 = await fetch(`${config.url}${path}`, {
         headers: { Cookie: `sid=${sid2}` },
       });
       if (!res2.ok) {
@@ -88,6 +53,65 @@ async function erpFetch(path: string): Promise<unknown> {
 
 export const appRouter = router({
   system: systemRouter,
+  // ─── إعدادات اتصال ERPNext لكل مستخدم ─────────────────────────────────────
+  erpConnection: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import("./db");
+      const db = await getDb();
+      if (!db) return null;
+      const rows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, ctx.user.id)).limit(1);
+      const conn = rows[0];
+      if (!conn) return null;
+      // لا نرجع كلمة المرور أبداً
+      return { url: conn.url, username: conn.username, lastVerifiedAt: conn.lastVerifiedAt, updatedAt: conn.updatedAt };
+    }),
+    save: protectedProcedure
+      .input(z.object({
+        url: z.string().url("رابط غير صالح — يجب أن يبدأ بـ https://"),
+        username: z.string().min(1, "اسم المستخدم مطلوب"),
+        password: z.string().min(1, "كلمة المرور مطلوبة"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const cleanUrl = input.url.replace(/\/+$/, "");
+        // اختبار الاتصال قبل الحفظ
+        const test = await testErpConnection(cleanUrl, input.username, input.password);
+        if (!test.ok) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: test.error ?? "فشل اختبار الاتصال" });
+        }
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+        const existing = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, ctx.user.id)).limit(1);
+        const values = {
+          url: cleanUrl,
+          username: input.username,
+          passwordEnc: encryptPassword(input.password),
+          lastVerifiedAt: new Date(),
+        };
+        if (existing[0]) {
+          await db.update(erpnextConnections).set(values).where(eq(erpnextConnections.userId, ctx.user.id));
+        } else {
+          await db.insert(erpnextConnections).values({ ...values, userId: ctx.user.id });
+        }
+        return { success: true, loggedInAs: test.loggedInAs };
+      }),
+    test: protectedProcedure
+      .input(z.object({
+        url: z.string().url(),
+        username: z.string().min(1),
+        password: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        return testErpConnection(input.url, input.username, input.password);
+      }),
+    remove: protectedProcedure.mutation(async ({ ctx }) => {
+      const { getDb } = await import("./db");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+      await db.delete(erpnextConnections).where(eq(erpnextConnections.userId, ctx.user.id));
+      return { success: true };
+    }),
+  }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ?? null),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -262,18 +286,42 @@ export const appRouter = router({
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       return getAllTasks();
     }),
+    users: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return getAllUsers();
+    }),
+    setUserRole: protectedProcedure
+      .input(z.object({ userId: z.number(), role: z.enum(["user", "admin"]) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        if (input.userId === ctx.user.id && input.role !== "admin") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكنك إزالة صلاحية المسؤول عن حسابك" });
+        }
+        await setUserRole(input.userId, input.role);
+        return { success: true };
+      }),
+    setUserActive: protectedProcedure
+      .input(z.object({ userId: z.number(), isActive: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        if (input.userId === ctx.user.id) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكنك تعطيل حسابك" });
+        }
+        await setUserActive(input.userId, input.isActive);
+        return { success: true };
+      }),
   }),
 
   erpnext: router({
-    testConnection: publicProcedure.query(async () => {
+    testConnection: protectedProcedure.query(async ({ ctx }) => {
       try {
-        const data = await erpFetch("/api/resource/Company?limit=5") as { data: Array<{ name: string }> };
+        const data = await erpFetch("/api/resource/Company?limit=5", ctx.user.id) as { data: Array<{ name: string }> };
         const companies = data?.data ?? [];
         if (companies.length === 0) return { connected: false, error: "لا توجد شركات" };
 
         // Get company details
         const companyName = companies[0].name;
-        const companyData = await erpFetch(`/api/resource/Company/${encodeURIComponent(companyName)}`) as { data: Record<string, unknown> };
+        const companyData = await erpFetch(`/api/resource/Company/${encodeURIComponent(companyName)}`, ctx.user.id) as { data: Record<string, unknown> };
         const company = companyData?.data ?? {};
 
         return {
@@ -292,39 +340,39 @@ export const appRouter = router({
       }
     }),
 
-    getCompanyInfo: publicProcedure.query(async () => {
-      const data = await erpFetch("/api/resource/Company?limit=1") as { data: Array<{ name: string }> };
+    getCompanyInfo: protectedProcedure.query(async ({ ctx }) => {
+      const data = await erpFetch("/api/resource/Company?limit=1", ctx.user.id) as { data: Array<{ name: string }> };
       const companies = data?.data ?? [];
       if (companies.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "لا توجد شركات" });
 
       const companyName = companies[0].name;
-      const companyData = await erpFetch(`/api/resource/Company/${encodeURIComponent(companyName)}`) as { data: Record<string, unknown> };
+      const companyData = await erpFetch(`/api/resource/Company/${encodeURIComponent(companyName)}`, ctx.user.id) as { data: Record<string, unknown> };
       return companyData?.data ?? {};
     }),
 
-    getAccounts: publicProcedure
+    getAccounts: protectedProcedure
       .input(z.object({ limit: z.number().optional().default(50), parentAccount: z.string().optional() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         let url = `/api/resource/Account?limit=${input.limit}&fields=["name","account_name","account_type","root_type","parent_account","is_group","account_currency"]&order_by=lft asc`;
         if (input.parentAccount) {
           url += `&filters=[["parent_account","=","${input.parentAccount}"]]`;
         }
-        const data = await erpFetch(url) as { data: unknown[] };
+        const data = await erpFetch(url, ctx.user.id) as { data: unknown[] };
         return data?.data ?? [];
       }),
 
-    getItems: publicProcedure
+    getItems: protectedProcedure
       .input(z.object({ limit: z.number().optional().default(20) }))
-      .query(async ({ input }) => {
-        const data = await erpFetch(`/api/resource/Item?limit=${input.limit}&fields=["name","item_name","item_group","description","standard_rate","stock_uom","is_sales_item","is_purchase_item"]`) as { data: unknown[] };
+      .query(async ({ input, ctx }) => {
+        const data = await erpFetch(`/api/resource/Item?limit=${input.limit}&fields=["name","item_name","item_group","description","standard_rate","stock_uom","is_sales_item","is_purchase_item"]`, ctx.user.id) as { data: unknown[] };
         return data?.data ?? [];
       }),
 
-    getJournalEntries: publicProcedure
+    getJournalEntries: protectedProcedure
       .input(z.object({ limit: z.number().optional().default(20) }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         try {
-          const data = await erpFetch(`/api/resource/Journal Entry?limit=${input.limit}&fields=["name","title","posting_date","total_debit","total_credit","docstatus","voucher_type"]&order_by=posting_date desc`) as { data: unknown[] };
+          const data = await erpFetch(`/api/resource/Journal Entry?limit=${input.limit}&fields=["name","title","posting_date","total_debit","total_credit","docstatus","voucher_type"]&order_by=posting_date desc`, ctx.user.id) as { data: unknown[] };
           return { data: data?.data ?? [], error: null };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -332,11 +380,11 @@ export const appRouter = router({
         }
       }),
 
-    getAccountBalance: publicProcedure
+    getAccountBalance: protectedProcedure
       .input(z.object({ account: z.string() }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         try {
-          const data = await erpFetch(`/api/method/frappe.client.get_value?doctype=Account&fieldname=["account_name","account_type","root_type"]&filters={"name":"${encodeURIComponent(input.account)}"}`) as { message: Record<string, unknown> };
+          const data = await erpFetch(`/api/method/frappe.client.get_value?doctype=Account&fieldname=["account_name","account_type","root_type"]&filters={"name":"${encodeURIComponent(input.account)}"}`, ctx.user.id) as { message: Record<string, unknown> };
           return data?.message ?? {};
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -345,13 +393,13 @@ export const appRouter = router({
       }),
 
     // ─── Dashboard Stats ──────────────────────────────────────────────────────
-    getDashboardStats: publicProcedure.query(async () => {
+    getDashboardStats: protectedProcedure.query(async ({ ctx }) => {
       try {
         const [customersRes, invoicesRes, suppliersRes, itemsRes] = await Promise.allSettled([
-          erpFetch("/api/resource/Customer?limit=500&fields=%5B%22name%22%5D") as Promise<{ data: unknown[] }>,
-          erpFetch("/api/resource/Sales%20Invoice?limit=500&fields=%5B%22name%22%2C%22grand_total%22%2C%22status%22%2C%22posting_date%22%5D&order_by=posting_date%20desc") as Promise<{ data: Array<{ name: string; grand_total: number; status: string; posting_date: string }> }>,
-          erpFetch("/api/resource/Supplier?limit=500&fields=%5B%22name%22%5D") as Promise<{ data: unknown[] }>,
-          erpFetch("/api/resource/Item?limit=500&fields=%5B%22name%22%5D") as Promise<{ data: unknown[] }>,
+          erpFetch("/api/resource/Customer?limit=500&fields=%5B%22name%22%5D", ctx.user.id) as Promise<{ data: unknown[] }>,
+          erpFetch("/api/resource/Sales%20Invoice?limit=500&fields=%5B%22name%22%2C%22grand_total%22%2C%22status%22%2C%22posting_date%22%5D&order_by=posting_date%20desc", ctx.user.id) as Promise<{ data: Array<{ name: string; grand_total: number; status: string; posting_date: string }> }>,
+          erpFetch("/api/resource/Supplier?limit=500&fields=%5B%22name%22%5D", ctx.user.id) as Promise<{ data: unknown[] }>,
+          erpFetch("/api/resource/Item?limit=500&fields=%5B%22name%22%5D", ctx.user.id) as Promise<{ data: unknown[] }>,
         ]);
 
         const customers = customersRes.status === "fulfilled" ? (customersRes.value?.data ?? []) : [];
@@ -399,22 +447,22 @@ export const appRouter = router({
       }
     }),
 
-    getCustomers: publicProcedure
+    getCustomers: protectedProcedure
       .input(z.object({ limit: z.number().optional().default(20) }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         try {
-          const data = await erpFetch(`/api/resource/Customer?limit=${input.limit}&fields=%5B%22name%22%2C%22customer_name%22%2C%22customer_type%22%2C%22mobile_no%22%2C%22email_id%22%5D&order_by=creation%20desc`) as { data: unknown[] };
+          const data = await erpFetch(`/api/resource/Customer?limit=${input.limit}&fields=%5B%22name%22%2C%22customer_name%22%2C%22customer_type%22%2C%22mobile_no%22%2C%22email_id%22%5D&order_by=creation%20desc`, ctx.user.id) as { data: unknown[] };
           return { data: data?.data ?? [], error: null };
         } catch (err) {
           return { data: [], error: err instanceof Error ? err.message : String(err) };
         }
       }),
 
-    getSalesInvoices: publicProcedure
+    getSalesInvoices: protectedProcedure
       .input(z.object({ limit: z.number().optional().default(20) }))
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
         try {
-          const data = await erpFetch(`/api/resource/Sales%20Invoice?limit=${input.limit}&fields=%5B%22name%22%2C%22customer%22%2C%22posting_date%22%2C%22grand_total%22%2C%22outstanding_amount%22%2C%22status%22%2C%22currency%22%5D&order_by=posting_date%20desc`) as { data: unknown[] };
+          const data = await erpFetch(`/api/resource/Sales%20Invoice?limit=${input.limit}&fields=%5B%22name%22%2C%22customer%22%2C%22posting_date%22%2C%22grand_total%22%2C%22outstanding_amount%22%2C%22status%22%2C%22currency%22%5D&order_by=posting_date%20desc`, ctx.user.id) as { data: unknown[] };
           return { data: data?.data ?? [], error: null };
         } catch (err) {
           return { data: [], error: err instanceof Error ? err.message : String(err) };
@@ -434,9 +482,10 @@ export const appRouter = router({
         due_date: z.string().optional(),
         currency: z.string().optional().default("OMR"),
       }))
-      .mutation(async ({ input }) => {
-        const erpUrl = process.env.ERPNEXT_URL ?? "";
-        const sid = await getErpnextSession();
+      .mutation(async ({ input, ctx }) => {
+        const erpConfig = await getErpConfigForUser(ctx.user.id);
+        const erpUrl = erpConfig.url;
+        const sid = await getErpSession(erpConfig);
         const body = {
           customer: input.customer,
           posting_date: input.posting_date ?? new Date().toISOString().slice(0, 10),
@@ -464,14 +513,14 @@ export const appRouter = router({
           content: z.string(),
         })),
       }))
-      .mutation(async ({ input }) => {
-        const erpUrl = process.env.ERPNEXT_URL ?? "demo.almoaser.cloud";
+      .mutation(async ({ input, ctx }) => {
+        const erpUrl = (await getErpConfigForUser(ctx.user.id)).url || "demo.almoaser.cloud";
         let erpContext = "";
         try {
           const [customersRes, invoicesRes, itemsRes] = await Promise.allSettled([
-            erpFetch("/api/resource/Customer?limit=20&fields=%5B%22name%22%2C%22customer_name%22%5D") as Promise<{ data: Array<{ name: string; customer_name: string }> }>,
-            erpFetch("/api/resource/Sales%20Invoice?limit=10&fields=%5B%22name%22%2C%22customer%22%2C%22grand_total%22%2C%22status%22%5D&order_by=posting_date%20desc") as Promise<{ data: Array<{ name: string; customer: string; grand_total: number; status: string }> }>,
-            erpFetch("/api/resource/Item?limit=20&fields=%5B%22name%22%2C%22item_name%22%2C%22standard_rate%22%5D") as Promise<{ data: Array<{ name: string; item_name: string; standard_rate: number }> }>,
+            erpFetch("/api/resource/Customer?limit=20&fields=%5B%22name%22%2C%22customer_name%22%5D", ctx.user.id) as Promise<{ data: Array<{ name: string; customer_name: string }> }>,
+            erpFetch("/api/resource/Sales%20Invoice?limit=10&fields=%5B%22name%22%2C%22customer%22%2C%22grand_total%22%2C%22status%22%5D&order_by=posting_date%20desc", ctx.user.id) as Promise<{ data: Array<{ name: string; customer: string; grand_total: number; status: string }> }>,
+            erpFetch("/api/resource/Item?limit=20&fields=%5B%22name%22%2C%22item_name%22%2C%22standard_rate%22%5D", ctx.user.id) as Promise<{ data: Array<{ name: string; item_name: string; standard_rate: number }> }>,
           ]);
           const customers = customersRes.status === "fulfilled" ? customersRes.value?.data ?? [] : [];
           const invoices = invoicesRes.status === "fulfilled" ? invoicesRes.value?.data ?? [] : [];

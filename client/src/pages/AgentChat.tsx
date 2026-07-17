@@ -342,6 +342,39 @@ function ToolResultRenderer({ display, onDownload }: { display: string; onDownlo
       return <CreatedInvoiceCard inv={inv} onDownload={onDownload} />;
     } catch { return null; }
   }
+  if (display.startsWith("__DOC_UPDATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__DOC_UPDATED__", "")) as { doctype: string; name: string; fields: string[] };
+      return (
+        <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
+          <p className="font-semibold text-blue-800">✏️ تم التعديل بنجاح</p>
+          <p className="text-blue-700 text-xs mt-1">{d.doctype} — {d.name}{d.fields?.length ? ` (الحقول: ${d.fields.join("، ")})` : ""}</p>
+        </div>
+      );
+    } catch { return null; }
+  }
+  if (display.startsWith("__DOC_CANCELLED__")) {
+    try {
+      const d = JSON.parse(display.replace("__DOC_CANCELLED__", "")) as { doctype: string; name: string };
+      return (
+        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+          <p className="font-semibold text-amber-800">🚫 تم إلغاء المستند</p>
+          <p className="text-amber-700 text-xs mt-1">{d.doctype} — {d.name} (عُكس أثره من الحسابات)</p>
+        </div>
+      );
+    } catch { return null; }
+  }
+  if (display.startsWith("__DOC_DELETED__")) {
+    try {
+      const d = JSON.parse(display.replace("__DOC_DELETED__", "")) as { doctype: string; name: string; cancelledFirst?: boolean };
+      return (
+        <div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm">
+          <p className="font-semibold text-red-800">🗑️ تم الحذف نهائياً</p>
+          <p className="text-red-700 text-xs mt-1">{d.doctype} — {d.name}{d.cancelledFirst ? " (أُلغي أولاً ثم حُذف)" : ""}</p>
+        </div>
+      );
+    } catch { return null; }
+  }
   return null;
 }
 

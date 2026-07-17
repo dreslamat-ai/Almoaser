@@ -7,19 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { User, Building2, Save } from "lucide-react";
+import { User, Building2, Save, Server, Plug, Trash2, CheckCircle2, Eye, EyeOff } from "lucide-react";
 
 export default function AccountSettings() {
   const { user, isAuthenticated, loading } = useAuth();
   const utils = trpc.useUtils();
   const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: erpConn } = trpc.erpConnection.get.useQuery(undefined, { enabled: isAuthenticated });
 
   const [profile, setProfile] = useState({ name: "", email: "" });
   const [company, setCompany] = useState({ companyName: "", companyType: "", phone: "", vatNumber: "" });
+  const [erp, setErp] = useState({ url: "", username: "", password: "" });
+  const [showPwd, setShowPwd] = useState(false);
 
   useEffect(() => {
     if (user) setProfile({ name: user.name ?? "", email: user.email ?? "" });
   }, [user]);
+
+  useEffect(() => {
+    if (erpConn) setErp(prev => ({ ...prev, url: erpConn.url, username: erpConn.username }));
+  }, [erpConn]);
 
   useEffect(() => {
     if (subscription) {
@@ -38,6 +45,29 @@ export default function AccountSettings() {
   });
   const companyMutation = trpc.profile.updateCompany.useMutation({
     onSuccess: () => { toast.success("تم تحديث بيانات الشركة"); utils.subscription.get.invalidate(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const erpSaveMutation = trpc.erpConnection.save.useMutation({
+    onSuccess: (r) => {
+      toast.success(`تم الاتصال والحفظ بنجاح — مسجّل باسم: ${r.loggedInAs ?? erp.username}`);
+      setErp(prev => ({ ...prev, password: "" }));
+      utils.erpConnection.get.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const erpTestMutation = trpc.erpConnection.test.useMutation({
+    onSuccess: (r) => {
+      if (r.ok) toast.success(`الاتصال ناجح — مسجّل باسم: ${r.loggedInAs}`);
+      else toast.error(r.error ?? "فشل الاختبار");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const erpRemoveMutation = trpc.erpConnection.remove.useMutation({
+    onSuccess: () => {
+      toast.success("تم حذف الاتصال — سيُستخدم اتصال النظام الافتراضي");
+      setErp({ url: "", username: "", password: "" });
+      utils.erpConnection.get.invalidate();
+    },
     onError: (e) => toast.error(e.message),
   });
 
@@ -121,6 +151,66 @@ export default function AccountSettings() {
               </Button>
             </form>
           )}
+        </div>
+
+        {/* ERPNext connection */}
+        <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mt-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-xl bg-navy/5 flex items-center justify-center">
+              <Server className="w-5 h-5 text-navy" />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-navy">اتصال نظام ERPNext الخاص بك</h2>
+              <p className="text-xs text-muted-foreground">اربط الوكيل الذكي ولوحات البيانات بنظام ERPNext الخاص بشركتك</p>
+            </div>
+            {erpConn && (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-3 py-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                متصل
+              </span>
+            )}
+          </div>
+          <form onSubmit={e => { e.preventDefault(); erpSaveMutation.mutate(erp); }} className="space-y-4">
+            <div>
+              <Label className="text-navy font-medium">رابط النظام</Label>
+              <Input value={erp.url} onChange={e => setErp(p => ({ ...p, url: e.target.value }))} placeholder="https://your-company.erpnext.com" className="mt-1" dir="ltr" />
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-navy font-medium">اسم المستخدم</Label>
+                <Input value={erp.username} onChange={e => setErp(p => ({ ...p, username: e.target.value }))} placeholder="user@example.com" className="mt-1" dir="ltr" />
+              </div>
+              <div>
+                <Label className="text-navy font-medium">كلمة المرور</Label>
+                <div className="relative mt-1">
+                  <Input type={showPwd ? "text" : "password"} value={erp.password} onChange={e => setErp(p => ({ ...p, password: e.target.value }))} placeholder={erpConn ? "••••••• (اتركها فارغة للإبقاء)" : "كلمة المرور"} dir="ltr" className="pl-10" />
+                  <button type="button" onClick={() => setShowPwd(s => !s)} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-navy">
+                    {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">تُحفظ مشفرة (AES-256) ولا تُعرض مجدداً</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" disabled={erpSaveMutation.isPending || !erp.url || !erp.username || !erp.password} className="bg-navy-gradient text-white">
+                <Save className="w-4 h-4 ml-2" />
+                {erpSaveMutation.isPending ? "جاري الاختبار والحفظ..." : "اختبار وحفظ الاتصال"}
+              </Button>
+              <Button type="button" variant="outline" disabled={erpTestMutation.isPending || !erp.url || !erp.username || !erp.password}
+                onClick={() => erpTestMutation.mutate(erp)} className="border-navy/20 text-navy">
+                <Plug className="w-4 h-4 ml-2" />
+                {erpTestMutation.isPending ? "جاري الاختبار..." : "اختبار فقط"}
+              </Button>
+              {erpConn && (
+                <Button type="button" variant="outline" disabled={erpRemoveMutation.isPending}
+                  onClick={() => { if (confirm("هل تريد حذف اتصال ERPNext الخاص بك؟ سيعود النظام للاتصال الافتراضي.")) erpRemoveMutation.mutate(); }}
+                  className="border-red-200 text-red-600 hover:bg-red-50">
+                  <Trash2 className="w-4 h-4 ml-2" />
+                  حذف الاتصال
+                </Button>
+              )}
+            </div>
+          </form>
         </div>
       </main>
     </div>

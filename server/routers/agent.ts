@@ -6,40 +6,47 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { storagePut, storageGetSignedUrl } from "../storage";
 import { transcribeAudio } from "../_core/voiceTranscription";
+import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
-// ─── ERPNext Session Cache ────────────────────────────────────────────────────
-let _sid: string | null = null;
-let _sidExpiry = 0;
+// ─── ERPNext Per-User Connection (AsyncLocalStorage) ─────────────────────────
+// كل طلب يحمل إعدادات اتصال المستخدم (رابطه/مستخدمه/كلمة مروره) عبر سياق غير متزامن،
+// فتعمل كل helpers (erpGET/erpPOST/submitDoc...) على نظام المستخدم دون تمرير config يدوياً
+import { AsyncLocalStorage } from "async_hooks";
+const erpContext = new AsyncLocalStorage<ErpConfig>();
+
+export async function runWithErpConfig<T>(userId: number, fn: () => Promise<T>): Promise<T> {
+  const config = await getErpConfigForUser(userId);
+  return erpContext.run(config, fn);
+}
+
+function currentErpConfig(): ErpConfig {
+  const cfg = erpContext.getStore();
+  if (cfg) return cfg;
+  // fallback (لا يحدث في المسار الطبيعي): اتصال النظام الافتراضي
+  return {
+    url: (process.env.ERPNEXT_URL ?? "").replace(/\/+$/, ""),
+    username: process.env.ERPNEXT_USERNAME ?? "",
+    password: process.env.ERPNEXT_PASSWORD ?? "",
+    source: "system",
+  };
+}
 
 async function getSession(): Promise<string> {
-  const now = Date.now();
-  if (_sid && now < _sidExpiry) return _sid;
-  const url = process.env.ERPNEXT_URL ?? "";
-  const usr = process.env.ERPNEXT_USERNAME ?? "";
-  const pwd = process.env.ERPNEXT_PASSWORD ?? "";
-  if (!url || !usr || !pwd) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "ERPNext credentials not configured" });
-  const res = await fetch(`${url}/api/method/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ usr, pwd }),
-  });
-  if (!res.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `ERPNext login failed: ${res.status}` });
-  const cookie = res.headers.get("set-cookie") ?? "";
-  const m = cookie.match(/sid=([^;]+)/);
-  if (!m || m[1] === "Guest") throw new TRPCError({ code: "UNAUTHORIZED", message: "ERPNext login returned Guest session" });
-  _sid = m[1];
-  _sidExpiry = now + 6 * 60 * 60 * 1000;
-  return _sid;
+  return getErpSession(currentErpConfig());
+}
+
+function erpBaseUrl(): string {
+  return currentErpConfig().url;
 }
 
 async function erpGET(path: string): Promise<unknown> {
-  const url = process.env.ERPNEXT_URL ?? "";
+  const url = erpBaseUrl();
   const sid = await getSession();
   const res = await fetch(`${url}${path}`, { headers: { Cookie: `sid=${sid}` } });
   if (res.status === 401 || res.status === 403) {
-    _sid = null; _sidExpiry = 0;
+    invalidateErpSession(currentErpConfig());
     const sid2 = await getSession();
     const res2 = await fetch(`${url}${path}`, { headers: { Cookie: `sid=${sid2}` } });
     if (!res2.ok) throw new Error(`ERPNext GET error ${res2.status}`);
@@ -50,7 +57,7 @@ async function erpGET(path: string): Promise<unknown> {
 }
 
 async function erpPOST(path: string, body: Record<string, unknown>): Promise<unknown> {
-  const url = process.env.ERPNEXT_URL ?? "";
+  const url = erpBaseUrl();
   const sid = await getSession();
   const res = await fetch(`${url}${path}`, {
     method: "POST",
@@ -62,6 +69,40 @@ async function erpPOST(path: string, body: Record<string, unknown>): Promise<unk
     throw new Error(`ERPNext POST error ${res.status}: ${errText.slice(0, 300)}`);
   }
   return res.json();
+}
+
+async function erpPUT(path: string, body: Record<string, unknown>): Promise<unknown> {
+  const url = erpBaseUrl();
+  const sid = await getSession();
+  const res = await fetch(`${url}${path}`, {
+    method: "PUT",
+    headers: { Cookie: `sid=${sid}`, "Content-Type": "application/json", "X-Frappe-CSRF-Token": "fetch" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`ERPNext PUT error ${res.status}: ${errText.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
+async function erpDELETE(path: string): Promise<void> {
+  const url = erpBaseUrl();
+  const sid = await getSession();
+  const res = await fetch(`${url}${path}`, {
+    method: "DELETE",
+    headers: { Cookie: `sid=${sid}`, "X-Frappe-CSRF-Token": "fetch" },
+  });
+  if (!res.ok && res.status !== 202) {
+    const errText = await res.text();
+    throw new Error(`ERPNext DELETE error ${res.status}: ${errText.slice(0, 300)}`);
+  }
+}
+
+/** إلغاء مستند معتمد (docstatus 1 → 2) عبر frappe.client.cancel */
+async function cancelDoc(doctype: string, docName: string): Promise<{ name: string; docstatus?: number }> {
+  const data = await erpPOST("/api/method/frappe.client.cancel", { doctype, name: docName }) as { message?: { name: string; docstatus?: number } };
+  return data?.message ?? { name: docName };
 }
 
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
@@ -421,6 +462,59 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "update_document",
+      description: "تعديل أي مستند أو سجل في النظام: فاتورة (مسودة فقط)، عميل، مورد، صنف، قيد يومية (مسودة)، دفعة (مسودة). مرر الحقول المراد تغييرها فقط في fields. المستندات المعتمدة (docstatus=1) لا يمكن تعديلها — يجب إلغاؤها أولاً بـ cancel_document ثم إنشاء بديل، أما العملاء/الموردين/الأصناف فتُعدَّل مباشرة في أي وقت",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry", "Customer", "Supplier", "Item"], description: "نوع المستند أو السجل" },
+          document_name: { type: "string", description: "معرّف المستند: رقم الفاتورة أو اسم العميل/المورد/الصنف كما هو في النظام" },
+          fields: {
+            type: "object",
+            description: "الحقول المراد تعديلها بصيغة ERPNext، مثل: {\"customer_name\": \"الاسم الجديد\"} أو {\"mobile_no\": \"0555...\"} أو {\"standard_rate\": 150} أو {\"due_date\": \"2026-08-01\"}",
+            additionalProperties: true,
+          },
+        },
+        required: ["doctype", "document_name", "fields"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "cancel_document",
+      description: "إلغاء (Cancel) مستند معتمد: فاتورة مبيعات/مشتريات، دفعة، أو قيد يومية. الإلغاء يعكس أثر المستند على الحسابات. مطلوب قبل حذف أي مستند معتمد",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"], description: "نوع المستند" },
+          document_name: { type: "string", description: "رقم المستند المعتمد" },
+        },
+        required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "delete_document",
+      description: "حذف نهائي لأي مستند أو سجل: فاتورة، عميل، مورد، صنف، قيد، دفعة. المستند المعتمد يُلغى تلقائياً أولاً ثم يُحذف. تحذير: الحذف نهائي ولا يمكن التراجع عنه — اطلب تأكيد المستخدم دائماً قبل التنفيذ",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry", "Customer", "Supplier", "Item"], description: "نوع المستند أو السجل" },
+          document_name: { type: "string", description: "معرّف المستند المراد حذفه" },
+        },
+        required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ─── Tool Executor ────────────────────────────────────────────────────────────
@@ -479,7 +573,7 @@ async function findSimilarSuppliers(name: string): Promise<Array<{ name: string;
 
 // اعتماد مستند عام (docstatus = 1)
 async function submitDoc(doctype: string, docName: string): Promise<{ name: string; status?: string; grand_total?: number }> {
-  const url = process.env.ERPNEXT_URL ?? "";
+  const url = erpBaseUrl();
   const sid = await getSession();
   const res = await fetch(`${url}/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(docName)}`, {
     method: "PUT",
@@ -707,7 +801,7 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
     case "submit_invoice": {
       const invName = args.invoice_name as string;
       // Frappe submit: PUT with docstatus=1
-      const url = process.env.ERPNEXT_URL ?? "";
+      const url = erpBaseUrl();
       const sid = await getSession();
       const res = await fetch(`${url}/api/resource/Sales%20Invoice/${encodeURIComponent(invName)}`, {
         method: "PUT",
@@ -966,6 +1060,60 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         display: `__DOC_SUBMITTED__${JSON.stringify({ doctype, name: result?.name, status: result?.status })}`,
       };
     }
+    case "update_document": {
+      const doctype = args.doctype as string;
+      const docName = args.document_name as string;
+      const fields = args.fields as Record<string, unknown>;
+      if (!fields || Object.keys(fields).length === 0) throw new Error("لم تُحدَّد حقول للتعديل");
+      const path = `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(docName)}`;
+      // منع تعديل مستند معتمد (docstatus=1) للمستندات المحاسبية
+      const transactional = ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"];
+      if (transactional.includes(doctype)) {
+        const cur = await erpGET(path) as { data?: { docstatus?: number } };
+        if (cur?.data?.docstatus === 1) {
+          throw new Error(`المستند ${docName} معتمد ولا يمكن تعديله مباشرة — يجب إلغاؤه أولاً (cancel_document) ثم إنشاء مستند بديل بالبيانات الصحيحة`);
+        }
+        if (cur?.data?.docstatus === 2) {
+          throw new Error(`المستند ${docName} ملغى ولا يمكن تعديله`);
+        }
+      }
+      const data = await erpPUT(path, fields) as { data: { name: string } };
+      return {
+        result: data?.data,
+        display: `__DOC_UPDATED__${JSON.stringify({ doctype, name: data?.data?.name ?? docName, fields: Object.keys(fields) })}`,
+      };
+    }
+    case "cancel_document": {
+      const doctype = args.doctype as string;
+      const docName = args.document_name as string;
+      const result = await cancelDoc(doctype, docName);
+      return {
+        result,
+        display: `__DOC_CANCELLED__${JSON.stringify({ doctype, name: result?.name ?? docName })}`,
+      };
+    }
+    case "delete_document": {
+      const doctype = args.doctype as string;
+      const docName = args.document_name as string;
+      const path = `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(docName)}`;
+      // إن كان المستند معتمداً — ألغِه أولاً (شرط ERPNext للحذف)
+      const transactional = ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"];
+      let wasCancelled = false;
+      if (transactional.includes(doctype)) {
+        try {
+          const cur = await erpGET(path) as { data?: { docstatus?: number } };
+          if (cur?.data?.docstatus === 1) {
+            await cancelDoc(doctype, docName);
+            wasCancelled = true;
+          }
+        } catch { /* المستند غير موجود — سيفشل الحذف برسالة واضحة */ }
+      }
+      await erpDELETE(path);
+      return {
+        result: { deleted: true, name: docName },
+        display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
+      };
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -986,7 +1134,7 @@ export const agentRouter = router({
         })).optional(),
       })),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const SYSTEM = `أنت محاسب قانوني خبير ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). اسمك "المعاصر AI".
 
 ## هويتك المهنية
@@ -1022,11 +1170,13 @@ export const agentRouter = router({
 9. **الاعتماد**: بعد إنشاء أي مستند (فاتورة/دفعة/قيد) اعرض اعتماده — إن وافق المستخدم أو طلبه معتمداً → استدعِ submit_invoice للفواتير أو submit_document لأي مستند آخر. المستند لا يؤثر على الحسابات إلا بعد الاعتماد
 10. **الأرقام العربية**: حوّل الأرقام العربية (٦٥٠٠٠) إلى إنجليزية (65000) عند تمريرها للأدوات
 11. **المستندات المستخرجة من الصور**: إذا احتوت المحادثة على "بيانات مستخرجة" من صورة (فاتورة/سند) وأكّد المستخدم التسجيل (نعم/سجّل/أكّد) → نفّذ فوراً حسب النوع: فاتورة مبيعات → سير إنشاء الفاتورة المعتاد (بحث عميل/أصناف ثم create_invoice) | فاتورة مشتريات → بحث مورد ثم create_purchase_invoice | سند قبض → create_payment_entry بنوع Receive | سند صرف → create_payment_entry بنوع Pay. إن صحّح المستخدم بيانات، استخدم البيانات المصحّحة
-
+12. **التعديل**: لتعديل بيانات عميل/مورد/صنف → update_document مباشرة. لتعديل فاتورة/قيد/دفعة: إن كانت مسودة → update_document، وإن كانت معتمدة → أخبر المستخدم أنها تتطلب الإلغاء أولاً واعرض عليه: cancel_document ثم إنشاء مستند بديل بالبيانات الصحيحة
+13. **الحذف والإلغاء**: delete_document حذف نهائي (يلغي المستند المعتمد تلقائياً قبل حذفه). **اطلب تأكيداً صريحاً من المستخدم قبل أي حذف أو إلغاء** واذكر رقم المستند وأثره (مثال: "إلغاء الفاتورة سيعكس أثرها من الحسابات — هل تؤكد؟"). لا تحذف أبداً دون تأكيد
 ## صلاحياتك الكاملة في النظام
-أنت تملك صلاحيات كاملة للإدخال والتسجيل والاعتماد في كل وحدات النظام (ضمن صلاحيات مستخدم ERPNext المتصل):
-- **المبيعات**: فواتير مبيعات (إنشاء/عرض/اعتماد)، عملاء (بحث/إنشاء)
+أنت تملك صلاحيات كاملة للإدخال والتسجيل والاعتماد والتعديل والإلغاء والحذف في كل وحدات النظام (ضمن صلاحيات مستخدم ERPNext المتصل):
+- **المبيعات**: فواتير مبيعات (إنشاء/عرض/اعتماد/تعديل/إلغاء/حذف)، عملاء (بحث/إنشاء/تعديل/حذف)
 - **المشتريات**: فواتير مشتريات (create_purchase_invoice/get_purchase_invoices)، موردين (get_suppliers/create_supplier) — نفس قاعدة منع التكرار تنطبق على الموردين
+- **التعديل والحذف الشامل**: update_document (تعديل أي حقل في فاتورة مسودة/عميل/مورد/صنف/قيد/دفعة)، cancel_document (إلغاء مستند معتمد)، delete_document (حذف نهائي مع إلغاء تلقائي للمعتمد) — أمثلة: "عدّل رقم جوال العميل محمود" → find_customer ثم update_document | "غيّر سعر صنف الاستشارة إلى 500" → find_item ثم update_document | "احذف الفاتورة SINV-0042" → تأكيد ثم delete_document | "ألغِ القيد JV-0010" → تأكيد ثم cancel_document
 - **الدفعات**: create_payment_entry — تسجيل قبض من عميل (Receive) أو صرف لمورد (Pay)، مع إمكانية ربط الدفعة بفاتورة محددة لسدادها (reference_invoice). عند قول المستخدم "سجّل دفعة/سداد/قبض/تحصيل من عميل" → Receive، "دفعنا/سددنا لمورد" → Pay
 - **قيود اليومية**: create_journal_entry — قيد مزدوج (مدين/دائن متساويان). قبل إنشاء القيد ابحث عن أسماء الحسابات الفعلية بـ get_accounts (الأسماء تتضمن اختصار الشركة مثل "Cash - X"). مثال: "سجل قيد: مدين الصندوق 3000 دائن المبيعات 3000" → get_accounts للصندوق والمبيعات ثم create_journal_entry
 - **سير سداد فاتورة**: "سجل سداد فاتورة SINV-XXX" → get_invoice_detail لمعرفة العميل والمبلغ المتبقي → create_payment_entry مع reference_invoice → اعرض الاعتماد
@@ -1070,6 +1220,8 @@ export const agentRouter = router({
 
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
 
+      // تشغيل كامل حلقة الوكيل ضمن سياق اتصال ERPNext الخاص بالمستخدم الحالي
+      return runWithErpConfig(ctx.user.id, async () => {
       for (let iter = 0; iter < 8; iter++) {
         let response;
         try {
@@ -1130,12 +1282,13 @@ export const agentRouter = router({
       }
 
       return { reply: "تم تنفيذ الطلب.", toolResults };
+      });
     }),
 
   getInvoicePdf: protectedProcedure
     .input(z.object({ invoiceName: z.string() }))
-    .mutation(async ({ input }) => {
-      const erpUrl = process.env.ERPNEXT_URL ?? "";
+    .mutation(async ({ input, ctx }) => runWithErpConfig(ctx.user.id, async () => {
+      const erpUrl = erpBaseUrl();
       const sid = await getSession();
       const pdfUrl = `${erpUrl}/api/method/frappe.utils.print_format.download_pdf?doctype=Sales%20Invoice&name=${encodeURIComponent(input.invoiceName)}&format=Standard&no_letterhead=0`;
       const res = await fetch(pdfUrl, { headers: { Cookie: `sid=${sid}` } });
@@ -1145,7 +1298,7 @@ export const agentRouter = router({
       const buffer = await res.arrayBuffer();
       const base64 = Buffer.from(buffer).toString("base64");
       return { pdfBase64: base64, filename: `${input.invoiceName}.pdf` };
-    }),
+    })),
 
   // ─── تحويل الصوت إلى نص (إدخال صوتي للوكيل) ─────────────────────────────
   transcribeVoice: protectedProcedure
