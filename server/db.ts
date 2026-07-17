@@ -1,6 +1,6 @@
 import { eq, desc, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, plans, subscriptions, tasks, serviceInvoices, registrationRequests } from "../drizzle/schema";
+import { InsertUser, users, plans, subscriptions, tasks, serviceInvoices, registrationRequests, taskComments } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -221,4 +221,49 @@ export async function getAllTasks() {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(tasks).orderBy(desc(tasks.createdAt));
+}
+
+// ─── Task Comments ────────────────────────────────────────────────────────────
+export async function getTaskById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getTaskCommentsByTaskId(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: taskComments.id,
+      taskId: taskComments.taskId,
+      userId: taskComments.userId,
+      authorRole: taskComments.authorRole,
+      content: taskComments.content,
+      createdAt: taskComments.createdAt,
+      authorName: users.name,
+    })
+    .from(taskComments)
+    .leftJoin(users, eq(taskComments.userId, users.id))
+    .where(eq(taskComments.taskId, taskId))
+    .orderBy(taskComments.createdAt);
+}
+
+export async function createTaskComment(data: {
+  taskId: number;
+  userId: number;
+  authorRole: "user" | "admin";
+  content: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(taskComments).values(data);
+}
+
+// ─── User Profile ─────────────────────────────────────────────────────────────
+export async function updateUserProfile(userId: number, data: { name?: string; email?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set(data).where(eq(users.id, userId));
 }

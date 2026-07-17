@@ -90,8 +90,18 @@ export const registrationRequests = mysqlTable("registration_requests", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const taskComments = mysqlTable("task_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull().references(() => tasks.id),
+  userId: int("userId").notNull().references(() => users.id),
+  authorRole: mysqlEnum("authorRole", ["user", "admin"]).default("user").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type Plan = typeof plans.$inferSelect;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type ServiceInvoice = typeof serviceInvoices.$inferSelect;
 export type RegistrationRequest = typeof registrationRequests.$inferSelect;
+export type TaskComment = typeof taskComments.$inferSelect;

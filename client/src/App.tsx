@@ -13,6 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import ERPNextDashboard from "./pages/ERPNextDashboard";
 import AgentChat from "./pages/AgentChat";
 import ChannelSettings from "./pages/ChannelSettings";
+import AccountSettings from "./pages/AccountSettings";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/erp" component={ERPNextDashboard} />
       <Route path="/agent" component={AgentChat} />
       <Route path="/channels" component={ChannelSettings} />
+      <Route path="/settings" component={AccountSettings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

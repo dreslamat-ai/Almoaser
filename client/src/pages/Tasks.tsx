@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, CheckCircle2, Clock, AlertCircle, XCircle, Filter } from "lucide-react";
+import { Plus, CheckCircle2, Clock, AlertCircle, XCircle, Filter, MessageSquare, Send } from "lucide-react";
 
 const taskTypeLabels: Record<string, string> = {
   bookkeeping: "مسك الدفاتر", invoice: "فاتورة", journal_entry: "قيد محاسبي",
@@ -20,6 +20,54 @@ const statusLabels: Record<string, string> = { pending: "معلق", in_progress:
 const statusColors: Record<string, string> = {
   pending: "badge-pending", in_progress: "badge-in_progress", completed: "badge-completed", cancelled: "badge-cancelled",
 };
+
+function TaskComments({ taskId, taskTitle }: { taskId: number; taskTitle: string }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const utils = trpc.useUtils();
+  const { data: comments, isLoading } = trpc.tasks.comments.useQuery({ taskId }, { enabled: open });
+  const addMutation = trpc.tasks.addComment.useMutation({
+    onSuccess: () => { setText(""); utils.tasks.comments.invalidate({ taskId }); },
+    onError: (e) => toast.error(e.message),
+  });
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="ghost" className="text-navy hover:bg-gray-100" title="التعليقات">
+          <MessageSquare className="w-4 h-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle className="text-navy text-base">تعليقات — {taskTitle}</DialogTitle></DialogHeader>
+        <div className="max-h-64 overflow-y-auto space-y-3 mt-2">
+          {isLoading ? (
+            <div className="flex justify-center py-6"><div className="w-6 h-6 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>
+          ) : !comments || comments.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">لا توجد تعليقات بعد — ابدأ المحادثة مع المحاسب</p>
+          ) : (
+            comments.map(c => (
+              <div key={c.id} className={`p-3 rounded-xl text-sm ${c.authorRole === "admin" ? "bg-navy/5 border border-navy/10" : "bg-gray-50 border border-gray-100"}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-xs font-semibold ${c.authorRole === "admin" ? "text-navy" : "text-gray-700"}`}>
+                    {c.authorRole === "admin" ? "المحاسب" : (c.authorName ?? "أنت")}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">{new Date(c.createdAt).toLocaleString("ar-SA")}</span>
+                </div>
+                <p className="text-gray-800 whitespace-pre-wrap">{c.content}</p>
+              </div>
+            ))
+          )}
+        </div>
+        <form onSubmit={e => { e.preventDefault(); if (text.trim()) addMutation.mutate({ taskId, content: text.trim() }); }} className="flex gap-2 mt-3">
+          <Input value={text} onChange={e => setText(e.target.value)} placeholder="اكتب تعليقك..." className="flex-1" maxLength={2000} />
+          <Button type="submit" disabled={addMutation.isPending || !text.trim()} className="bg-navy-gradient text-white px-3">
+            <Send className="w-4 h-4" />
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function Tasks() {
   const { isAuthenticated, loading } = useAuth();
@@ -126,6 +174,7 @@ export default function Tasks() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-xs px-3 py-1 rounded-full font-medium ${statusColors[task.status]}`}>{statusLabels[task.status]}</span>
+                  <TaskComments taskId={task.id} taskTitle={task.title} />
                   {task.status === "pending" && (
                     <Button size="sm" variant="ghost" className="text-blue-600 hover:bg-blue-50"
                       onClick={() => updateMutation.mutate({ id: task.id, status: "in_progress" })}>بدء</Button>

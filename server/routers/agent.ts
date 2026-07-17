@@ -100,12 +100,12 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "get_customers",
-      description: "جلب قائمة العملاء من ERPNext",
+      description: "جلب قائمة العملاء أو البحث عن عميل بالاسم (بحث تقريبي). استخدمها دائماً قبل إنشاء أي عميل جديد للتأكد من عدم وجوده مسبقاً",
       parameters: {
         type: "object",
         properties: {
           limit: { type: "number", description: "عدد العملاء (افتراضي 20)" },
-          search: { type: "string", description: "بحث باسم العميل" },
+          search: { type: "string", description: "بحث تقريبي باسم العميل (جزء من الاسم يكفي)" },
         },
         required: [],
         additionalProperties: false,
@@ -116,11 +116,12 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "get_items",
-      description: "جلب قائمة الأصناف والخدمات من ERPNext",
+      description: "جلب قائمة الأصناف والخدمات أو البحث عن صنف بالاسم (بحث تقريبي). استخدمها دائماً قبل إنشاء أي صنف جديد للتأكد من عدم وجوده مسبقاً",
       parameters: {
         type: "object",
         properties: {
           limit: { type: "number", description: "عدد الأصناف (افتراضي 20)" },
+          search: { type: "string", description: "بحث تقريبي باسم الصنف أو كوده (جزء من الاسم يكفي)" },
         },
         required: [],
         additionalProperties: false,
@@ -176,7 +177,7 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "create_customer",
-      description: "إنشاء عميل جديد في النظام. استخدمها عند طلب المستخدم إضافة عميل، أو تلقائياً عند إنشاء فاتورة لعميل غير موجود",
+      description: "إنشاء عميل جديد. لا تستخدمها أبداً قبل البحث بـ get_customers والتأكد من عدم وجود العميل — الأداة نفسها ترفض الإنشاء إذا وُجد عميل مطابق أو مشابه وتعيد قائمة المرشحين",
       parameters: {
         type: "object",
         properties: {
@@ -194,7 +195,7 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "create_item",
-      description: "إنشاء صنف/خدمة جديدة في النظام. استخدمها عند طلب المستخدم إضافة صنف، أو تلقائياً عند إنشاء فاتورة بصنف غير موجود",
+      description: "إنشاء صنف/خدمة جديدة. لا تستخدمها أبداً قبل البحث بـ get_items والتأكد من عدم وجود الصنف — الأداة نفسها ترفض الإنشاء إذا وُجد صنف مطابق أو مشابه وتعيد قائمة المرشحين",
       parameters: {
         type: "object",
         properties: {
@@ -227,6 +228,63 @@ const TOOLS = [
 ];
 
 // ─── Tool Executor ────────────────────────────────────────────────────────────
+
+// تطبيع النص العربي للمقارنة التقريبية (همزات، تاء مربوطة، ألف مقصورة، تشكيل، مسافات)
+function normalizeArabic(s: string): string {
+  return s
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[أإآا]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function isSimilar(a: string, b: string): boolean {
+  const na = normalizeArabic(a);
+  const nb = normalizeArabic(b);
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
+
+// البحث عن عملاء مطابقين/مشابهين بالاسم
+async function findSimilarCustomers(name: string): Promise<Array<{ name: string; customer_name: string }>> {
+  const fields = encodeURIComponent(JSON.stringify(["name", "customer_name"]));
+  // بحث like بأول كلمة من الاسم لتوسيع النتائج، ثم فلترة تقريبية محلياً
+  const firstWord = name.trim().split(/\s+/)[0] ?? name;
+  const filters = encodeURIComponent(JSON.stringify([["customer_name", "like", `%${firstWord}%`]]));
+  const data = await erpGET(`/api/resource/Customer?limit=50&fields=${fields}&filters=${filters}`) as { data?: Array<{ name: string; customer_name: string }> };
+  const all = data?.data ?? [];
+  return all.filter(c => isSimilar(c.customer_name, name) || isSimilar(c.name, name));
+}
+
+// البحث عن أصناف مطابقة/مشابهة بالاسم أو الكود
+async function findSimilarItems(name: string): Promise<Array<{ name: string; item_name: string; standard_rate?: number }>> {
+  const fields = encodeURIComponent(JSON.stringify(["name", "item_name", "standard_rate"]));
+  const firstWord = name.trim().split(/\s+/)[0] ?? name;
+  const filters = encodeURIComponent(JSON.stringify([["item_name", "like", `%${firstWord}%`]]));
+  const data = await erpGET(`/api/resource/Item?limit=50&fields=${fields}&filters=${filters}`) as { data?: Array<{ name: string; item_name: string; standard_rate?: number }> };
+  const all = data?.data ?? [];
+  return all.filter(i => isSimilar(i.item_name, name) || isSimilar(i.name, name));
+}
+
+// ترجمة أخطاء ERPNext الشائعة إلى رسائل عربية مفهومة
+function translateErpError(raw: string): string {
+  if (/LinkValidationError|Could not find/i.test(raw)) {
+    const m = raw.match(/Could not find ([^:]+): ([^"\\,}]+)/i);
+    if (m) return `السجل المرتبط غير موجود: ${m[1]} "${m[2]}" — ابحث عنه أولاً أو أنشئه ثم أعد المحاولة`;
+    return "أحد السجلات المرتبطة (عميل/صنف/حساب) غير موجود في النظام";
+  }
+  if (/DuplicateEntryError|already exists/i.test(raw)) return "السجل موجود مسبقاً — استخدم الموجود بدلاً من إنشاء نسخة مكررة";
+  if (/MandatoryError|is mandatory/i.test(raw)) return "حقل إلزامي ناقص: " + raw.slice(0, 200);
+  if (/PermissionError|not permitted/i.test(raw)) return "صلاحيات غير كافية لتنفيذ هذه العملية في ERPNext";
+  if (/ValidationError/i.test(raw)) return "خطأ تحقق من ERPNext: " + raw.slice(0, 200);
+  return raw.slice(0, 300);
+}
+
 async function executeTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown; display: string }> {
   switch (name) {
     case "get_invoices": {
@@ -255,16 +313,62 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
     case "get_items": {
       const limit = (args.limit as number) ?? 20;
       const fields = encodeURIComponent(JSON.stringify(["name", "item_name", "item_group", "standard_rate", "stock_uom"]));
-      const data = await erpGET(`/api/resource/Item?limit=${limit}&fields=${fields}`) as { data: unknown[] };
+      let path = `/api/resource/Item?limit=${limit}&fields=${fields}`;
+      if (args.search) path += `&filters=${encodeURIComponent(JSON.stringify([["item_name", "like", `%${args.search}%`]]))}`;
+      const data = await erpGET(path) as { data: unknown[] };
+      // إذا كان بحثاً ولم يجد نتائج like، جرّب البحث التقريبي المعرَّب
+      if (args.search && (!data?.data || data.data.length === 0)) {
+        const similar = await findSimilarItems(args.search as string);
+        if (similar.length > 0) return { result: similar, display: `__ITEMS__${JSON.stringify(similar)}` };
+      }
       return { result: data?.data ?? [], display: `__ITEMS__${JSON.stringify(data?.data ?? [])}` };
     }
     case "create_invoice": {
+      // حماية: تأكد من وجود العميل، وإن وُجد مشابه استخدمه تلقائياً
+      const customerName = args.customer as string;
+      const custMatches = await findSimilarCustomers(customerName);
+      const exactCust = custMatches.find(c => normalizeArabic(c.customer_name) === normalizeArabic(customerName) || c.name === customerName);
+      let resolvedCustomer = exactCust?.name ?? null;
+      if (!resolvedCustomer && custMatches.length === 1) resolvedCustomer = custMatches[0].name;
+      if (!resolvedCustomer && custMatches.length > 1) {
+        return {
+          result: { needs_clarification: true, reason: "found_multiple_customers", candidates: custMatches.map(c => c.customer_name) },
+          display: "",
+        };
+      }
+      if (!resolvedCustomer) {
+        return {
+          result: { error: `العميل "${customerName}" غير موجود في النظام. أنشئه أولاً بـ create_customer ثم أعد إنشاء الفاتورة` },
+          display: "",
+        };
+      }
+      // حماية: حل أكواد الأصناف — استخدم الموجود إن وُجد مشابه
+      const rawItems = args.items as Array<{ item_code: string; qty: number; rate: number }>;
+      const resolvedItems: Array<{ item_code: string; qty: number; rate: number }> = [];
+      for (const it of rawItems) {
+        const itemMatches = await findSimilarItems(it.item_code);
+        const exactItem = itemMatches.find(i => normalizeArabic(i.item_name) === normalizeArabic(it.item_code) || i.name === it.item_code);
+        const resolved = exactItem?.name ?? (itemMatches.length === 1 ? itemMatches[0].name : null);
+        if (!resolved) {
+          if (itemMatches.length > 1) {
+            return {
+              result: { needs_clarification: true, reason: "found_multiple_items", searched: it.item_code, candidates: itemMatches.map(i => i.item_name) },
+              display: "",
+            };
+          }
+          return {
+            result: { error: `الصنف "${it.item_code}" غير موجود في النظام. أنشئه أولاً بـ create_item ثم أعد إنشاء الفاتورة` },
+            display: "",
+          };
+        }
+        resolvedItems.push({ item_code: resolved, qty: it.qty, rate: it.rate });
+      }
       const today = new Date().toISOString().split("T")[0];
       const invoiceDoc = {
-        customer: args.customer,
+        customer: resolvedCustomer,
         posting_date: today,
         due_date: (args.due_date as string) ?? today,
-        items: (args.items as Array<{ item_code: string; qty: number; rate: number }>).map(i => ({
+        items: resolvedItems.map(i => ({
           item_code: i.item_code,
           qty: i.qty,
           rate: i.rate,
@@ -275,7 +379,7 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       const invoiceName = data?.data?.name ?? "SINV-???";
       return {
         result: data?.data,
-        display: `__INVOICE_CREATED__${JSON.stringify({ name: invoiceName, customer: args.customer, items: args.items, grand_total: data?.data?.grand_total })}`,
+        display: `__INVOICE_CREATED__${JSON.stringify({ name: invoiceName, customer: resolvedCustomer, items: resolvedItems, grand_total: data?.data?.grand_total })}`,
       };
     }
     case "get_sales_report": {
@@ -302,6 +406,19 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       return { result: report, display: `__REPORT__${JSON.stringify(report)}` };
     }
     case "create_customer": {
+      // منع التكرار: ابحث عن عميل مطابق أو مشابه أولاً
+      const newName = args.customer_name as string;
+      const existing = await findSimilarCustomers(newName);
+      if (existing.length > 0) {
+        return {
+          result: {
+            duplicate_prevented: true,
+            message: `يوجد ${existing.length} عميل مشابه بالفعل — استخدم الموجود بدلاً من الإنشاء`,
+            candidates: existing.map(c => ({ name: c.name, customer_name: c.customer_name })),
+          },
+          display: "",
+        };
+      }
       // جلب المجموعة والإقليم الجذر ديناميكياً (قد تكون أسماؤها معرّبة)
       const cgData = await erpGET(`/api/resource/Customer%20Group?limit=1&filters=${encodeURIComponent(JSON.stringify([["is_group", "=", 1]]))}`) as { data: Array<{ name: string }> };
       const terData = await erpGET(`/api/resource/Territory?limit=1&filters=${encodeURIComponent(JSON.stringify([["is_group", "=", 1]]))}`) as { data: Array<{ name: string }> };
@@ -320,6 +437,19 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       };
     }
     case "create_item": {
+      // منع التكرار: ابحث عن صنف مطابق أو مشابه أولاً
+      const newItemName = args.item_name as string;
+      const existingItems = await findSimilarItems(newItemName);
+      if (existingItems.length > 0) {
+        return {
+          result: {
+            duplicate_prevented: true,
+            message: `يوجد ${existingItems.length} صنف مشابه بالفعل — استخدم الموجود بدلاً من الإنشاء`,
+            candidates: existingItems.map(i => ({ name: i.name, item_name: i.item_name, standard_rate: i.standard_rate })),
+          },
+          display: "",
+        };
+      }
       const isService = (args.is_service as boolean) ?? true;
       // جلب مجموعة الأصناف الجذر ووحدة القياس ديناميكياً
       const igData = await erpGET(`/api/resource/Item%20Group?limit=1&filters=${encodeURIComponent(JSON.stringify([["is_group", "=", 1]]))}`) as { data: Array<{ name: string }> };
@@ -396,14 +526,23 @@ export const agentRouter = router({
 1. **نفّذ أولاً، اشرح ثانياً**: عند أي طلب يتعلق بفواتير/عملاء/أصناف/تقارير → استدعِ الأداة المناسبة فوراً ثم علّق على النتائج
 2. **لا تعطِ إجابات نظرية**: إذا كان لديك أداة تنفذ الطلب، استخدمها مباشرة
 3. **بعد تنفيذ الأداة**: لخّص النتائج بأسلوب محاسب محترف — أبرز الأرقام المهمة، نبّه على المتأخرات، اقترح الإجراء التالي
-4. **معالجة النواقص تلقائياً (مهم جداً)**: أنت خبير تحلّ المشاكل بنفسك:
-   - عند إنشاء فاتورة لعميل غير موجود → تحقق بـ get_customers، وإن لم تجده → أنشئه فوراً بـ create_customer ثم أكمل الفاتورة
-   - عند إنشاء فاتورة بصنف غير موجود → تحقق بـ get_items، وإن لم تجده → أنشئه فوراً بـ create_item (بسعر الفاتورة) ثم أكمل
-   - إذا فشل create_invoice بسبب عميل/صنف مفقود → أنشئ الناقص ثم أعد المحاولة تلقائياً — لا تسأل المستخدم عن أشياء يمكنك حلها بنفسك
-   - اسأل المستخدم فقط عن بيانات لا يمكنك استنتاجها (مثل المبلغ إذا لم يُذكر)
-5. **استرجاع فاتورة**: "اعرض فاتورة SINV-XXX" → get_invoice_detail | "آخر الفواتير" → get_invoices
-6. **الردود**: عربية فصيحة واضحة، مختصرة ومهنية. استخدم المصطلحات المحاسبية الصحيحة
-7. **الاعتماد**: بعد إنشاء الفاتورة اعرض اعتمادها — إن وافق المستخدم أو طلبها معتمدة → استدعِ submit_invoice
+4. **منع التكرار — القاعدة الذهبية (الأهم على الإطلاق)**:
+   - **ممنوع منعاً باتاً** إنشاء عميل أو صنف دون البحث عنه أولاً
+   - قبل أي create_customer → ابحث بـ get_customers(search) — إن وُجد مطابق أو مشابه → **استخدم الموجود** ولا تنشئ نسخة مكررة
+   - قبل أي create_item → ابحث بـ get_items(search) — إن وُجد مطابق أو مشابه → **استخدم الموجود**
+   - إن وُجدت عدة نتائج مشابهة → **اعرضها على المستخدم واسأله أيها يقصد** قبل المتابعة
+   - فقط إذا لم تجد أي تطابق → أنشئ الجديد ثم أكمل العملية الأصلية
+5. **سير إنشاء الفاتورة الصحيح**:
+   أ. get_customers(search: اسم العميل) → موجود؟ استخدمه : مشابه متعدد؟ اسأل : غير موجود؟ create_customer
+   ب. get_items(search: اسم الصنف) → موجود؟ استخدمه : مشابه متعدد؟ اسأل : غير موجود؟ create_item بسعر الفاتورة
+   ج. create_invoice بالأسماء الفعلية (name) المُعادة من البحث
+   د. إذا أعادت الأداة needs_clarification مع candidates → اعرض الخيارات على المستخدم واسأله
+   هـ. إذا أعادت duplicate_prevented → استخدم السجل الموجود من candidates وأكمل مباشرة دون سؤال
+6. **اسأل المستخدم فقط** عن بيانات لا يمكنك استنتاجها (المبلغ، الكمية إذا لم تُذكر) أو عند وجود عدة مرشحين مشابهين
+7. **استرجاع فاتورة**: "اعرض فاتورة SINV-XXX" → get_invoice_detail | "آخر الفواتير" → get_invoices
+8. **اللغة / Language**: ردّ دائماً بنفس لغة رسالة المستخدم الأخيرة. If the user writes in English, respond entirely in professional English with correct accounting terminology (Invoice, Journal Entry, Accounts Receivable, Trial Balance...). إذا كتب المستخدم بالعربية فردّ بعربية فصيحة مهنية بمصطلحات محاسبية صحيحة. Keep replies concise and professional in both languages
+9. **الاعتماد**: بعد إنشاء الفاتورة اعرض اعتمادها — إن وافق المستخدم أو طلبها معتمدة → استدعِ submit_invoice
+10. **الأرقام العربية**: حوّل الأرقام العربية (٦٥٠٠٠) إلى إنجليزية (65000) عند تمريرها للأدوات
 
 ## خبرتك في Almoaser AI ERP
 - **Sales Invoice**: فاتورة المبيعات — تُنشأ Draft ثم Submit لتسجّل في الحسابات. الحالات: Draft/Unpaid/Paid/Overdue/Cancelled
@@ -444,16 +583,26 @@ export const agentRouter = router({
 
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
 
-      for (let iter = 0; iter < 5; iter++) {
-        const response = await invokeLLM({
-          messages: llmMessages,
-          tools: TOOLS,
-          tool_choice: "auto",
-          maxTokens: 2000,
-        });
+      for (let iter = 0; iter < 8; iter++) {
+        let response;
+        try {
+          response = await invokeLLM({
+            messages: llmMessages,
+            tools: TOOLS,
+            tool_choice: "auto",
+            maxTokens: 2000,
+          });
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : "LLM invocation failed";
+          console.error("[agent.chat] invokeLLM error:", errMsg);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذر الاتصال بالنموذج الذكي مؤقتاً — يرجى المحاولة مرة أخرى" });
+        }
 
-        const msg = response.choices[0]?.message;
-        if (!msg) break;
+        const msg = response?.choices?.[0]?.message;
+        if (!msg) {
+          console.error("[agent.chat] empty LLM response:", JSON.stringify(response)?.slice(0, 500));
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "أعاد النموذج الذكي استجابة فارغة — يرجى إعادة صياغة الطلب أو المحاولة مرة أخرى" });
+        }
 
         if (!msg.tool_calls || msg.tool_calls.length === 0) {
           const replyText = typeof msg.content === "string"
@@ -484,7 +633,9 @@ export const agentRouter = router({
             toolResult = JSON.stringify(result);
             displayData = display;
           } catch (e) {
-            toolResult = JSON.stringify({ error: e instanceof Error ? e.message : "Tool execution failed" });
+            const rawErr = e instanceof Error ? e.message : "Tool execution failed";
+            console.error(`[agent.chat] tool ${tc.function.name} failed:`, rawErr);
+            toolResult = JSON.stringify({ error: translateErpError(rawErr) });
           }
           toolResults.push({ tool_call_id: tcId, tool_name: tc.function.name, display: displayData });
           llmMessages.push({ role: "tool", content: toolResult, tool_call_id: tcId });

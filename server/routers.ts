@@ -5,6 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
+import { notifyOwner } from "./_core/notification";
 import { agentRouter } from "./routers/agent";
 import {
   getActivePlans, getPlanById,
@@ -13,6 +14,8 @@ import {
   getInvoicesByUserId,
   createRegistrationRequest,
   getAllRegistrationRequests, getAllSubscriptions, getAllTasks,
+  getTaskCommentsByTaskId, createTaskComment, getTaskById,
+  updateUserProfile,
 } from "./db";
 
 // ─── ERPNext Session Cache ────────────────────────────────────────────────────
@@ -156,6 +159,39 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+    comments: protectedProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const task = await getTaskById(input.taskId);
+        if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "المهمة غير موجودة" });
+        if (task.userId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return getTaskCommentsByTaskId(input.taskId);
+      }),
+    addComment: protectedProcedure
+      .input(z.object({ taskId: z.number(), content: z.string().min(1).max(2000) }))
+      .mutation(async ({ ctx, input }) => {
+        const task = await getTaskById(input.taskId);
+        if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "المهمة غير موجودة" });
+        if (task.userId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        await createTaskComment({
+          taskId: input.taskId,
+          userId: ctx.user.id,
+          authorRole: ctx.user.role === "admin" ? "admin" : "user",
+          content: input.content,
+        });
+        // إشعار المالك عند تعليق العميل على مهمة
+        if (ctx.user.role !== "admin") {
+          notifyOwner({
+            title: "تعليق جديد على مهمة — Almoaser AI ERP",
+            content: `المهمة: ${task.title}\nمن: ${ctx.user.name ?? "عميل"}\nالتعليق: ${input.content.slice(0, 300)}`,
+          }).catch(() => {});
+        }
+        return { success: true };
+      }),
   }),
 
   invoices: router({
@@ -176,6 +212,39 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         await createRegistrationRequest(input);
+        // إشعار المسؤول بطلب تسجيل جديد (لا يوقف العملية عند الفشل)
+        notifyOwner({
+          title: "طلب تسجيل جديد — Almoaser AI ERP",
+          content: `الاسم: ${input.name}\nالبريد: ${input.email}\nالجوال: ${input.phone}\nالشركة: ${input.companyName ?? "-"}\nالنشاط: ${input.companyType ?? "-"}`,
+        }).catch(() => {});
+        return { success: true };
+      }),
+  }),
+
+  profile: router({
+    update: protectedProcedure
+      .input(z.object({
+        name: z.string().min(2).max(100).optional(),
+        email: z.string().email().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!input.name && !input.email) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "لا توجد بيانات للتحديث" });
+        }
+        await updateUserProfile(ctx.user.id, input);
+        return { success: true };
+      }),
+    updateCompany: protectedProcedure
+      .input(z.object({
+        companyName: z.string().max(255).optional(),
+        companyType: z.string().max(100).optional(),
+        phone: z.string().max(20).optional(),
+        vatNumber: z.string().max(50).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const sub = await getSubscriptionByUserId(ctx.user.id);
+        if (!sub) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك — اشترك في باقة أولاً" });
+        await updateSubscription(sub.id, input);
         return { success: true };
       }),
   }),
