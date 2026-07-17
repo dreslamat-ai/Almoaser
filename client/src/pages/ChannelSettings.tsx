@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   MessageSquare, Send, Settings, CheckCircle2, XCircle,
-  Eye, EyeOff, Zap, Globe, Shield, Info,
+  Eye, EyeOff, Zap, Globe, Shield, Info, Server, Plug, Trash2, Save,
 } from "lucide-react";
 
 function FieldGroup({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
@@ -21,6 +21,101 @@ function FieldGroup({ label, description, children }: { label: string; descripti
       {description && <p className="text-xs text-muted-foreground">{description}</p>}
       {children}
     </div>
+  );
+}
+
+function ErpConnectionCard() {
+  const utils = trpc.useUtils();
+  const { data: erpConn } = trpc.erpConnection.get.useQuery();
+  const [erp, setErp] = useState({ url: "", username: "", password: "" });
+  const [showPwd, setShowPwd] = useState(false);
+
+  useEffect(() => {
+    if (erpConn) setErp(prev => ({ ...prev, url: erpConn.url, username: erpConn.username }));
+  }, [erpConn]);
+
+  const erpSaveMutation = trpc.erpConnection.save.useMutation({
+    onSuccess: (r) => {
+      toast.success(`تم الاتصال والحفظ بنجاح — مسجّل باسم: ${r.loggedInAs ?? erp.username}`);
+      setErp(prev => ({ ...prev, password: "" }));
+      utils.erpConnection.get.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const erpTestMutation = trpc.erpConnection.test.useMutation({
+    onSuccess: (r) => {
+      if (r.ok) toast.success(`الاتصال ناجح — مسجّل باسم: ${r.loggedInAs}`);
+      else toast.error(r.error ?? "فشل الاختبار");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const erpRemoveMutation = trpc.erpConnection.remove.useMutation({
+    onSuccess: () => {
+      toast.success("تم حذف الاتصال — سيُستخدم اتصال النظام الافتراضي");
+      setErp({ url: "", username: "", password: "" });
+      utils.erpConnection.get.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-3 pt-4 px-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Server className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-sm font-semibold">اتصال نظام ERPNext الخاص بك</CardTitle>
+              <CardDescription className="text-xs">اربط الوكيل الذكي ولوحات البيانات بنظام ERPNext الخاص بشركتك</CardDescription>
+            </div>
+          </div>
+          <Badge variant={erpConn ? "default" : "secondary"} className="text-xs">
+            {erpConn ? <><CheckCircle2 className="w-3 h-3 ml-1" />متصل</> : <><XCircle className="w-3 h-3 ml-1" />غير متصل</>}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="px-5 pb-5 space-y-4">
+        <form onSubmit={e => { e.preventDefault(); erpSaveMutation.mutate(erp); }} className="space-y-4">
+          <FieldGroup label="رابط النظام" description="عنوان نظام ERPNext الخاص بشركتك">
+            <Input value={erp.url} onChange={e => setErp(p => ({ ...p, url: e.target.value }))} placeholder="https://your-company.erpnext.com" dir="ltr" className="font-mono text-xs" />
+          </FieldGroup>
+          <div className="grid grid-cols-2 gap-3">
+            <FieldGroup label="اسم المستخدم">
+              <Input value={erp.username} onChange={e => setErp(p => ({ ...p, username: e.target.value }))} placeholder="user@example.com" dir="ltr" className="font-mono text-xs" />
+            </FieldGroup>
+            <FieldGroup label="كلمة المرور" description="تُحفظ مشفرة (AES-256) ولا تُعرض مجدداً">
+              <div className="relative">
+                <Input type={showPwd ? "text" : "password"} value={erp.password} onChange={e => setErp(p => ({ ...p, password: e.target.value }))} placeholder={erpConn ? "••••••• (اتركها فارغة للإبقاء)" : "كلمة المرور"} dir="ltr" className="pl-10 font-mono text-xs" />
+                <button type="button" onClick={() => setShowPwd(s => !s)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </FieldGroup>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" disabled={erpSaveMutation.isPending || !erp.url || !erp.username || !erp.password} className="gap-1.5">
+              <Save className="w-3.5 h-3.5" />
+              {erpSaveMutation.isPending ? "جاري الاختبار والحفظ..." : "اختبار وحفظ الاتصال"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={erpTestMutation.isPending || !erp.url || !erp.username || !erp.password}
+              onClick={() => erpTestMutation.mutate(erp)} className="gap-1.5">
+              <Plug className="w-3.5 h-3.5" />
+              {erpTestMutation.isPending ? "جاري الاختبار..." : "اختبار فقط"}
+            </Button>
+            {erpConn && (
+              <Button type="button" variant="outline" size="sm" disabled={erpRemoveMutation.isPending}
+                onClick={() => { if (confirm("هل تريد حذف اتصال ERPNext الخاص بك؟ سيعود النظام للاتصال الافتراضي.")) erpRemoveMutation.mutate(); }}
+                className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50">
+                <Trash2 className="w-3.5 h-3.5" />
+                حذف الاتصال
+              </Button>
+            )}
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -78,12 +173,15 @@ export default function ChannelSettings() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">إعدادات القنوات</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">ربط واتساب وتيليجرام بوكيل الذكاء الاصطناعي</p>
+            <p className="text-xs text-muted-foreground mt-0.5">ربط نظام ERPNext وواتساب وتيليجرام بوكيل الذكاء الاصطناعي</p>
           </div>
           <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
             {saveMutation.isPending ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
           </Button>
         </div>
+
+        {/* ERPNext Connection */}
+        <ErpConnectionCard />
 
         {/* Agent Toggle */}
         <Card className="shadow-sm border-primary/20 bg-primary/5">
