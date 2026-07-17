@@ -190,6 +190,7 @@ const plugins = [
     },
     workbox: {
       globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+      maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MiB — الحزمة الرئيسية تتجاوز حد 2MiB الافتراضي
       runtimeCaching: [
         {
           urlPattern: /^https:\/\/demo\.almoaser\.cloud\/.*/i,
