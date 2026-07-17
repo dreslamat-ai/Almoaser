@@ -19,8 +19,12 @@ function Sidebar({ active }: { active: string }) {
     <aside className="w-64 bg-navy-hero min-h-screen flex flex-col">
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-gold" />
+          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center overflow-hidden">
+            <img
+              src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
+              alt="شعار المعاصر"
+              className="w-8 h-8 object-contain"
+            />
           </div>
           <div>
             <div className="font-bold text-white">Almoaser <span className="text-gold text-xs font-light">AI ERP</span></div>
@@ -67,7 +71,7 @@ export default function Dashboard() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <Bot className="w-16 h-16 text-navy mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-navy mb-2">مرحباً بك في Almoaser AI Powered ERP</h2>
+          <h2 className="text-2xl font-bold text-navy mb-2">مرحباً بك في Almoaser AI ERP</h2>
           <p className="text-muted-foreground mb-6">سجّل دخولك للوصول إلى لوحة التحكم</p>
           <Button onClick={() => startLogin()} className="bg-navy-gradient text-white hover:opacity-90">تسجيل الدخول</Button>
         </div>
@@ -93,7 +97,7 @@ export default function Dashboard() {
       <main className="flex-1 p-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">مرحباً، {user?.name ?? "عزيزي العميل"} 👋</h1>
-          <p className="text-muted-foreground mt-1">هذا ملخص حسابك في Almoaser AI Powered ERP</p>
+          <p className="text-muted-foreground mt-1">هذا ملخص حسابك في Almoaser AI ERP</p>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -167,9 +171,9 @@ export default function Dashboard() {
             </div>
             <div className="flex-1">
               <h3 className="font-bold text-lg">وكيل AI جاهز لمساعدتك</h3>
-              <p className="text-white/70 text-sm">أرسل أوامرك عبر واتساب وسينفذها الوكيل فوراً في Almoaser AI Powered ERP</p>
+              <p className="text-white/70 text-sm">أرسل أوامرك عبر واتساب وسينفذها الوكيل فوراً في Almoaser AI ERP</p>
             </div>
-            <a href="https://wa.me/966564677377?text=مرحباً، أريد التواصل مع وكيل Almoaser AI Powered ERP" target="_blank" rel="noopener noreferrer">
+            <a href="https://wa.me/966564677377?text=مرحباً، أريد التواصل مع وكيل Almoaser AI ERP" target="_blank" rel="noopener noreferrer">
               <Button className="bg-gold text-white hover:bg-gold/90 flex-shrink-0">تواصل عبر واتساب</Button>
             </a>
           </div>

@@ -96,11 +96,11 @@ function Navbar() {
     <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? "bg-white/95 backdrop-blur-xl shadow-sm border-b border-gray-100" : "bg-transparent"}`}>
       <div className="container flex items-center justify-between h-16">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-navy-gradient flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 shadow-sm flex items-center justify-center overflow-hidden">
+            <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر" className="w-8 h-8 object-contain" />
           </div>
           <div>
-            <span className="font-bold text-lg text-navy">Almoaser <span className="text-gold font-light text-sm">AI Powered ERP</span></span>
+            <span className="font-bold text-lg text-navy">Almoaser <span className="text-gold font-light text-sm">AI ERP</span></span>
             <div className="text-[10px] text-muted-foreground leading-none">خدمات مسك الدفاتر</div>
           </div>
         </div>
@@ -215,7 +215,7 @@ function ServicesSection() {
             خدماتنا
           </div>
           <h2 className="text-4xl font-bold text-navy mb-4">كل ما تحتاجه لإدارة محاسبتك</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">وكلاء AI متخصصون لكل قسم، يعملون بتناسق تام مع نظام Almoaser AI Powered ERP الخاص بك.</p>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">وكلاء AI متخصصون لكل قسم، يعملون بتناسق تام مع نظام Almoaser AI ERP الخاص بك.</p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {services.map((s, i) => (
@@ -237,7 +237,7 @@ function HowItWorksSection() {
     { num: "01", title: "مقابلة وتحليل النشاط", desc: "نفهم طبيعة عملك ومتطلباتك المحاسبية لنخصص الوكيل المناسب.", icon: <Users className="w-5 h-5" /> },
     { num: "02", title: "تحديد الباقة المناسبة", desc: "تختار الباقة التي تناسب حجم عملياتك وميزانيتك.", icon: <Star className="w-5 h-5" /> },
     { num: "03", title: "التعاقد والتوقيع", desc: "توقيع الاتفاقية وتحديد نطاق الخدمة وآلية التواصل.", icon: <FileText className="w-5 h-5" /> },
-    { num: "04", title: "تهيئة النظام المحاسبي", desc: "إعداد Almoaser AI Powered ERP وضبط الوكلاء وفق خطة حسابات شركتك.", icon: <Bot className="w-5 h-5" /> },
+    { num: "04", title: "تهيئة النظام المحاسبي", desc: "إعداد Almoaser AI ERP وضبط الوكلاء وفق خطة حسابات شركتك.", icon: <Bot className="w-5 h-5" /> },
     { num: "05", title: "البدء في التنفيذ", desc: "ترسل أوامرك عبر واتساب والوكيل ينفذها فوراً في النظام.", icon: <MessageCircle className="w-5 h-5" /> },
     { num: "06", title: "المراجعة والتحسين", desc: "تقارير دورية ومراجعة مستمرة لضمان دقة البيانات.", icon: <TrendingUp className="w-5 h-5" /> },
   ];
@@ -864,15 +864,15 @@ function Footer() {
       <div className="container">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-gold" />
+            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center overflow-hidden">
+              <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر" className="w-8 h-8 object-contain" />
             </div>
             <div>
-              <div className="font-bold text-white">Almoaser <span className="text-gold text-sm font-light">AI Powered ERP</span></div>
+              <div className="font-bold text-white">Almoaser <span className="text-gold text-sm font-light">AI ERP</span></div>
               <div className="text-xs">خدمات مسك الدفاتر بالذكاء الاصطناعي</div>
             </div>
           </div>
-          <div className="text-sm">© 2026 Almoaser AI Powered ERP — جميع الحقوق محفوظة</div>
+          <div className="text-sm">© 2026 Almoaser AI ERP — جميع الحقوق محفوظة</div>
           <div className="flex gap-4 text-sm">
             <a href="https://almoaser.com" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">الموقع الرئيسي</a>
             <a href="#contact" className="hover:text-white transition-colors">تواصل معنا</a>
