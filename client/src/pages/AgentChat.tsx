@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Streamdown } from "streamdown";
+import { toast } from "sonner";
 import {
   Bot, Send, User, Sparkles, Loader2, Trash2,
   FileText, BarChart3, Users, Package, MessageSquare,
   Download, CheckCircle2, AlertCircle, TrendingUp,
+  Mic, Square, ImagePlus, Camera,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -353,14 +355,42 @@ const SUGGESTIONS = [
   { icon: BarChart3, text: "تقرير مبيعات هذه السنة" },
 ];
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(",")[1] ?? "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+const DOC_TYPE_LABEL: Record<string, string> = {
+  sales_invoice: "فاتورة مبيعات",
+  purchase_invoice: "فاتورة مشتريات",
+  receipt_voucher: "سند قبض",
+  payment_voucher: "سند صرف",
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AgentChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const chatMutation = trpc.agent.chat.useMutation();
   const pdfMutation = trpc.agent.getInvoicePdf.useMutation();
+  const transcribeMutation = trpc.agent.transcribeVoice.useMutation();
+  const extractMutation = trpc.agent.extractDocument.useMutation();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -410,6 +440,83 @@ export default function AgentChat() {
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
+  };
+
+  // ─── Voice input ────────────────────────────────────────────────────────────
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        if (blob.size < 1500) { toast.error("التسجيل قصير جداً — اضغط الميكروفون وتحدث ثم اضغط إيقاف"); return; }
+        setTranscribing(true);
+        try {
+          const base64 = await blobToBase64(blob);
+          const result = await transcribeMutation.mutateAsync({ audioBase64: base64, mimeType });
+          // ضع النص في خانة الإدخال ليراجعه المستخدم ثم أرسله مباشرة
+          void send(result.text);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "تعذّر تحويل الصوت إلى نص");
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+    } catch {
+      toast.error("تعذّر الوصول إلى الميكروفون — تأكد من منح الإذن للمتصفح");
+    }
+  }, [transcribeMutation]);
+
+  const stopRecording = useCallback(() => {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    setRecording(false);
+  }, []);
+
+  // ─── Document image upload (OCR) ────────────────────────────────────────────
+  const handleImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("يرجى اختيار صورة (JPG أو PNG)"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("الصورة كبيرة جداً — الحد الأقصى 10 ميجابايت"); return; }
+    setExtracting(true);
+    setMessages(prev => [...prev, { role: "user", content: "📷 رفعتُ صورة مستند مالي — اقرأها واستخرج بياناتها", ts: Date.now() }]);
+    try {
+      const base64 = await blobToBase64(file);
+      const { extracted } = await extractMutation.mutateAsync({ imageBase64: base64, mimeType: file.type });
+      const label = DOC_TYPE_LABEL[extracted.doc_type] ?? extracted.doc_type;
+      const itemsText = extracted.items.length
+        ? extracted.items.map(it => `  - ${it.description} × ${it.qty} بسعر ${it.rate} = ${it.amount}`).join("\n")
+        : "  (لا توجد بنود مفصلة)";
+      const summary = [
+        `قرأتُ المستند من الصورة. هذه البيانات المستخرجة — **راجعها وأكّد لي التسجيل**:`,
+        ``,
+        `- **نوع المستند**: ${label}`,
+        `- **الطرف (عميل/مورد)**: ${extracted.party_name || "غير واضح"}`,
+        extracted.invoice_number ? `- **رقم المستند في الصورة**: ${extracted.invoice_number}` : "",
+        extracted.date ? `- **التاريخ**: ${extracted.date}` : "",
+        `- **البنود**:\n${itemsText}`,
+        extracted.vat_amount > 0 ? `- **الضريبة**: ${extracted.vat_amount}` : "",
+        `- **الإجمالي**: ${extracted.total_amount}${extracted.currency ? " " + extracted.currency : ""}`,
+        extracted.notes ? `- **ملاحظات**: ${extracted.notes}` : "",
+        ``,
+        `هل أسجّله في النظام؟ اكتب "نعم" للتسجيل، أو صحّح أي بيانات قبل التسجيل.`,
+      ].filter(Boolean).join("\n");
+      setMessages(prev => [...prev, { role: "assistant", content: summary, ts: Date.now() }]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "تعذّر قراءة الصورة";
+      setMessages(prev => [...prev, { role: "assistant", content: `⚠️ ${msg}`, ts: Date.now() }]);
+    } finally {
+      setExtracting(false);
+    }
   };
 
   return (
@@ -523,14 +630,41 @@ export default function AgentChat() {
           {/* Input */}
           <div className="border-t border-border p-3 shrink-0">
             <div className="flex gap-2 items-end">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => void handleImageSelected(e)}
+              />
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={chatMutation.isPending || extracting || recording}
+                size="icon"
+                variant="outline"
+                className="h-11 w-11 shrink-0"
+                title="ارفع صورة فاتورة أو سند قبض"
+              >
+                {extracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+              </Button>
+              <Button
+                onClick={() => (recording ? stopRecording() : void startRecording())}
+                disabled={chatMutation.isPending || transcribing || extracting}
+                size="icon"
+                variant={recording ? "destructive" : "outline"}
+                className={`h-11 w-11 shrink-0 ${recording ? "animate-pulse" : ""}`}
+                title={recording ? "إيقاف التسجيل وإرسال" : "تحدث مع الوكيل بالصوت"}
+              >
+                {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
               <Textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKey}
-                placeholder="اكتب أمرك... مثال: اعرض آخر الفواتير غير المدفوعة"
+                placeholder={recording ? "🎙️ جارٍ التسجيل... اضغط زر الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص..." : "اكتب أمرك أو تحدث بالصوت أو ارفع صورة فاتورة..."}
                 className="flex-1 min-h-[44px] max-h-32 resize-none text-sm"
                 rows={1}
-                disabled={chatMutation.isPending}
+                disabled={chatMutation.isPending || recording || transcribing}
               />
               <Button
                 onClick={() => void send()}
@@ -543,7 +677,7 @@ export default function AgentChat() {
             </div>
             <p className="text-xs text-muted-foreground mt-1.5 text-center">
               <MessageSquare className="w-3 h-3 inline ml-1" />
-              Enter للإرسال · Shift+Enter لسطر جديد · الوكيل ينفذ العمليات مباشرة على Almoaser AI ERP
+              Enter للإرسال · 🎙️ تحدث بالصوت · 📷 ارفع صورة فاتورة/سند — الوكيل يفهم وينفذ مباشرة على Almoaser AI ERP
             </p>
           </div>
         </Card>

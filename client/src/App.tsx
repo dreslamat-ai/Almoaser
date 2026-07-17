@@ -14,6 +14,9 @@ import ERPNextDashboard from "./pages/ERPNextDashboard";
 import AgentChat from "./pages/AgentChat";
 import ChannelSettings from "./pages/ChannelSettings";
 import AccountSettings from "./pages/AccountSettings";
+import ErpInvoices from "./pages/ErpInvoices";
+import ErpCustomers from "./pages/ErpCustomers";
+import ErpReports from "./pages/ErpReports";
 
 function Router() {
   return (
@@ -26,6 +29,9 @@ function Router() {
       <Route path="/subscription" component={Subscription} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/erp" component={ERPNextDashboard} />
+      <Route path="/erp/invoices" component={ErpInvoices} />
+      <Route path="/erp/customers" component={ErpCustomers} />
+      <Route path="/erp/reports" component={ErpReports} />
       <Route path="/agent" component={AgentChat} />
       <Route path="/channels" component={ChannelSettings} />
       <Route path="/settings" component={AccountSettings} />

@@ -4,6 +4,8 @@
  */
 import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
+import { storagePut, storageGetSignedUrl } from "../storage";
+import { transcribeAudio } from "../_core/voiceTranscription";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
@@ -225,6 +227,200 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_suppliers",
+      description: "جلب قائمة الموردين أو البحث عن مورد بالاسم (بحث تقريبي). استخدمها دائماً قبل إنشاء أي مورد جديد",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "عدد الموردين (افتراضي 20)" },
+          search: { type: "string", description: "بحث تقريبي باسم المورد" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_supplier",
+      description: "إنشاء مورد جديد. لا تستخدمها قبل البحث بـ get_suppliers — الأداة ترفض الإنشاء إذا وُجد مورد مشابه وتعيد المرشحين",
+      parameters: {
+        type: "object",
+        properties: {
+          supplier_name: { type: "string", description: "اسم المورد" },
+          supplier_type: { type: "string", enum: ["Company", "Individual"], description: "نوع المورد (الافتراضي Company)" },
+          mobile_no: { type: "string", description: "رقم الجوال (اختياري)" },
+          email_id: { type: "string", description: "البريد الإلكتروني (اختياري)" },
+        },
+        required: ["supplier_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_purchase_invoices",
+      description: "جلب قائمة فواتير المشتريات مع إمكانية الفلترة بالحالة أو المورد",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "عدد الفواتير (افتراضي 10)" },
+          status: { type: "string", enum: ["Paid", "Unpaid", "Overdue", "Draft", "Cancelled"], description: "فلترة حسب الحالة" },
+          supplier: { type: "string", description: "فلترة حسب اسم المورد" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_purchase_invoice",
+      description: "إنشاء فاتورة مشتريات من مورد كمسودة. تحقق من وجود المورد والأصناف أولاً (get_suppliers/get_items) — الأداة تحل الأسماء المشابهة تلقائياً",
+      parameters: {
+        type: "object",
+        properties: {
+          supplier: { type: "string", description: "اسم المورد" },
+          items: {
+            type: "array",
+            description: "قائمة الأصناف المشتراة",
+            items: {
+              type: "object",
+              properties: {
+                item_code: { type: "string", description: "كود أو اسم الصنف" },
+                qty: { type: "number", description: "الكمية" },
+                rate: { type: "number", description: "سعر الشراء" },
+              },
+              required: ["item_code", "qty", "rate"],
+              additionalProperties: false,
+            },
+          },
+          due_date: { type: "string", description: "تاريخ الاستحقاق YYYY-MM-DD (اختياري)" },
+        },
+        required: ["supplier", "items"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_payments",
+      description: "جلب قائمة الدفعات (Payment Entries) المستلمة والمدفوعة مع إمكانية الفلترة",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "عدد الدفعات (افتراضي 10)" },
+          payment_type: { type: "string", enum: ["Receive", "Pay"], description: "Receive = مستلمة من عميل، Pay = مدفوعة لمورد" },
+          party: { type: "string", description: "فلترة حسب اسم العميل أو المورد" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_payment_entry",
+      description: "تسجيل دفعة: مستلمة من عميل (Receive) أو مدفوعة لمورد (Pay). يمكن ربطها بفاتورة محددة لسدادها. تُنشأ كمسودة ثم تُعتمد بـ submit_document",
+      parameters: {
+        type: "object",
+        properties: {
+          payment_type: { type: "string", enum: ["Receive", "Pay"], description: "Receive = قبض من عميل، Pay = صرف لمورد" },
+          party: { type: "string", description: "اسم العميل (لـ Receive) أو المورد (لـ Pay)" },
+          amount: { type: "number", description: "مبلغ الدفعة" },
+          reference_invoice: { type: "string", description: "رقم الفاتورة المراد سدادها مثل ACC-SINV-2026-00001 (اختياري — لربط الدفعة بالفاتورة)" },
+          mode_of_payment: { type: "string", description: "طريقة الدفع مثل Cash أو Bank (اختياري)" },
+        },
+        required: ["payment_type", "party", "amount"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_accounts",
+      description: "جلب شجرة الحسابات أو البحث عن حساب بالاسم — استخدمها قبل إنشاء قيد يومية لمعرفة أسماء الحسابات الفعلية",
+      parameters: {
+        type: "object",
+        properties: {
+          search: { type: "string", description: "بحث باسم الحساب مثل Cash أو الصندوق أو المبيعات" },
+          root_type: { type: "string", enum: ["Asset", "Liability", "Equity", "Income", "Expense"], description: "فلترة حسب التصنيف (اختياري)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_journal_entries",
+      description: "جلب قيود اليومية المسجلة",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "عدد القيود (افتراضي 10)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_journal_entry",
+      description: "تسجيل قيد يومية محاسبي (مدين/دائن). يجب أن يتساوى إجمالي المدين مع إجمالي الدائن. ابحث عن أسماء الحسابات الفعلية بـ get_accounts أولاً. يُنشأ كمسودة ثم يُعتمد بـ submit_document",
+      parameters: {
+        type: "object",
+        properties: {
+          entries: {
+            type: "array",
+            description: "سطور القيد — كل سطر حساب مع مبلغ مدين أو دائن",
+            items: {
+              type: "object",
+              properties: {
+                account: { type: "string", description: "اسم الحساب الفعلي من شجرة الحسابات" },
+                debit: { type: "number", description: "المبلغ المدين (0 إذا كان السطر دائناً)" },
+                credit: { type: "number", description: "المبلغ الدائن (0 إذا كان السطر مديناً)" },
+              },
+              required: ["account", "debit", "credit"],
+              additionalProperties: false,
+            },
+          },
+          remark: { type: "string", description: "البيان / وصف القيد" },
+          posting_date: { type: "string", description: "تاريخ القيد YYYY-MM-DD (اختياري — الافتراضي اليوم)" },
+        },
+        required: ["entries"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "submit_document",
+      description: "اعتماد (Submit) أي مستند لتسجيله رسمياً في الحسابات: فاتورة مبيعات، فاتورة مشتريات، دفعة، أو قيد يومية",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"], description: "نوع المستند" },
+          document_name: { type: "string", description: "رقم المستند مثل ACC-SINV-2026-00001 أو ACC-PAY-2026-00001" },
+        },
+        required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ─── Tool Executor ────────────────────────────────────────────────────────────
@@ -269,6 +465,43 @@ async function findSimilarItems(name: string): Promise<Array<{ name: string; ite
   const data = await erpGET(`/api/resource/Item?limit=50&fields=${fields}&filters=${filters}`) as { data?: Array<{ name: string; item_name: string; standard_rate?: number }> };
   const all = data?.data ?? [];
   return all.filter(i => isSimilar(i.item_name, name) || isSimilar(i.name, name));
+}
+
+// البحث عن موردين مطابقين/مشابهين بالاسم
+async function findSimilarSuppliers(name: string): Promise<Array<{ name: string; supplier_name: string }>> {
+  const fields = encodeURIComponent(JSON.stringify(["name", "supplier_name"]));
+  const firstWord = name.trim().split(/\s+/)[0] ?? name;
+  const filters = encodeURIComponent(JSON.stringify([["supplier_name", "like", `%${firstWord}%`]]));
+  const data = await erpGET(`/api/resource/Supplier?limit=50&fields=${fields}&filters=${filters}`) as { data?: Array<{ name: string; supplier_name: string }> };
+  const all = data?.data ?? [];
+  return all.filter(s => isSimilar(s.supplier_name, name) || isSimilar(s.name, name));
+}
+
+// اعتماد مستند عام (docstatus = 1)
+async function submitDoc(doctype: string, docName: string): Promise<{ name: string; status?: string; grand_total?: number }> {
+  const url = process.env.ERPNEXT_URL ?? "";
+  const sid = await getSession();
+  const res = await fetch(`${url}/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(docName)}`, {
+    method: "PUT",
+    headers: { Cookie: `sid=${sid}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ docstatus: 1 }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`فشل اعتماد المستند: ${errText.slice(0, 300)}`);
+  }
+  const data = await res.json() as { data: { name: string; status?: string; grand_total?: number } };
+  return data?.data;
+}
+
+// جلب الشركة الافتراضية (مطلوبة للدفعات والقيود)
+let _defaultCompany: string | null = null;
+async function getDefaultCompany(): Promise<string> {
+  if (_defaultCompany) return _defaultCompany;
+  const data = await erpGET(`/api/resource/Company?limit=1&fields=${encodeURIComponent(JSON.stringify(["name"]))}`) as { data: Array<{ name: string }> };
+  _defaultCompany = data?.data?.[0]?.name ?? "";
+  if (!_defaultCompany) throw new Error("لا توجد شركة معرّفة في النظام");
+  return _defaultCompany;
 }
 
 // ترجمة أخطاء ERPNext الشائعة إلى رسائل عربية مفهومة
@@ -364,10 +597,13 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         resolvedItems.push({ item_code: resolved, qty: it.qty, rate: it.rate });
       }
       const today = new Date().toISOString().split("T")[0];
+      // due_date لا يجوز أن يسبق posting_date — إن كان التاريخ المُمرر أقدم (مثلاً من صورة فاتورة قديمة) استخدم اليوم
+      const requestedDue = (args.due_date as string) ?? today;
+      const safeDueDate = requestedDue < today ? today : requestedDue;
       const invoiceDoc = {
         customer: resolvedCustomer,
         posting_date: today,
-        due_date: (args.due_date as string) ?? today,
+        due_date: safeDueDate,
         items: resolvedItems.map(i => ({
           item_code: i.item_code,
           qty: i.qty,
@@ -488,6 +724,248 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         display: `__INVOICE_SUBMITTED__${JSON.stringify({ name: data?.data?.name, status: data?.data?.status, grand_total: data?.data?.grand_total })}`,
       };
     }
+    case "get_suppliers": {
+      const limit = (args.limit as number) ?? 20;
+      const fields = encodeURIComponent(JSON.stringify(["name", "supplier_name", "supplier_type", "mobile_no", "email_id"]));
+      let path = `/api/resource/Supplier?limit=${limit}&fields=${fields}`;
+      if (args.search) path += `&filters=${encodeURIComponent(JSON.stringify([["supplier_name", "like", `%${args.search}%`]]))}`;
+      const data = await erpGET(path) as { data: unknown[] };
+      if (args.search && (!data?.data || data.data.length === 0)) {
+        const similar = await findSimilarSuppliers(args.search as string);
+        if (similar.length > 0) return { result: similar, display: `__SUPPLIERS__${JSON.stringify(similar)}` };
+      }
+      return { result: data?.data ?? [], display: `__SUPPLIERS__${JSON.stringify(data?.data ?? [])}` };
+    }
+    case "create_supplier": {
+      const newName = args.supplier_name as string;
+      const existing = await findSimilarSuppliers(newName);
+      if (existing.length > 0) {
+        return {
+          result: {
+            duplicate_prevented: true,
+            message: `يوجد ${existing.length} مورد مشابه بالفعل — استخدم الموجود بدلاً من الإنشاء`,
+            candidates: existing.map(s => ({ name: s.name, supplier_name: s.supplier_name })),
+          },
+          display: "",
+        };
+      }
+      const sgData = await erpGET(`/api/resource/Supplier%20Group?limit=1&filters=${encodeURIComponent(JSON.stringify([["is_group", "=", 1]]))}`) as { data: Array<{ name: string }> };
+      const supplierDoc = {
+        supplier_name: newName,
+        supplier_type: (args.supplier_type as string) ?? "Company",
+        supplier_group: sgData?.data?.[0]?.name ?? "All Supplier Groups",
+        ...(args.mobile_no ? { mobile_no: args.mobile_no } : {}),
+        ...(args.email_id ? { email_id: args.email_id } : {}),
+      };
+      const data = await erpPOST("/api/resource/Supplier", supplierDoc) as { data: { name: string; supplier_name: string; supplier_type: string } };
+      return {
+        result: data?.data,
+        display: `__SUPPLIER_CREATED__${JSON.stringify({ name: data?.data?.name, supplier_name: data?.data?.supplier_name, supplier_type: data?.data?.supplier_type })}`,
+      };
+    }
+    case "get_purchase_invoices": {
+      const limit = (args.limit as number) ?? 10;
+      const fields = encodeURIComponent(JSON.stringify(["name", "supplier", "posting_date", "due_date", "grand_total", "outstanding_amount", "status", "currency"]));
+      let filterStr = "";
+      if (args.status) filterStr = `&filters=${encodeURIComponent(JSON.stringify([["status", "=", args.status]]))}`;
+      else if (args.supplier) filterStr = `&filters=${encodeURIComponent(JSON.stringify([["supplier", "like", `%${args.supplier}%`]]))}`;
+      const data = await erpGET(`/api/resource/Purchase%20Invoice?limit=${limit}&fields=${fields}&order_by=posting_date%20desc${filterStr}`) as { data: unknown[] };
+      return { result: data?.data ?? [], display: `__PURCHASE_INVOICES__${JSON.stringify(data?.data ?? [])}` };
+    }
+    case "create_purchase_invoice": {
+      const supplierName = args.supplier as string;
+      const supMatches = await findSimilarSuppliers(supplierName);
+      const exactSup = supMatches.find(s => normalizeArabic(s.supplier_name) === normalizeArabic(supplierName) || s.name === supplierName);
+      let resolvedSupplier = exactSup?.name ?? null;
+      if (!resolvedSupplier && supMatches.length === 1) resolvedSupplier = supMatches[0].name;
+      if (!resolvedSupplier && supMatches.length > 1) {
+        return {
+          result: { needs_clarification: true, reason: "found_multiple_suppliers", candidates: supMatches.map(s => s.supplier_name) },
+          display: "",
+        };
+      }
+      if (!resolvedSupplier) {
+        return {
+          result: { error: `المورد "${supplierName}" غير موجود في النظام. أنشئه أولاً بـ create_supplier ثم أعد إنشاء الفاتورة` },
+          display: "",
+        };
+      }
+      const rawItems = args.items as Array<{ item_code: string; qty: number; rate: number }>;
+      const resolvedItems: Array<{ item_code: string; qty: number; rate: number }> = [];
+      for (const it of rawItems) {
+        const itemMatches = await findSimilarItems(it.item_code);
+        const exactItem = itemMatches.find(i => normalizeArabic(i.item_name) === normalizeArabic(it.item_code) || i.name === it.item_code);
+        const resolved = exactItem?.name ?? (itemMatches.length === 1 ? itemMatches[0].name : null);
+        if (!resolved) {
+          if (itemMatches.length > 1) {
+            return {
+              result: { needs_clarification: true, reason: "found_multiple_items", searched: it.item_code, candidates: itemMatches.map(i => i.item_name) },
+              display: "",
+            };
+          }
+          return {
+            result: { error: `الصنف "${it.item_code}" غير موجود. أنشئه أولاً بـ create_item ثم أعد إنشاء فاتورة المشتريات` },
+            display: "",
+          };
+        }
+        resolvedItems.push({ item_code: resolved, qty: it.qty, rate: it.rate });
+      }
+      const today = new Date().toISOString().split("T")[0];
+      const requestedPiDue = (args.due_date as string) ?? today;
+      const safePiDueDate = requestedPiDue < today ? today : requestedPiDue;
+      const piDoc = {
+        supplier: resolvedSupplier,
+        posting_date: today,
+        due_date: safePiDueDate,
+        items: resolvedItems.map(i => ({ item_code: i.item_code, qty: i.qty, rate: i.rate, amount: i.qty * i.rate })),
+      };
+      const data = await erpPOST("/api/resource/Purchase%20Invoice", piDoc) as { data: { name: string; grand_total: number } };
+      return {
+        result: data?.data,
+        display: `__PURCHASE_INVOICE_CREATED__${JSON.stringify({ name: data?.data?.name, supplier: resolvedSupplier, items: resolvedItems, grand_total: data?.data?.grand_total })}`,
+      };
+    }
+    case "get_payments": {
+      const limit = (args.limit as number) ?? 10;
+      const fields = encodeURIComponent(JSON.stringify(["name", "payment_type", "party_type", "party", "paid_amount", "posting_date", "status", "mode_of_payment"]));
+      const filters: Array<[string, string, string]> = [];
+      if (args.payment_type) filters.push(["payment_type", "=", args.payment_type as string]);
+      if (args.party) filters.push(["party", "like", `%${args.party}%`]);
+      const filterStr = filters.length > 0 ? `&filters=${encodeURIComponent(JSON.stringify(filters))}` : "";
+      const data = await erpGET(`/api/resource/Payment%20Entry?limit=${limit}&fields=${fields}&order_by=posting_date%20desc${filterStr}`) as { data: unknown[] };
+      return { result: data?.data ?? [], display: `__PAYMENTS__${JSON.stringify(data?.data ?? [])}` };
+    }
+    case "create_payment_entry": {
+      const paymentType = args.payment_type as string; // Receive | Pay
+      const partyName = args.party as string;
+      const amount = args.amount as number;
+      const partyType = paymentType === "Receive" ? "Customer" : "Supplier";
+      // حل اسم الطرف
+      let resolvedParty: string | null = null;
+      if (partyType === "Customer") {
+        const matches = await findSimilarCustomers(partyName);
+        const exact = matches.find(c => normalizeArabic(c.customer_name) === normalizeArabic(partyName) || c.name === partyName);
+        resolvedParty = exact?.name ?? (matches.length === 1 ? matches[0].name : null);
+        if (!resolvedParty && matches.length > 1) {
+          return { result: { needs_clarification: true, reason: "found_multiple_customers", candidates: matches.map(c => c.customer_name) }, display: "" };
+        }
+      } else {
+        const matches = await findSimilarSuppliers(partyName);
+        const exact = matches.find(s => normalizeArabic(s.supplier_name) === normalizeArabic(partyName) || s.name === partyName);
+        resolvedParty = exact?.name ?? (matches.length === 1 ? matches[0].name : null);
+        if (!resolvedParty && matches.length > 1) {
+          return { result: { needs_clarification: true, reason: "found_multiple_suppliers", candidates: matches.map(s => s.supplier_name) }, display: "" };
+        }
+      }
+      if (!resolvedParty) {
+        return { result: { error: `${partyType === "Customer" ? "العميل" : "المورد"} "${partyName}" غير موجود في النظام` }, display: "" };
+      }
+      // استخدام الطريقة القياسية في Frappe لتجهيز دفعة مرتبطة بفاتورة
+      const company = await getDefaultCompany();
+      const today = new Date().toISOString().split("T")[0];
+      const paymentDoc: Record<string, unknown> = {
+        payment_type: paymentType,
+        party_type: partyType,
+        party: resolvedParty,
+        company,
+        posting_date: today,
+        paid_amount: amount,
+        received_amount: amount,
+        ...(args.mode_of_payment ? { mode_of_payment: args.mode_of_payment } : {}),
+      };
+      // جلب الحسابات الافتراضية: حساب الطرف (مدينون/دائنون) وحساب النقد
+      const companyData = await erpGET(`/api/resource/Company/${encodeURIComponent(company)}`) as { data: { default_receivable_account?: string; default_payable_account?: string; default_cash_account?: string; default_bank_account?: string } };
+      const cd = companyData?.data ?? {};
+      const cashAccount = cd.default_cash_account || cd.default_bank_account;
+      if (paymentType === "Receive") {
+        paymentDoc.paid_from = cd.default_receivable_account;
+        paymentDoc.paid_to = cashAccount;
+      } else {
+        paymentDoc.paid_from = cashAccount;
+        paymentDoc.paid_to = cd.default_payable_account;
+      }
+      if (!paymentDoc.paid_from || !paymentDoc.paid_to) {
+        return { result: { error: "الحسابات الافتراضية (النقد/المدينون/الدائنون) غير معرّفة في إعدادات الشركة داخل النظام — يرجى ضبطها أولاً" }, display: "" };
+      }
+      // ربط بفاتورة محددة إن طُلب
+      if (args.reference_invoice) {
+        const refDoctype = paymentType === "Receive" ? "Sales Invoice" : "Purchase Invoice";
+        paymentDoc.references = [{
+          reference_doctype: refDoctype,
+          reference_name: args.reference_invoice,
+          allocated_amount: amount,
+        }];
+      }
+      const data = await erpPOST("/api/resource/Payment%20Entry", paymentDoc) as { data: { name: string; paid_amount: number; payment_type: string; party: string } };
+      return {
+        result: data?.data,
+        display: `__PAYMENT_CREATED__${JSON.stringify({ name: data?.data?.name, payment_type: data?.data?.payment_type, party: data?.data?.party, paid_amount: data?.data?.paid_amount })}`,
+      };
+    }
+    case "get_accounts": {
+      const fields = encodeURIComponent(JSON.stringify(["name", "account_name", "account_type", "root_type", "is_group"]));
+      const filters: Array<[string, string, string | number]> = [["is_group", "=", 0]];
+      if (args.search) filters.push(["account_name", "like", `%${args.search}%`]);
+      if (args.root_type) filters.push(["root_type", "=", args.root_type as string]);
+      const data = await erpGET(`/api/resource/Account?limit=50&fields=${fields}&filters=${encodeURIComponent(JSON.stringify(filters))}`) as { data: unknown[] };
+      return { result: data?.data ?? [], display: `__ACCOUNTS__${JSON.stringify(data?.data ?? [])}` };
+    }
+    case "get_journal_entries": {
+      const limit = (args.limit as number) ?? 10;
+      const fields = encodeURIComponent(JSON.stringify(["name", "posting_date", "total_debit", "total_credit", "user_remark", "docstatus"]));
+      const data = await erpGET(`/api/resource/Journal%20Entry?limit=${limit}&fields=${fields}&order_by=posting_date%20desc`) as { data: unknown[] };
+      return { result: data?.data ?? [], display: `__JOURNAL_ENTRIES__${JSON.stringify(data?.data ?? [])}` };
+    }
+    case "create_journal_entry": {
+      const entries = args.entries as Array<{ account: string; debit: number; credit: number }>;
+      const totalDebit = entries.reduce((s, e) => s + (e.debit ?? 0), 0);
+      const totalCredit = entries.reduce((s, e) => s + (e.credit ?? 0), 0);
+      if (Math.abs(totalDebit - totalCredit) > 0.001) {
+        return { result: { error: `القيد غير متوازن: إجمالي المدين ${totalDebit} ≠ إجمالي الدائن ${totalCredit} — يجب أن يتساويا` }, display: "" };
+      }
+      // حل أسماء الحسابات: بحث تقريبي عن كل حساب
+      const resolvedEntries: Array<{ account: string; debit_in_account_currency: number; credit_in_account_currency: number }> = [];
+      for (const e of entries) {
+        const accFields = encodeURIComponent(JSON.stringify(["name", "account_name"]));
+        const accFilters = encodeURIComponent(JSON.stringify([["is_group", "=", 0], ["account_name", "like", `%${e.account.trim().split(/\s+/)[0]}%`]]));
+        const accData = await erpGET(`/api/resource/Account?limit=20&fields=${accFields}&filters=${accFilters}`) as { data: Array<{ name: string; account_name: string }> };
+        const candidates = (accData?.data ?? []).filter(a => isSimilar(a.account_name, e.account) || isSimilar(a.name, e.account));
+        // إذا كان الاسم الكامل (name) مطابقاً تماماً استخدمه مباشرة
+        let resolvedAccount = e.account;
+        if (candidates.length === 1) resolvedAccount = candidates[0].name;
+        else if (candidates.length > 1) {
+          const exact = candidates.find(a => normalizeArabic(a.account_name) === normalizeArabic(e.account));
+          if (exact) resolvedAccount = exact.name;
+          else return { result: { needs_clarification: true, reason: "found_multiple_accounts", searched: e.account, candidates: candidates.map(a => a.name) }, display: "" };
+        } else if (candidates.length === 0) {
+          // ربما مرر المستخدم الاسم الكامل بالفعل — جرّبه كما هو، وإلا سيُعاد خطأ مترجم
+          resolvedAccount = e.account;
+        }
+        resolvedEntries.push({ account: resolvedAccount, debit_in_account_currency: e.debit ?? 0, credit_in_account_currency: e.credit ?? 0 });
+      }
+      const company = await getDefaultCompany();
+      const jeDoc = {
+        voucher_type: "Journal Entry",
+        company,
+        posting_date: (args.posting_date as string) ?? new Date().toISOString().split("T")[0],
+        accounts: resolvedEntries,
+        ...(args.remark ? { user_remark: args.remark } : {}),
+      };
+      const data = await erpPOST("/api/resource/Journal%20Entry", jeDoc) as { data: { name: string; total_debit: number } };
+      return {
+        result: data?.data,
+        display: `__JOURNAL_CREATED__${JSON.stringify({ name: data?.data?.name, total_debit: data?.data?.total_debit, entries: resolvedEntries.length })}`,
+      };
+    }
+    case "submit_document": {
+      const doctype = args.doctype as string;
+      const docName = args.document_name as string;
+      const result = await submitDoc(doctype, docName);
+      return {
+        result,
+        display: `__DOC_SUBMITTED__${JSON.stringify({ doctype, name: result?.name, status: result?.status })}`,
+      };
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -541,8 +1019,17 @@ export const agentRouter = router({
 6. **اسأل المستخدم فقط** عن بيانات لا يمكنك استنتاجها (المبلغ، الكمية إذا لم تُذكر) أو عند وجود عدة مرشحين مشابهين
 7. **استرجاع فاتورة**: "اعرض فاتورة SINV-XXX" → get_invoice_detail | "آخر الفواتير" → get_invoices
 8. **اللغة / Language**: ردّ دائماً بنفس لغة رسالة المستخدم الأخيرة. If the user writes in English, respond entirely in professional English with correct accounting terminology (Invoice, Journal Entry, Accounts Receivable, Trial Balance...). إذا كتب المستخدم بالعربية فردّ بعربية فصيحة مهنية بمصطلحات محاسبية صحيحة. Keep replies concise and professional in both languages
-9. **الاعتماد**: بعد إنشاء الفاتورة اعرض اعتمادها — إن وافق المستخدم أو طلبها معتمدة → استدعِ submit_invoice
+9. **الاعتماد**: بعد إنشاء أي مستند (فاتورة/دفعة/قيد) اعرض اعتماده — إن وافق المستخدم أو طلبه معتمداً → استدعِ submit_invoice للفواتير أو submit_document لأي مستند آخر. المستند لا يؤثر على الحسابات إلا بعد الاعتماد
 10. **الأرقام العربية**: حوّل الأرقام العربية (٦٥٠٠٠) إلى إنجليزية (65000) عند تمريرها للأدوات
+11. **المستندات المستخرجة من الصور**: إذا احتوت المحادثة على "بيانات مستخرجة" من صورة (فاتورة/سند) وأكّد المستخدم التسجيل (نعم/سجّل/أكّد) → نفّذ فوراً حسب النوع: فاتورة مبيعات → سير إنشاء الفاتورة المعتاد (بحث عميل/أصناف ثم create_invoice) | فاتورة مشتريات → بحث مورد ثم create_purchase_invoice | سند قبض → create_payment_entry بنوع Receive | سند صرف → create_payment_entry بنوع Pay. إن صحّح المستخدم بيانات، استخدم البيانات المصحّحة
+
+## صلاحياتك الكاملة في النظام
+أنت تملك صلاحيات كاملة للإدخال والتسجيل والاعتماد في كل وحدات النظام (ضمن صلاحيات مستخدم ERPNext المتصل):
+- **المبيعات**: فواتير مبيعات (إنشاء/عرض/اعتماد)، عملاء (بحث/إنشاء)
+- **المشتريات**: فواتير مشتريات (create_purchase_invoice/get_purchase_invoices)، موردين (get_suppliers/create_supplier) — نفس قاعدة منع التكرار تنطبق على الموردين
+- **الدفعات**: create_payment_entry — تسجيل قبض من عميل (Receive) أو صرف لمورد (Pay)، مع إمكانية ربط الدفعة بفاتورة محددة لسدادها (reference_invoice). عند قول المستخدم "سجّل دفعة/سداد/قبض/تحصيل من عميل" → Receive، "دفعنا/سددنا لمورد" → Pay
+- **قيود اليومية**: create_journal_entry — قيد مزدوج (مدين/دائن متساويان). قبل إنشاء القيد ابحث عن أسماء الحسابات الفعلية بـ get_accounts (الأسماء تتضمن اختصار الشركة مثل "Cash - X"). مثال: "سجل قيد: مدين الصندوق 3000 دائن المبيعات 3000" → get_accounts للصندوق والمبيعات ثم create_journal_entry
+- **سير سداد فاتورة**: "سجل سداد فاتورة SINV-XXX" → get_invoice_detail لمعرفة العميل والمبلغ المتبقي → create_payment_entry مع reference_invoice → اعرض الاعتماد
 
 ## خبرتك في Almoaser AI ERP
 - **Sales Invoice**: فاتورة المبيعات — تُنشأ Draft ثم Submit لتسجّل في الحسابات. الحالات: Draft/Unpaid/Paid/Overdue/Cancelled
@@ -658,5 +1145,145 @@ export const agentRouter = router({
       const buffer = await res.arrayBuffer();
       const base64 = Buffer.from(buffer).toString("base64");
       return { pdfBase64: base64, filename: `${input.invoiceName}.pdf` };
+    }),
+
+  // ─── تحويل الصوت إلى نص (إدخال صوتي للوكيل) ─────────────────────────────
+  transcribeVoice: protectedProcedure
+    .input(z.object({
+      audioBase64: z.string(),
+      mimeType: z.string().default("audio/webm"),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const buffer = Buffer.from(input.audioBase64, "base64");
+      if (buffer.length > 15 * 1024 * 1024) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "التسجيل الصوتي كبير جداً — الحد الأقصى 15 ميجابايت" });
+      }
+      const ext = input.mimeType.includes("mp4") ? "m4a"
+        : input.mimeType.includes("ogg") ? "ogg"
+        : input.mimeType.includes("wav") ? "wav"
+        : input.mimeType.includes("mpeg") ? "mp3"
+        : "webm";
+      const fileKey = `voice/${ctx.user.id}-${Date.now()}.${ext}`;
+      // storagePut يعيد key نهائياً بلاحقة عشوائية — استخدمه هو لطلب الرابط الموقّع
+      const { key, url } = await storagePut(fileKey, buffer, input.mimeType);
+      const signedUrl = await storageGetSignedUrl(key);
+      try {
+        const result = await transcribeAudio({
+          audioUrl: signedUrl,
+          prompt: "محادثة محاسبية بالعربية مع نظام ERP: فواتير، عملاء، أصناف، دفعات، قيود يومية، مبالغ بالريال",
+        });
+        if ("error" in result) {
+          throw new Error(String(result.error));
+        }
+        const text = (result.text ?? "").trim();
+        if (!text) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "لم أتمكن من سماع كلام واضح في التسجيل — حاول مرة أخرى" });
+        }
+        return { text, audioUrl: url };
+      } catch (e) {
+        if (e instanceof TRPCError) throw e;
+        console.error("[agent.transcribeVoice] failed:", e instanceof Error ? e.message : e);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّر تحويل التسجيل الصوتي إلى نص — حاول مرة أخرى" });
+      }
+    }),
+
+  // ─── استخراج بيانات فاتورة/سند قبض من صورة (OCR بالذكاء الاصطناعي) ──────
+  extractDocument: protectedProcedure
+    .input(z.object({
+      imageBase64: z.string(),
+      mimeType: z.string().default("image/jpeg"),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const buffer = Buffer.from(input.imageBase64, "base64");
+      if (buffer.length > 10 * 1024 * 1024) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "الصورة كبيرة جداً — الحد الأقصى 10 ميجابايت" });
+      }
+      const ext = input.mimeType.includes("png") ? "png" : input.mimeType.includes("webp") ? "webp" : "jpg";
+      const fileKey = `docs/${ctx.user.id}-${Date.now()}.${ext}`;
+      const { key, url } = await storagePut(fileKey, buffer, input.mimeType);
+      const signedUrl = await storageGetSignedUrl(key);
+
+      let response;
+      try {
+        response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: "أنت خبير OCR محاسبي. استخرج بيانات المستند المالي من الصورة بدقة. حوّل الأرقام العربية (١٢٣) إلى إنجليزية (123). التواريخ بصيغة YYYY-MM-DD. إذا لم يكن المستند فاتورة أو سنداً مالياً، اجعل doc_type = unknown.",
+            },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "استخرج بيانات هذا المستند المالي (فاتورة مبيعات، فاتورة مشتريات، أو سند قبض/صرف):" },
+                { type: "image_url", image_url: { url: signedUrl, detail: "high" } },
+              ],
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "financial_document",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  doc_type: { type: "string", enum: ["sales_invoice", "purchase_invoice", "receipt_voucher", "payment_voucher", "unknown"], description: "نوع المستند" },
+                  party_name: { type: "string", description: "اسم العميل أو المورد أو الدافع" },
+                  date: { type: "string", description: "تاريخ المستند YYYY-MM-DD أو فارغ" },
+                  invoice_number: { type: "string", description: "رقم الفاتورة/السند في الصورة إن وجد" },
+                  items: {
+                    type: "array",
+                    description: "الأصناف/البنود",
+                    items: {
+                      type: "object",
+                      properties: {
+                        description: { type: "string" },
+                        qty: { type: "number" },
+                        rate: { type: "number" },
+                        amount: { type: "number" },
+                      },
+                      required: ["description", "qty", "rate", "amount"],
+                      additionalProperties: false,
+                    },
+                  },
+                  total_amount: { type: "number", description: "الإجمالي النهائي" },
+                  vat_amount: { type: "number", description: "قيمة الضريبة إن وجدت وإلا 0" },
+                  currency: { type: "string", description: "العملة إن ظهرت وإلا فارغ" },
+                  notes: { type: "string", description: "أي ملاحظات مهمة أخرى في المستند" },
+                },
+                required: ["doc_type", "party_name", "date", "invoice_number", "items", "total_amount", "vat_amount", "currency", "notes"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+      } catch (e) {
+        console.error("[agent.extractDocument] LLM failed:", e instanceof Error ? e.message : e);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّر قراءة الصورة — تأكد من وضوحها وحاول مرة أخرى" });
+      }
+
+      const raw = response?.choices?.[0]?.message?.content;
+      const jsonText = typeof raw === "string"
+        ? raw
+        : Array.isArray(raw)
+          ? raw.map((c: { type?: string; text?: string }) => (c.type === "text" ? c.text ?? "" : "")).join("")
+          : "";
+      let extracted: {
+        doc_type: string; party_name: string; date: string; invoice_number: string;
+        items: Array<{ description: string; qty: number; rate: number; amount: number }>;
+        total_amount: number; vat_amount: number; currency: string; notes: string;
+      };
+      try {
+        extracted = JSON.parse(jsonText);
+      } catch {
+        console.error("[agent.extractDocument] JSON parse failed:", jsonText?.slice(0, 300));
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّر تحليل بيانات المستند — حاول بصورة أوضح" });
+      }
+
+      if (extracted.doc_type === "unknown") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "لم أتعرف على مستند مالي في هذه الصورة — تأكد أنها صورة فاتورة أو سند قبض/صرف واضحة" });
+      }
+
+      return { extracted, imageUrl: url };
     }),
 });
