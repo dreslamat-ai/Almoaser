@@ -5,6 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
+import { agentRouter } from "./routers/agent";
 import {
   getActivePlans, getPlanById,
   getSubscriptionByUserId, createSubscription, updateSubscription,
@@ -425,6 +426,7 @@ export const appRouter = router({
       }),
   }),
 
+  agent: agentRouter,
   channels: router({
     saveSettings: protectedProcedure
       .input(z.object({
