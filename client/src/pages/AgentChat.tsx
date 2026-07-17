@@ -12,7 +12,7 @@ import {
   FileText, BarChart3, Users, Package, MessageSquare,
   Download, CheckCircle2, AlertCircle, TrendingUp,
   Mic, Square, ImagePlus, Camera,
-  History, Plus, X,
+  History, Plus, X, Volume2, VolumeX,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -24,6 +24,71 @@ type Message = {
   toolResults?: ToolResult[];
   quickReplies?: string[];
 };
+
+// ─── إشعار صوتي عند اكتمال رد الوكيل ─────────────────────────────────────────
+const SOUND_PREF_KEY = "agent-chat-sound-enabled";
+
+function isSoundEnabled(): boolean {
+  try {
+    return localStorage.getItem(SOUND_PREF_KEY) !== "0";
+  } catch { return true; }
+}
+
+// سياق صوتي مشترك يُنشأ/يُستأنف عند أول تفاعل مستخدم (سياسات autoplay في المتصفحات
+// تمنع الصوت قبل أي إيماءة). استدعاء unlockAudio() من معالجات النقر/الإرسال يضمن
+// أن النغمة اللاحقة — حتى غير المتزامنة — تعمل على كروم وسفاري والجوال.
+let sharedAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  try {
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return null;
+    if (!sharedAudioCtx || sharedAudioCtx.state === "closed") sharedAudioCtx = new AC();
+    return sharedAudioCtx;
+  } catch { return null; }
+}
+
+// يُستدعى من داخل معالج تفاعل المستخدم (نقرة/إرسال) لفك قفل الصوت
+function unlockAudio() {
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === "suspended") void ctx.resume().catch(() => { /* fallback صامت */ });
+}
+
+// نغمة قصيرة لطيفة (نغمتان متصاعدتان) عبر Web Audio API — دون ملفات خارجية.
+// إن ظل السياق موقوفاً (متصفح يمنع الصوت قبل تفاعل)، نتجاهل بصمت دون أخطاء.
+function playReplyChime() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const start = () => {
+      if (ctx.state !== "running") return; // fallback صامت — لا نغمة قبل أول تفاعل
+      const now = ctx.currentTime;
+      const notes: Array<{ freq: number; start: number; dur: number }> = [
+        { freq: 880, start: 0, dur: 0.12 },       // A5
+        { freq: 1318.5, start: 0.11, dur: 0.18 }, // E6
+      ];
+      for (const n of notes) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = n.freq;
+        gain.gain.setValueAtTime(0, now + n.start);
+        gain.gain.linearRampToValueAtTime(0.12, now + n.start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + n.dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + n.start);
+        osc.stop(now + n.start + n.dur + 0.05);
+      }
+    };
+    if (ctx.state === "suspended") {
+      // محاولة استئناف أخيرة ثم التشغيل إن نجحت
+      void ctx.resume().then(start).catch(() => { /* fallback صامت */ });
+    } else {
+      start();
+    }
+  } catch { /* الصوت غير متاح — نتجاهل بصمت */ }
+}
 
 // تفكيك عمود toolResults المخزَّن: يدعم الصيغة القديمة (مصفوفة ToolResult[])
 // والصيغة الجديدة (كائن { toolResults, quickReplies })
@@ -442,6 +507,7 @@ export default function AgentChat() {
   const [transcribing, setTranscribing] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [pendingQuickReply, setPendingQuickReply] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => isSoundEnabled());
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -527,9 +593,19 @@ export default function AgentChat() {
     }
   };
 
+  const toggleSound = () => {
+    setSoundEnabled(prev => {
+      const next = !prev;
+      try { localStorage.setItem(SOUND_PREF_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      if (next) playReplyChime(); // معاينة فورية عند التفعيل
+      return next;
+    });
+  };
+
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || chatMutation.isPending) return;
+    unlockAudio(); // فك قفل الصوت أثناء تفاعل المستخدم ليعمل الإشعار عند وصول الرد
     setInput("");
     const userMsg: Message = { role: "user", content, ts: Date.now() };
     const newMessages = [...messages, userMsg];
@@ -549,6 +625,7 @@ export default function AgentChat() {
         toolResults: result.toolResults,
         quickReplies: (result as { quickReplies?: string[] }).quickReplies,
       }]);
+      if (isSoundEnabled()) playReplyChime();
       void utils.agent.listConversations.invalidate();
     } catch (err) {
       setMessages(prev => [...prev, {
@@ -663,6 +740,11 @@ export default function AgentChat() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               متصل
             </Badge>
+            <Button variant="outline" size="sm" className="text-xs gap-1 px-2"
+              onClick={toggleSound}
+              title={soundEnabled ? "كتم صوت الإشعار" : "تفعيل صوت الإشعار"}>
+              {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5 text-muted-foreground" />}
+            </Button>
             <Button variant="outline" size="sm" className="text-xs gap-1"
               onClick={() => setHistoryOpen(o => !o)}>
               <History className="w-3.5 h-3.5" /> السجل
