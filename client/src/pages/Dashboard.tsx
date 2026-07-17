@@ -1,5 +1,5 @@
+import { trialDaysLeft } from "@shared/subscription";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -73,7 +73,7 @@ export default function Dashboard() {
           <Bot className="w-16 h-16 text-navy mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-navy mb-2">مرحباً بك في Almoaser AI ERP</h2>
           <p className="text-muted-foreground mb-6">سجّل دخولك للوصول إلى لوحة التحكم</p>
-          <Button onClick={() => startLogin()} className="bg-navy-gradient text-white hover:opacity-90">تسجيل الدخول</Button>
+          <Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white hover:opacity-90">تسجيل الدخول</Button>
         </div>
       </div>
     );
@@ -152,6 +152,16 @@ export default function Dashboard() {
                   <div><span className="text-muted-foreground">الحالة: </span><span className={`font-medium ${subscription.status === "active" ? "text-green-600" : "text-yellow-600"}`}>{subscription.status === "active" ? "نشط" : "تجريبي"}</span></div>
                   <div><span className="text-muted-foreground">الشركة: </span><span className="font-medium text-navy">{subscription.companyName ?? "—"}</span></div>
                 </div>
+                {subscription.status === "trial" && subscription.endDate && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-amber-800">
+                      {trialDaysLeft(subscription.endDate) > 0
+                        ? <>فترة تجريبية — متبقٍ <span className="font-bold">{trialDaysLeft(subscription.endDate)}</span> {trialDaysLeft(subscription.endDate) === 1 ? "يوم" : "أيام"}، وبعدها تبدأ باقتك تلقائياً</>
+                        : <>انتهت الفترة التجريبية — ستُفعَّل باقتك تلقائياً</>}
+                    </span>
+                  </div>
+                )}
                 <Button onClick={() => navigate("/subscription")} variant="outline" className="w-full border-navy text-navy hover:bg-navy hover:text-white">إدارة الاشتراك</Button>
               </div>
             ) : (

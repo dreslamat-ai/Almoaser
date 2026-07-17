@@ -1,6 +1,5 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar } from "lucide-react";
@@ -44,7 +43,7 @@ export default function AdminPanel() {
   });
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>;
-  if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => startLogin()} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
+  if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
   if (user?.role !== "admin") return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">

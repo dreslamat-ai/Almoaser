@@ -8,6 +8,8 @@ import { invokeLLM } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
 import { agentRouter } from "./routers/agent";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, testErpConnection, encryptPassword } from "./erpConnection";
+import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
+import { sdk } from "./_core/sdk";
 import { erpnextConnections } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import {
@@ -114,6 +116,53 @@ export const appRouter = router({
   }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ?? null),
+    // تسجيل الدخول بحساب ERPNext (نفس بريد وكلمة مرور النظام)
+    loginWithErp: publicProcedure
+      .input(z.object({
+        email: z.string().trim().min(3).max(320),
+        password: z.string().min(1).max(256),
+        erpUrl: z.string().trim().max(500).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const erpUrl = (input.erpUrl || process.env.ERPNEXT_URL || "").replace(/\/+$/, "");
+        const result = await loginWithErpAccount(erpUrl, input.email, input.password);
+        if (!result.ok) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: result.error });
+        }
+        const sessionToken = await sdk.createSessionToken(result.result.openId, {
+          name: result.result.fullName,
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
+        return { success: true, name: result.result.fullName, email: result.result.email } as const;
+      }),
+    // تسجيل مستخدم جديد: رابط نظامه + بريده + كلمة مروره + الباقة، مع تجربة 3 أيام
+    signupWithErp: publicProcedure
+      .input(z.object({
+        erpUrl: z.string().trim().min(8).max(500),
+        email: z.string().trim().min(3).max(320),
+        password: z.string().min(1).max(256),
+        planId: z.number().int().positive(),
+        companyName: z.string().trim().max(255).optional(),
+        phone: z.string().trim().max(20).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await signupWithErpAccount(input);
+        if (!result.ok) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: result.error });
+        }
+        const sessionToken = await sdk.createSessionToken(result.result.openId, {
+          name: result.result.fullName,
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
+        return {
+          success: true,
+          name: result.result.fullName,
+          email: result.result.email,
+          trialEndsAt: result.result.trialEndsAt,
+        } as const;
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -127,7 +176,11 @@ export const appRouter = router({
   }),
 
   subscription: router({
-    get: protectedProcedure.query(({ ctx }) => getSubscriptionByUserId(ctx.user.id)),
+    get: protectedProcedure.query(async ({ ctx }) => {
+      // إن انتهت فترة التجربة تُفعَّل الباقة المختارة تلقائياً قبل الإرجاع
+      await activateTrialIfExpired(ctx.user.id);
+      return getSubscriptionByUserId(ctx.user.id);
+    }),
     create: protectedProcedure
       .input(z.object({
         planId: z.number(),

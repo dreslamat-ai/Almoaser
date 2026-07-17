@@ -1,6 +1,5 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -21,7 +20,7 @@ export default function Subscription() {
   });
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>;
-  if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => startLogin()} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
+  if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
 
   const planIcons = [<BookOpen className="w-6 h-6" />, <Zap className="w-6 h-6" />, <Bot className="w-6 h-6" />];
   const currentPlan = plans?.find(p => p.id === subscription?.planId);

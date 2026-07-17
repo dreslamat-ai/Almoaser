@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,7 +87,7 @@ export default function Tasks() {
   const resetForm = () => setForm({ title: "", description: "", type: "bookkeeping", priority: "medium" });
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>;
-  if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => startLogin()} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
+  if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
 
   const filtered = filter === "all" ? tasks : tasks?.filter(t => t.status === filter);
 

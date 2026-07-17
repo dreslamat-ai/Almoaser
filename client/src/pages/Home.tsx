@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,8 +115,8 @@ function Navbar() {
             </Button>
           ) : (
             <>
-              <Button variant="ghost" onClick={() => startLogin()} className="text-navy">تسجيل الدخول</Button>
-              <Button onClick={() => startLogin()} className="bg-navy-gradient text-white hover:opacity-90">ابدأ مجاناً</Button>
+              <Button variant="ghost" onClick={() => navigate("/login")} className="text-navy">تسجيل الدخول</Button>
+              <Button onClick={() => navigate("/signup")} className="bg-navy-gradient text-white hover:opacity-90">ابدأ مجاناً</Button>
             </>
           )}
         </div>
@@ -161,7 +160,7 @@ function HeroSection() {
                 <ArrowLeft className="w-5 h-5 mr-2" />
               </Button>
             ) : (
-              <Button size="lg" onClick={() => startLogin()}
+              <Button size="lg" onClick={() => navigate("/signup")}
                 className="bg-gold text-white hover:bg-gold/90 text-base px-8 py-4 h-auto">
                 ابدأ تجربتك المجانية
                 <ArrowLeft className="w-5 h-5 mr-2" />

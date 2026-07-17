@@ -17,11 +17,15 @@ import AccountSettings from "./pages/AccountSettings";
 import ErpInvoices from "./pages/ErpInvoices";
 import ErpCustomers from "./pages/ErpCustomers";
 import ErpReports from "./pages/ErpReports";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={ERPNextDashboard} />
+      <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
+      <Route path="/signup" component={Signup} />
       <Route path="/home" component={Home} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/tasks" component={Tasks} />

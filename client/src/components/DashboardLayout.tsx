@@ -19,7 +19,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { LayoutDashboard, LogOut, PanelLeft, Bot, Settings, FileText, BarChart3, Users, Download, X } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -108,22 +107,22 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen" dir="rtl">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-6">
             <h1 className="text-2xl font-semibold tracking-tight text-center">
-              Sign in to continue
+              سجّل الدخول للمتابعة
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
+              الوصول إلى لوحة التحكم يتطلب تسجيل الدخول بحسابك في النظام.
             </p>
           </div>
           <Button
-            onClick={() => startLogin()}
+            onClick={() => { window.location.href = "/login"; }}
             size="lg"
             className="w-full shadow-lg hover:shadow-xl transition-all"
           >
-            Sign in
+            تسجيل الدخول
           </Button>
         </div>
       </div>
