@@ -46,9 +46,9 @@ export default function AccountSettings() {
   if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
       <Sidebar active="/settings" />
-      <main className="flex-1 p-8 max-w-4xl">
+      <main className="flex-1 p-4 md:p-8 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">إعدادات الحساب</h1>
           <p className="text-muted-foreground mt-1">إدارة بياناتك الشخصية وبيانات شركتك</p>

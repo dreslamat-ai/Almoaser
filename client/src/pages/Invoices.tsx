@@ -15,9 +15,9 @@ export default function Invoices() {
   if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
       <Sidebar active="/invoices" />
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-4 md:p-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">فواتير الخدمة</h1>
           <p className="text-muted-foreground mt-1">سجل فواتير اشتراكك الشهري</p>

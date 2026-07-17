@@ -26,9 +26,9 @@ export default function Subscription() {
   const currentPlan = plans?.find(p => p.id === subscription?.planId);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
       <Sidebar active="/subscription" />
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-4 md:p-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">إدارة الاشتراك</h1>
           <p className="text-muted-foreground mt-1">اختر الباقة المناسبة لعملك</p>

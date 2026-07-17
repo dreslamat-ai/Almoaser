@@ -3,11 +3,14 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { useState } from "react";
+import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu } from "lucide-react";
 
-function Sidebar({ active }: { active: string }) {
+function SidebarContent({ active, onNavigate }: { active: string; onNavigate?: () => void }) {
   const { logout } = useAuth();
   const [, navigate] = useLocation();
+  const go = (path: string) => { onNavigate?.(); navigate(path); };
   const navItems = [
     { path: "/dashboard", label: "الرئيسية", icon: <BarChart3 className="w-5 h-5" /> },
     { path: "/tasks", label: "المهام", icon: <CheckCircle2 className="w-5 h-5" /> },
@@ -16,7 +19,7 @@ function Sidebar({ active }: { active: string }) {
     { path: "/erp", label: "نظام ERP", icon: <Database className="w-5 h-5" /> },
   ];
   return (
-    <aside className="w-64 bg-navy-hero min-h-screen flex flex-col">
+    <div className="w-full h-full bg-navy-hero flex flex-col">
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center overflow-hidden">
@@ -34,7 +37,7 @@ function Sidebar({ active }: { active: string }) {
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map(item => (
-          <button key={item.path} onClick={() => navigate(item.path)}
+          <button key={item.path} onClick={() => go(item.path)}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${active === item.path ? "bg-white/15 text-white font-medium" : "text-white/60 hover:bg-white/10 hover:text-white"}`}>
             {item.icon}
             {item.label}
@@ -42,7 +45,7 @@ function Sidebar({ active }: { active: string }) {
         ))}
       </nav>
       <div className="p-4 border-t border-white/10 space-y-1">
-        <button onClick={() => navigate("/settings")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${active === "/settings" ? "bg-white/15 text-white font-medium" : "text-white/60 hover:bg-white/10 hover:text-white"}`}>
+        <button onClick={() => go("/settings")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${active === "/settings" ? "bg-white/15 text-white font-medium" : "text-white/60 hover:bg-white/10 hover:text-white"}`}>
           <Settings className="w-5 h-5" />
           الإعدادات
         </button>
@@ -51,7 +54,41 @@ function Sidebar({ active }: { active: string }) {
           تسجيل الخروج
         </button>
       </div>
-    </aside>
+    </div>
+  );
+}
+
+function Sidebar({ active }: { active: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      {/* شريط جانبي ثابت للشاشات الكبيرة */}
+      <aside className="hidden md:flex w-64 min-h-screen flex-col shrink-0">
+        <SidebarContent active={active} />
+      </aside>
+      {/* شريط علوي + درج جانبي للجوال */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-50 bg-navy-hero border-b border-white/10 flex items-center justify-between px-4 h-14">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center overflow-hidden">
+            <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر" className="w-6 h-6 object-contain" />
+          </div>
+          <span className="font-bold text-white text-sm">Almoaser <span className="text-gold text-xs font-light">AI ERP</span></span>
+        </div>
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" aria-label="فتح القائمة">
+              <Menu className="w-6 h-6" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="p-0 w-72 border-0 bg-navy-hero [&>button]:text-white">
+            <SheetTitle className="sr-only">القائمة</SheetTitle>
+            <SidebarContent active={active} onNavigate={() => setOpen(false)} />
+          </SheetContent>
+        </Sheet>
+      </div>
+      {/* مساحة للشريط العلوي على الجوال */}
+      <div className="md:hidden h-14" aria-hidden="true" />
+    </>
   );
 }
 
@@ -92,9 +129,9 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
       <Sidebar active="/dashboard" />
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-4 md:p-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">مرحباً، {user?.name ?? "عزيزي العميل"} 👋</h1>
           <p className="text-muted-foreground mt-1">هذا ملخص حسابك في Almoaser AI ERP</p>

@@ -92,9 +92,9 @@ export default function Tasks() {
   const filtered = filter === "all" ? tasks : tasks?.filter(t => t.status === filter);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
       <Sidebar active="/tasks" />
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-4 md:p-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-navy">المهام المحاسبية</h1>
