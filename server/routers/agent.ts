@@ -541,14 +541,13 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "get_settings",
-      description: "قراءة إعدادات النظام لأي موديول: بيانات الشركة (الاسم، الرقم الضريبي، العملة)، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، أو قوالب الضرائب. استخدمها لفهم الإعدادات الحالية قبل أي تعديل",
+      description: "قراءة إعدادات النظام لأي DocType إعدادات في ERPNext: بيانات الشركة، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، قوالب الضرائب، طرق الدفع (Mode of Payment) وربطها بحسابات الخزينة/الصندوق، POS Profile، شروط الدفع، السنة المالية، مراكز التكلفة، المستودعات، وغيرها. استخدمها لفهم الإعدادات الحالية قبل أي تعديل",
       parameters: {
         type: "object",
         properties: {
           settings_type: {
             type: "string",
-            enum: ["Company", "Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults", "Sales Taxes and Charges Template", "Purchase Taxes and Charges Template"],
-            description: "نوع الإعدادات المطلوب قراءتها",
+            description: "اسم DocType الإعدادات بالإنجليزية كما في ERPNext. أمثلة: Company, Selling Settings, Buying Settings, Stock Settings, Accounts Settings, System Settings, Global Defaults, Sales Taxes and Charges Template, Purchase Taxes and Charges Template, Mode of Payment, POS Profile, Payment Terms Template, Fiscal Year, Cost Center, Warehouse, Currency Exchange, Print Settings — أو أي DocType آخر",
           },
           name: { type: "string", description: "اسم السجل المحدد (مطلوب للشركة أو قالب ضريبة محدد — اتركه فارغاً لجلب القائمة أو الإعدادات العامة)" },
         },
@@ -561,19 +560,18 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "update_settings",
-      description: "تعديل إعدادات النظام لأي موديول أو مستند إعدادات: بيانات الشركة (رقم ضريبي، عنوان)، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، أو قوالب الضرائب. اقرأ الإعدادات بـ get_settings أولاً، ولخّص للمستخدم ما ستغيّره قبل التنفيذ",
+      description: "تعديل إعدادات النظام لأي DocType إعدادات في ERPNext ضمن صلاحيات المستخدم المتصل: بيانات الشركة، إعدادات الموديولات، قوالب الضرائب، طرق الدفع (Mode of Payment) وربطها بحسابات الخزينة/الصندوق عبر الحقل accounts (جدول فرعي: [{company, default_account}])، POS Profile، شروط الدفع، وغيرها. اقرأ الإعدادات بـ get_settings أولاً، ولخّص للمستخدم ما ستغيّره قبل التنفيذ. لا ترفض أي طلب إعدادات استباقياً — نفّذه وإن رفضه ERPNext انقل رسالة الخطأ",
       parameters: {
         type: "object",
         properties: {
           settings_type: {
             type: "string",
-            enum: ["Company", "Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults", "Sales Taxes and Charges Template", "Purchase Taxes and Charges Template"],
-            description: "نوع الإعدادات المراد تعديلها",
+            description: "اسم DocType الإعدادات بالإنجليزية كما في ERPNext. أمثلة: Company, Selling Settings, Accounts Settings, Mode of Payment, POS Profile, Payment Terms Template, Sales Taxes and Charges Template — أو أي DocType آخر",
           },
           name: { type: "string", description: "اسم السجل المحدد (مطلوب للشركة أو قالب ضريبة — اتركه فارغاً لمستندات الإعدادات الفردية مثل Selling Settings)" },
           fields: {
             type: "object",
-            description: "الحقول المراد تعديلها وقيمها الجديدة، مثل {\"tax_id\": \"310000000000003\"} أو {\"country\": \"Saudi Arabia\"}",
+            description: "الحقول المراد تعديلها وقيمها الجديدة، مثل {\"tax_id\": \"310000000000003\"} أو للجداول الفرعية مثل ربط طريقة دفع بحساب: {\"accounts\": [{\"company\": \"اسم الشركة\", \"default_account\": \"اسم الحساب\"}]}",
             additionalProperties: true,
           },
         },
@@ -1404,7 +1402,10 @@ export const agentRouter = router({
 - **الدفعات**: create_payment_entry — تسجيل قبض من عميل (Receive) أو صرف لمورد (Pay)، مع إمكانية ربط الدفعة بفاتورة محددة لسدادها (reference_invoice). عند قول المستخدم "سجّل دفعة/سداد/قبض/تحصيل من عميل" → Receive، "دفعنا/سددنا لمورد" → Pay
 - **قيود اليومية**: create_journal_entry — قيد مزدوج (مدين/دائن متساويان). قبل إنشاء القيد ابحث عن أسماء الحسابات الفعلية بـ get_accounts (الأسماء تتضمن اختصار الشركة مثل "Cash - X"). مثال: "سجل قيد: مدين الصندوق 3000 دائن المبيعات 3000" → get_accounts للصندوق والمبيعات ثم create_journal_entry
 - **سير سداد فاتورة**: "سجل سداد فاتورة SINV-XXX" → get_invoice_detail لمعرفة العميل والمبلغ المتبقي → create_payment_entry مع reference_invoice → اعرض الاعتماد
-- **إعدادات النظام لكافة الموديولات**: get_settings لقراءة إعدادات أي موديول (بيانات الشركة والرقم الضريبي، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، قوالب الضرائب) وupdate_settings لتعديلها. أمثلة: "حدّث الرقم الضريبي للشركة" → get_settings(Company) ثم update_settings(Company, {tax_id}) | "ما نسبة الضريبة المعتمدة؟" → get_settings(Sales Taxes and Charges Template) | "غيّر العملة الافتراضية" → update_settings(Global Defaults). قبل أي تعديل إعدادات اقرأ القيم الحالية ولخّص التغيير للمستخدم
+- **إعدادات النظام لكافة الموديولات والمستندات**: get_settings لقراءة أي DocType إعدادات وupdate_settings لتعديله — يشمل ذلك بيانات الشركة، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، قوالب الضرائب، **طرق الدفع (Mode of Payment) وربطها بحسابات الخزينة/الصندوق**، POS Profile، شروط الدفع، السنة المالية، مراكز التكلفة، المستودعات، وأي DocType آخر. أمثلة: "حدّث الرقم الضريبي للشركة" → update_settings(Company, {tax_id}) | "اربط طريقة الدفع نقدي بحساب الصندوق" → get_settings(Mode of Payment, name) لقراءة الوضع الحالي ثم update_settings(Mode of Payment, name, {accounts: [{company, default_account}]}) — ابحث عن اسم الحساب الفعلي بـ get_accounts أولاً | "غيّر العملة الافتراضية" → update_settings(Global Defaults). قبل أي تعديل إعدادات اقرأ القيم الحالية ولخّص التغيير للمستخدم
+
+## قاعدة عدم الرفض الاستباقي (مهم جداً)
+صلاحياتك في النظام هي **نفس صلاحيات مستخدم ERPNext المتصل بالكامل** — لا توجد لديك قيود إضافية. **يُمنع منعاً باتاً** أن ترفض طلب إعدادات أو تعديل بحجة أنك "تحتاج صلاحيات مسؤول النظام" أو "هذا يتجاوز صلاحياتك" قبل المحاولة الفعلية. القاعدة: **نفّذ دائماً عبر الأداة المناسبة**، وإن أعاد ERPNext خطأ صلاحيات (PermissionError) فعندها فقط انقل رسالة الخطأ للمستخدم واقترح الحل. أي طلب لتهيئة أو تعديل إعدادات أي موديول أو مستند (طرق الدفع، الحسابات الافتراضية، الضرائب، الشركة، الطباعة...) هو ضمن نطاق عملك المباشر.
 
 ## خبرتك في Almoaser AI ERP
 - **Sales Invoice**: فاتورة المبيعات — تُنشأ Draft ثم Submit لتسجّل في الحسابات. الحالات: Draft/Unpaid/Paid/Overdue/Cancelled
