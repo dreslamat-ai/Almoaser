@@ -329,7 +329,7 @@ function WhatsAppDemoSection() {
                 <button key={s.id} onClick={() => { switchScenario(i); setTimeout(() => playScenario(), 100); }}
                   className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-right transition-all duration-200 ${
                     activeScenario === i
-                      ? "border-navy bg-navy text-white shadow-lg scale-[1.02]"
+                      ? "border-gold bg-gold text-navy shadow-lg scale-[1.02]"
                       : "border-gray-200 bg-white text-navy hover:border-navy/40 hover:shadow-sm"
                   }`}>
                   <span className="text-2xl">{s.icon}</span>
