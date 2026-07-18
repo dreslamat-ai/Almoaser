@@ -337,25 +337,6 @@ function WhatsAppDemoSection() {
                 </button>
               ))}
             </div>
-
-            {/* القيمة المضافة */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
-              <h3 className="font-bold text-navy text-lg">لماذا هذا يغيّر كل شيء؟</h3>
-              {[
-                { icon: "⚡", title: "سرعة فائقة", desc: "ما كان يستغرق 15 دقيقة يتم في 5 ثوانٍ" },
-                { icon: "🎯", title: "دقة 100%", desc: "لا أخطاء إدخال يدوي، البيانات تُسجَّل مباشرة" },
-                { icon: "🌙", title: "24/7 بلا توقف", desc: "الوكيل يعمل حتى في العطل والإجازات" },
-                { icon: "💬", title: "بالعربية الفصحى والعامية", desc: "يفهم طلبك بأي أسلوب تكتب به" },
-              ].map((v, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="text-xl mt-0.5">{v.icon}</span>
-                  <div>
-                    <p className="font-semibold text-navy text-sm">{v.title}</p>
-                    <p className="text-muted-foreground text-xs">{v.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* يمين: هاتف واتساب */}
@@ -479,6 +460,25 @@ function WhatsAppDemoSection() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* القيمة المضافة — تحت معاينة عمل الوكيل */}
+        <div className={`mt-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.3s" }}>
+          <h3 className="font-bold text-navy text-2xl text-center mb-8">لماذا هذا يغيّر كل شيء؟</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { icon: "⚡", title: "سرعة فائقة", desc: "ما كان يستغرق 15 دقيقة يتم في 5 ثوانٍ" },
+              { icon: "🎯", title: "دقة 100%", desc: "لا أخطاء إدخال يدوي، البيانات تُسجَّل مباشرة" },
+              { icon: "🌙", title: "24/7 بلا توقف", desc: "الوكيل يعمل حتى في العطل والإجازات" },
+              { icon: "💬", title: "بالعربية الفصحى والعامية", desc: "يفهم طلبك بأي أسلوب تكتب به" },
+            ].map((v, i) => (
+              <div key={i} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-center hover:shadow-md transition-shadow">
+                <span className="text-3xl block mb-3">{v.icon}</span>
+                <p className="font-semibold text-navy text-sm mb-1">{v.title}</p>
+                <p className="text-muted-foreground text-xs leading-relaxed">{v.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
