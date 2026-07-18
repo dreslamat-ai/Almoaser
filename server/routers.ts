@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
 import { agentRouter } from "./routers/agent";
+import { paymentsRouter } from "./routers/payments";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, testErpConnection, encryptPassword } from "./erpConnection";
 import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
 import { notifyUser, notifyAdmins, maybeNotifyTrialEnding } from "./notifications";
@@ -184,6 +185,19 @@ export const appRouter = router({
     get: publicProcedure.input(z.object({ id: z.number() })).query(({ input }) => getPlanById(input.id)),
   }),
 
+  credits: router({
+    // الرصيد الحالي مع ضمان التجديد الشهري
+    balance: protectedProcedure.query(async ({ ctx }) => {
+      const { getCreditsBalance } = await import("./credits");
+      return (await getCreditsBalance(ctx.user.id)) ?? null;
+    }),
+    // سجل حركات النقاط
+    transactions: protectedProcedure.query(async ({ ctx }) => {
+      const { getCreditTransactions } = await import("./credits");
+      return getCreditTransactions(ctx.user.id);
+    }),
+  }),
+
   subscription: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       // إن انتهت فترة التجربة تُفعَّل الباقة المختارة تلقائياً قبل الإرجاع
@@ -198,6 +212,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         planId: z.number(),
+        billing: z.enum(["monthly", "yearly"]).optional(),
         companyName: z.string().optional(),
         companyType: z.string().optional(),
         phone: z.string().optional(),
@@ -206,16 +221,45 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const existing = await getSubscriptionByUserId(ctx.user.id);
         if (existing) throw new TRPCError({ code: "CONFLICT", message: "لديك اشتراك بالفعل" });
-        await createSubscription({ userId: ctx.user.id, ...input });
+        const { billing, ...rest } = input;
+        await createSubscription({ userId: ctx.user.id, ...rest });
+        // تعبئة رصيد النقاط الأولي حسب الباقة + تسجيل دورة الفوترة
+        const plan = await getPlanById(input.planId);
+        const created = await getSubscriptionByUserId(ctx.user.id);
+        if (created && plan) {
+          await updateSubscription(created.id, {
+            billing: billing ?? "monthly",
+            creditsBalance: plan.monthlyCredits,
+            creditsCycleStart: new Date(),
+          });
+        }
         return { success: true };
       }),
     upgrade: protectedProcedure
-      .input(z.object({ planId: z.number() }))
+      .input(z.object({ planId: z.number(), billing: z.enum(["monthly", "yearly"]).optional() }))
       .mutation(async ({ ctx, input }) => {
         const existing = await getSubscriptionByUserId(ctx.user.id);
         if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك" });
-        await updateSubscription(existing.id, { planId: input.planId, status: "active" });
+        const plan = await getPlanById(input.planId);
+        await updateSubscription(existing.id, {
+          planId: input.planId,
+          status: "active",
+          ...(input.billing ? { billing: input.billing } : {}),
+          // عند الترقية يُعاد ضبط الرصيد لرصيد الباقة الجديدة وتبدأ دورة جديدة
+          ...(plan ? { creditsBalance: plan.monthlyCredits, creditsCycleStart: new Date() } : {}),
+        });
         return { success: true };
+      }),
+
+    // تحويل الاشتراك الحالي بين الفوترة الشهرية والسنوية (دون تغيير الباقة أو الرصيد)
+    switchBilling: protectedProcedure
+      .input(z.object({ billing: z.enum(["monthly", "yearly"]) }))
+      .mutation(async ({ ctx, input }) => {
+        const existing = await getSubscriptionByUserId(ctx.user.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك" });
+        if (existing.billing === input.billing) return { success: true, unchanged: true };
+        await updateSubscription(existing.id, { billing: input.billing });
+        return { success: true, unchanged: false };
       }),
   }),
 
@@ -547,6 +591,86 @@ export const appRouter = router({
         }
       }),
 
+    // بيانات طباعة الفاتورة الضريبية: تفاصيل الفاتورة + الشركة + العميل + QR بصيغة ZATCA TLV
+    getInvoicePrintData: protectedProcedure
+      .input(z.object({ invoiceName: z.string() }))
+      .query(async ({ input, ctx }) => {
+        const invData = await erpFetch(`/api/resource/Sales%20Invoice/${encodeURIComponent(input.invoiceName)}`, ctx.user.id) as { data: Record<string, unknown> };
+        const inv = invData?.data;
+        if (!inv) throw new TRPCError({ code: "NOT_FOUND", message: "الفاتورة غير موجودة" });
+
+        // بيانات الشركة (البائع)
+        const companyName = inv.company as string;
+        let company: Record<string, unknown> = {};
+        try {
+          const cData = await erpFetch(`/api/resource/Company/${encodeURIComponent(companyName)}`, ctx.user.id) as { data: Record<string, unknown> };
+          company = cData?.data ?? {};
+        } catch { /* تجاهل */ }
+
+        // بيانات العميل (الرقم الضريبي والعنوان)
+        let customer: Record<string, unknown> = {};
+        try {
+          const custData = await erpFetch(`/api/resource/Customer/${encodeURIComponent(inv.customer as string)}`, ctx.user.id) as { data: Record<string, unknown> };
+          customer = custData?.data ?? {};
+        } catch { /* تجاهل */ }
+
+        // ─── رمز QR وفق صيغة ZATCA TLV (Base64) ───
+        const sellerName = (company.company_name as string) ?? companyName ?? "";
+        const sellerVat = (company.tax_id as string) ?? "";
+        const postingDate = (inv.posting_date as string) ?? "";
+        const postingTime = (inv.posting_time as string) ?? "00:00:00";
+        const timestamp = `${postingDate}T${postingTime.split(".")[0]}Z`;
+        const grandTotal = String(inv.grand_total ?? 0);
+        const vatTotal = String(inv.total_taxes_and_charges ?? 0);
+        const tlv = (tag: number, value: string): Buffer => {
+          const v = Buffer.from(value, "utf8");
+          return Buffer.concat([Buffer.from([tag]), Buffer.from([v.length]), v]);
+        };
+        const qrBase64 = Buffer.concat([
+          tlv(1, sellerName),
+          tlv(2, sellerVat),
+          tlv(3, timestamp),
+          tlv(4, grandTotal),
+          tlv(5, vatTotal),
+        ]).toString("base64");
+
+        return {
+          invoice: {
+            name: inv.name as string,
+            postingDate,
+            dueDate: inv.due_date as string,
+            status: inv.status as string,
+            currency: inv.currency as string,
+            netTotal: Number(inv.net_total ?? 0),
+            totalTaxes: Number(inv.total_taxes_and_charges ?? 0),
+            discountAmount: Number(inv.discount_amount ?? 0),
+            grandTotal: Number(inv.grand_total ?? 0),
+            outstanding: Number(inv.outstanding_amount ?? 0),
+            remarks: (inv.remarks as string) ?? "",
+            items: ((inv.items as Array<Record<string, unknown>>) ?? []).map(it => ({
+              itemName: (it.item_name as string) ?? (it.item_code as string),
+              uom: (it.uom as string) ?? "Nos",
+              qty: Number(it.qty ?? 0),
+              rate: Number(it.rate ?? 0),
+              amount: Number(it.amount ?? 0),
+            })),
+          },
+          company: {
+            name: sellerName,
+            taxId: sellerVat,
+            phone: (company.phone_no as string) ?? "",
+            email: (company.email as string) ?? "",
+            country: (company.country as string) ?? "",
+          },
+          customer: {
+            name: (customer.customer_name as string) ?? (inv.customer as string),
+            taxId: (customer.tax_id as string) ?? "",
+            address: (inv.address_display as string) ?? "",
+          },
+          qrBase64,
+        };
+      }),
+
     createSalesInvoice: protectedProcedure
       .input(z.object({
         customer: z.string(),
@@ -623,6 +747,7 @@ export const appRouter = router({
   }),
 
   agent: agentRouter,
+  payments: paymentsRouter,
   notifications: notificationsRouter,
   channels: router({
     saveSettings: protectedProcedure

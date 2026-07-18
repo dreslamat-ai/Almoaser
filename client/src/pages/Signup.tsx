@@ -176,7 +176,7 @@ export default function Signup() {
                   <div className="flex-1">
                     <p className="font-bold text-foreground">{plan.nameAr}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      حتى {plan.maxTasks} مهمة · {plan.maxTransactions} عملية شهرياً
+                      {plan.maxDocuments ?? 30} مستنداً · {plan.monthlyCredits ?? 150} نقطة شهرياً
                     </p>
                   </div>
                   <div className="text-left shrink-0">
@@ -186,6 +186,8 @@ export default function Signup() {
                 </button>
               ))}
             </div>
+
+            <p className="text-[11px] text-muted-foreground text-center">الأسعار لا تشمل ضريبة القيمة المضافة (15%) · خصم 15% عند الدفع السنوي</p>
 
             <div className="flex gap-2">
               <Button variant="outline" className="h-11 gap-2" onClick={() => setStep(1)} disabled={signupMutation.isPending}>

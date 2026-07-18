@@ -25,6 +25,14 @@ export const plans = mysqlTable("plans", {
   billingCycle: mysqlEnum("billingCycle", ["monthly", "yearly"]).default("monthly").notNull(),
   maxTasks: int("maxTasks").default(10).notNull(),
   maxTransactions: int("maxTransactions").default(100).notNull(),
+  // حد المستندات الشهري (30 / 50 / 100)
+  maxDocuments: int("maxDocuments").default(30).notNull(),
+  // رصيد النقاط الشهري = maxDocuments × 5 (رسالة = 1 نقطة، مستند = 5 نقاط)
+  monthlyCredits: int("monthlyCredits").default(150).notNull(),
+  // نسبة خصم الدفع السنوي بالمئة (15% لجميع الباقات)
+  yearlyDiscountPct: int("yearlyDiscountPct").default(15).notNull(),
+  // هل تشمل الباقة دعماً شخصياً مباشراً
+  hasDirectSupport: boolean("hasDirectSupport").default(false).notNull(),
   features: text("features"),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -37,11 +45,54 @@ export const subscriptions = mysqlTable("subscriptions", {
   status: mysqlEnum("status", ["active", "inactive", "cancelled", "trial"]).default("trial").notNull(),
   startDate: timestamp("startDate").defaultNow().notNull(),
   endDate: timestamp("endDate"),
+  // دورة الفوترة المختارة: شهري أو سنوي (بخصم 15%)
+  billing: mysqlEnum("billing", ["monthly", "yearly"]).default("monthly").notNull(),
+  // رصيد النقاط المتبقي (يُعاد تعبئته شهرياً من الباقة + يُضاف إليه الشحن)
+  creditsBalance: int("creditsBalance").default(0).notNull(),
+  // بداية الدورة الشهرية الحالية للنقاط (تُجدَّد كل 30 يوماً)
+  creditsCycleStart: timestamp("creditsCycleStart"),
   companyName: varchar("companyName", { length: 255 }),
   companyType: varchar("companyType", { length: 100 }),
   phone: varchar("phone", { length: 20 }),
   vatNumber: varchar("vatNumber", { length: 50 }),
   notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── حركات النقاط (خصم/شحن/تجديد) ────────────────────────────────────────────
+export const creditTransactions = mysqlTable("credit_transactions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  subscriptionId: int("subscriptionId").references(() => subscriptions.id),
+  // النوع: message (رسالة -1) | document (مستند -5) | monthly_refill (تعبئة شهرية) | topup (شحن مدفوع) | adjustment (تعديل إداري)
+  type: mysqlEnum("type", ["message", "document", "monthly_refill", "topup", "adjustment"]).notNull(),
+  // موجبة للإضافة وسالبة للخصم
+  amount: int("amount").notNull(),
+  // الرصيد بعد الحركة
+  balanceAfter: int("balanceAfter").notNull(),
+  note: varchar("note", { length: 300 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── مدفوعات MyFatoorah ───────────────────────────────────────────────────────
+export const payments = mysqlTable("payments", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  // الغرض: subscription (اشتراك/ترقية) | topup (شحن نقاط)
+  purpose: mysqlEnum("purpose", ["subscription", "topup"]).notNull(),
+  planId: int("planId").references(() => plans.id),
+  // دورة الفوترة عند الاشتراك
+  billing: mysqlEnum("billing", ["monthly", "yearly"]),
+  // عدد النقاط عند الشحن
+  credits: int("credits"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 10 }).default("SAR").notNull(),
+  status: mysqlEnum("status", ["pending", "paid", "failed", "expired"]).default("pending").notNull(),
+  // معرف الفاتورة لدى MyFatoorah
+  invoiceId: varchar("invoiceId", { length: 100 }),
+  paymentUrl: varchar("paymentUrl", { length: 500 }),
+  paidAt: timestamp("paidAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -137,6 +188,8 @@ export const agentMessages = mysqlTable("agent_messages", {
 
 export type Plan = typeof plans.$inferSelect;
 export type Subscription = typeof subscriptions.$inferSelect;
+export type CreditTransaction = typeof creditTransactions.$inferSelect;
+export type Payment = typeof payments.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type ServiceInvoice = typeof serviceInvoices.$inferSelect;
 export type RegistrationRequest = typeof registrationRequests.$inferSelect;

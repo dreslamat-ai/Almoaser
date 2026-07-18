@@ -195,7 +195,7 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "create_invoice",
-      description: "إنشاء فاتورة مبيعات جديدة في ERPNext كمسودة",
+      description: "إنشاء فاتورة مبيعات جديدة في ERPNext كمسودة. تُحتسب ضريبة القيمة المضافة 15% تلقائياً وفق النظام السعودي ما لم يحدد المستخدم خلاف ذلك",
       parameters: {
         type: "object",
         properties: {
@@ -208,13 +208,14 @@ const TOOLS = [
               properties: {
                 item_code: { type: "string", description: "كود الصنف" },
                 qty: { type: "number", description: "الكمية" },
-                rate: { type: "number", description: "السعر" },
+                rate: { type: "number", description: "السعر (قبل الضريبة)" },
               },
               required: ["item_code", "qty", "rate"],
               additionalProperties: false,
             },
           },
           due_date: { type: "string", description: "تاريخ الاستحقاق بصيغة YYYY-MM-DD (اختياري)" },
+          apply_vat: { type: "boolean", description: "احتساب ضريبة القيمة المضافة 15% (الافتراضي true). اجعلها false فقط إذا طلب المستخدم صراحةً فاتورة بدون ضريبة أو معفاة" },
         },
         required: ["customer", "items"],
         additionalProperties: false,
@@ -248,6 +249,7 @@ const TOOLS = [
           customer_type: { type: "string", enum: ["Company", "Individual"], description: "نوع العميل: شركة أو فرد (الافتراضي Company)" },
           mobile_no: { type: "string", description: "رقم الجوال (اختياري)" },
           email_id: { type: "string", description: "البريد الإلكتروني (اختياري)" },
+          tax_id: { type: "string", description: "الرقم الضريبي للعميل (15 رقماً يبدأ وينتهي بـ 3 وفق نظام ضريبة القيمة المضافة السعودي) — مطلوب للعملاء من نوع شركة/منشأة، اسأل المستخدم عنه عند إنشاء عميل شركة" },
         },
         required: ["customer_name"],
         additionalProperties: false,
@@ -535,6 +537,51 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_settings",
+      description: "قراءة إعدادات النظام لأي موديول: بيانات الشركة (الاسم، الرقم الضريبي، العملة)، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، أو قوالب الضرائب. استخدمها لفهم الإعدادات الحالية قبل أي تعديل",
+      parameters: {
+        type: "object",
+        properties: {
+          settings_type: {
+            type: "string",
+            enum: ["Company", "Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults", "Sales Taxes and Charges Template", "Purchase Taxes and Charges Template"],
+            description: "نوع الإعدادات المطلوب قراءتها",
+          },
+          name: { type: "string", description: "اسم السجل المحدد (مطلوب للشركة أو قالب ضريبة محدد — اتركه فارغاً لجلب القائمة أو الإعدادات العامة)" },
+        },
+        required: ["settings_type"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "update_settings",
+      description: "تعديل إعدادات النظام لأي موديول أو مستند إعدادات: بيانات الشركة (رقم ضريبي، عنوان)، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، أو قوالب الضرائب. اقرأ الإعدادات بـ get_settings أولاً، ولخّص للمستخدم ما ستغيّره قبل التنفيذ",
+      parameters: {
+        type: "object",
+        properties: {
+          settings_type: {
+            type: "string",
+            enum: ["Company", "Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults", "Sales Taxes and Charges Template", "Purchase Taxes and Charges Template"],
+            description: "نوع الإعدادات المراد تعديلها",
+          },
+          name: { type: "string", description: "اسم السجل المحدد (مطلوب للشركة أو قالب ضريبة — اتركه فارغاً لمستندات الإعدادات الفردية مثل Selling Settings)" },
+          fields: {
+            type: "object",
+            description: "الحقول المراد تعديلها وقيمها الجديدة، مثل {\"tax_id\": \"310000000000003\"} أو {\"country\": \"Saudi Arabia\"}",
+            additionalProperties: true,
+          },
+        },
+        required: ["settings_type", "fields"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ─── Tool Executor ────────────────────────────────────────────────────────────
@@ -760,6 +807,31 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       // due_date لا يجوز أن يسبق posting_date — إن كان التاريخ المُمرر أقدم (مثلاً من صورة فاتورة قديمة) استخدم اليوم
       const requestedDue = (args.due_date as string) ?? today;
       const safeDueDate = requestedDue < today ? today : requestedDue;
+      // ─── ضريبة القيمة المضافة: تُطبَّق من قوالب الضرائب الجاهزة في نظام المعاصر ───
+      // نجلب القالب الافتراضي (أو الأول المتاح) من Sales Taxes and Charges Template دون أي إعداد يدوي من الوكيل
+      const applyVat = (args.apply_vat as boolean) ?? true;
+      let taxTemplate: string | null = null;
+      let taxRows: Array<Record<string, unknown>> = [];
+      if (applyVat) {
+        try {
+          const tplFields = encodeURIComponent(JSON.stringify(["name", "is_default"]));
+          const tplData = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template?limit=10&fields=${tplFields}&filters=${encodeURIComponent(JSON.stringify([["disabled", "=", 0]]))}`) as { data: Array<{ name: string; is_default: number }> };
+          const templates = tplData?.data ?? [];
+          taxTemplate = templates.find(t => t.is_default === 1)?.name ?? templates[0]?.name ?? null;
+          if (taxTemplate) {
+            // جلب صفوف الضريبة من القالب لتضمينها في الفاتورة
+            const tplDoc = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template/${encodeURIComponent(taxTemplate)}`) as { data: { taxes?: Array<{ charge_type: string; account_head: string; rate: number; description: string }> } };
+            taxRows = (tplDoc?.data?.taxes ?? []).map(t => ({
+              charge_type: t.charge_type,
+              account_head: t.account_head,
+              rate: t.rate,
+              description: t.description,
+            }));
+          }
+        } catch (e) {
+          console.warn("[create_invoice] failed to load tax template:", e instanceof Error ? e.message : e);
+        }
+      }
       const invoiceDoc = {
         customer: resolvedCustomer,
         posting_date: today,
@@ -770,12 +842,13 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
           rate: i.rate,
           amount: i.qty * i.rate,
         })),
+        ...(taxTemplate && taxRows.length > 0 ? { taxes_and_charges: taxTemplate, taxes: taxRows } : {}),
       };
-      const data = await erpPOST("/api/resource/Sales%20Invoice", invoiceDoc) as { data: { name: string; grand_total: number } };
+      const data = await erpPOST("/api/resource/Sales%20Invoice", invoiceDoc) as { data: { name: string; grand_total: number; total_taxes_and_charges?: number; net_total?: number } };
       const invoiceName = data?.data?.name ?? "SINV-???";
       return {
         result: data?.data,
-        display: `__INVOICE_CREATED__${JSON.stringify({ name: invoiceName, customer: resolvedCustomer, items: resolvedItems, grand_total: data?.data?.grand_total })}`,
+        display: `__INVOICE_CREATED__${JSON.stringify({ name: invoiceName, customer: resolvedCustomer, items: resolvedItems, grand_total: data?.data?.grand_total, net_total: data?.data?.net_total, total_taxes: data?.data?.total_taxes_and_charges, tax_template: taxTemplate })}`,
       };
     }
     case "get_sales_report": {
@@ -825,11 +898,12 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         territory: terData?.data?.[0]?.name ?? "All Territories",
         ...(args.mobile_no ? { mobile_no: args.mobile_no } : {}),
         ...(args.email_id ? { email_id: args.email_id } : {}),
+        ...(args.tax_id ? { tax_id: args.tax_id } : {}),
       };
-      const data = await erpPOST("/api/resource/Customer", customerDoc) as { data: { name: string; customer_name: string; customer_type: string } };
+      const data = await erpPOST("/api/resource/Customer", customerDoc) as { data: { name: string; customer_name: string; customer_type: string; tax_id?: string } };
       return {
         result: data?.data,
-        display: `__CUSTOMER_CREATED__${JSON.stringify({ name: data?.data?.name, customer_name: data?.data?.customer_name, customer_type: data?.data?.customer_type })}`,
+        display: `__CUSTOMER_CREATED__${JSON.stringify({ name: data?.data?.name, customer_name: data?.data?.customer_name, customer_type: data?.data?.customer_type, tax_id: data?.data?.tax_id })}`,
       };
     }
     case "create_item": {
@@ -1180,6 +1254,54 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
       };
     }
+    case "get_settings": {
+      const settingsType = args.settings_type as string;
+      const recName = args.name as string | undefined;
+      // مستندات الإعدادات الفردية (Single DocTypes) تُقرأ باسم النوع نفسه
+      const SINGLE_DOCTYPES = new Set(["Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults"]);
+      if (SINGLE_DOCTYPES.has(settingsType)) {
+        const data = await erpGET(`/api/resource/${encodeURIComponent(settingsType)}/${encodeURIComponent(settingsType)}`) as { data: Record<string, unknown> };
+        return { result: data?.data, display: "" };
+      }
+      if (recName) {
+        const data = await erpGET(`/api/resource/${encodeURIComponent(settingsType)}/${encodeURIComponent(recName)}`) as { data: Record<string, unknown> };
+        return { result: data?.data, display: "" };
+      }
+      // بدون اسم: أعد قائمة السجلات المتاحة (شركات أو قوالب ضرائب)
+      const listData = await erpGET(`/api/resource/${encodeURIComponent(settingsType)}?limit=20`) as { data: Array<{ name: string }> };
+      return { result: { available: (listData?.data ?? []).map(r => r.name), hint: "استخدم get_settings مع name لقراءة تفاصيل سجل محدد" }, display: "" };
+    }
+    case "update_settings": {
+      const settingsType = args.settings_type as string;
+      const recName = args.name as string | undefined;
+      const fields = args.fields as Record<string, unknown>;
+      if (!fields || Object.keys(fields).length === 0) {
+        return { result: { error: "لم تُحدد أي حقول للتعديل" }, display: "" };
+      }
+      const SINGLE_DOCTYPES = new Set(["Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults"]);
+      let path: string;
+      if (SINGLE_DOCTYPES.has(settingsType)) {
+        path = `/api/resource/${encodeURIComponent(settingsType)}/${encodeURIComponent(settingsType)}`;
+      } else {
+        if (!recName) {
+          // حاول الحصول على السجل الوحيد تلقائياً (مثل الشركة الوحيدة)
+          const listData = await erpGET(`/api/resource/${encodeURIComponent(settingsType)}?limit=5`) as { data: Array<{ name: string }> };
+          const records = listData?.data ?? [];
+          if (records.length === 1) {
+            path = `/api/resource/${encodeURIComponent(settingsType)}/${encodeURIComponent(records[0].name)}`;
+          } else {
+            return { result: { needs_clarification: true, reason: "specify_record_name", available: records.map(r => r.name) }, display: "" };
+          }
+        } else {
+          path = `/api/resource/${encodeURIComponent(settingsType)}/${encodeURIComponent(recName)}`;
+        }
+      }
+      const data = await erpPUT(path, fields) as { data: Record<string, unknown> };
+      return {
+        result: { updated: true, settings_type: settingsType, changed_fields: Object.keys(fields), data: data?.data ? Object.fromEntries(Object.keys(fields).map(k => [k, (data.data as Record<string, unknown>)[k]])) : undefined },
+        display: `__SETTINGS_UPDATED__${JSON.stringify({ settings_type: settingsType, name: recName ?? settingsType, changed: Object.keys(fields) })}`,
+      };
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -1202,6 +1324,18 @@ export const agentRouter = router({
       })),
     }))
     .mutation(async ({ input, ctx }) => {
+      // ─── خصم نقطة رصيد لكل رسالة (رسالة = 1 نقطة) ───
+      const credits = await import("../credits");
+      try {
+        await credits.deductCredits(ctx.user.id, credits.MESSAGE_COST, "message", "رسالة للوكيل الذكي");
+      } catch (e) {
+        if (e instanceof credits.InsufficientCreditsError) {
+          const { TRPCError } = await import("@trpc/server");
+          throw new TRPCError({ code: "FORBIDDEN", message: e.message });
+        }
+        // إن تعذّر الاتصال بقاعدة البيانات لا نمنع المحادثة
+        console.warn("[agent.chat] credits deduction skipped:", e instanceof Error ? e.message : e);
+      }
       // ─── حفظ سجل المحادثة: إنشاء محادثة جديدة إن لم تُمرَّر، وحفظ رسالة المستخدم ───
       const dbHelpers = await import("../db");
       const lastUserMsg = [...input.messages].reverse().find(m => m.role === "user");
@@ -1260,6 +1394,8 @@ export const agentRouter = router({
 11. **المستندات المستخرجة من الصور**: إذا احتوت المحادثة على "بيانات مستخرجة" من صورة (فاتورة/سند) وأكّد المستخدم التسجيل (نعم/سجّل/أكّد) → نفّذ فوراً حسب النوع: فاتورة مبيعات → سير إنشاء الفاتورة المعتاد (بحث عميل/أصناف ثم create_invoice) | فاتورة مشتريات → بحث مورد ثم create_purchase_invoice | سند قبض → create_payment_entry بنوع Receive | سند صرف → create_payment_entry بنوع Pay. إن صحّح المستخدم بيانات، استخدم البيانات المصحّحة
 12. **التعديل**: لتعديل بيانات عميل/مورد/صنف → update_document مباشرة. لتعديل فاتورة/قيد/دفعة: إن كانت مسودة → update_document، وإن كانت معتمدة → أخبر المستخدم أنها تتطلب الإلغاء أولاً واعرض عليه: cancel_document ثم إنشاء مستند بديل بالبيانات الصحيحة
 13. **الحذف والإلغاء**: delete_document حذف نهائي (يلغي المستند المعتمد تلقائياً قبل حذفه). **اطلب تأكيداً صريحاً من المستخدم قبل أي حذف أو إلغاء** واذكر رقم المستند وأثره (مثال: "إلغاء الفاتورة سيعكس أثرها من الحسابات — هل تؤكد؟"). لا تحذف أبداً دون تأكيد
+14. **ضريبة القيمة المضافة (VAT)**: الضريبة تأتي **جاهزة من إعدادات نظام المعاصر** — create_invoice تطبّق قالب الضريبة الافتراضي (Sales Taxes and Charges Template) تلقائياً دون أي إعداد منك. لا تحسب الضريبة يدوياً ولا تضفها كصنف. الأسعار المُمررة rate هي قبل الضريبة، والنظام يحتسب 15% ويظهرها في الفاتورة. إن طلب المستخدم فاتورة بدون ضريبة/معفاة → apply_vat: false. عند إخبار المستخدم بإجمالي الفاتورة اذكر: الإجمالي قبل الضريبة، الضريبة، والمجموع شامل الضريبة
+15. **الرقم الضريبي للعملاء**: عند إنشاء عميل من نوع شركة/مؤسسة → **اسأل عن الرقم الضريبي** (15 رقماً يبدأ وينتهي بـ 3) ومرّره في tax_id — مطلوب للفاتورة الضريبية السعودية. إن لم يتوفر لدى المستخدم، أنشئ العميل بدونه ونبّهه لأهمية إضافته لاحقاً بـ update_document
 ## صلاحياتك الكاملة في النظام
 أنت تملك صلاحيات كاملة للإدخال والتسجيل والاعتماد والتعديل والإلغاء والحذف في كل وحدات النظام (ضمن صلاحيات مستخدم ERPNext المتصل):
 - **المبيعات**: فواتير مبيعات (إنشاء/عرض/اعتماد/تعديل/إلغاء/حذف)، عملاء (بحث/إنشاء/تعديل/حذف)
@@ -1268,6 +1404,7 @@ export const agentRouter = router({
 - **الدفعات**: create_payment_entry — تسجيل قبض من عميل (Receive) أو صرف لمورد (Pay)، مع إمكانية ربط الدفعة بفاتورة محددة لسدادها (reference_invoice). عند قول المستخدم "سجّل دفعة/سداد/قبض/تحصيل من عميل" → Receive، "دفعنا/سددنا لمورد" → Pay
 - **قيود اليومية**: create_journal_entry — قيد مزدوج (مدين/دائن متساويان). قبل إنشاء القيد ابحث عن أسماء الحسابات الفعلية بـ get_accounts (الأسماء تتضمن اختصار الشركة مثل "Cash - X"). مثال: "سجل قيد: مدين الصندوق 3000 دائن المبيعات 3000" → get_accounts للصندوق والمبيعات ثم create_journal_entry
 - **سير سداد فاتورة**: "سجل سداد فاتورة SINV-XXX" → get_invoice_detail لمعرفة العميل والمبلغ المتبقي → create_payment_entry مع reference_invoice → اعرض الاعتماد
+- **إعدادات النظام لكافة الموديولات**: get_settings لقراءة إعدادات أي موديول (بيانات الشركة والرقم الضريبي، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، قوالب الضرائب) وupdate_settings لتعديلها. أمثلة: "حدّث الرقم الضريبي للشركة" → get_settings(Company) ثم update_settings(Company, {tax_id}) | "ما نسبة الضريبة المعتمدة؟" → get_settings(Sales Taxes and Charges Template) | "غيّر العملة الافتراضية" → update_settings(Global Defaults). قبل أي تعديل إعدادات اقرأ القيم الحالية ولخّص التغيير للمستخدم
 
 ## خبرتك في Almoaser AI ERP
 - **Sales Invoice**: فاتورة المبيعات — تُنشأ Draft ثم Submit لتسجّل في الحسابات. الحالات: Draft/Unpaid/Paid/Overdue/Cancelled
@@ -1381,6 +1518,15 @@ export const agentRouter = router({
             const { result, display } = await executeTool(tc.function.name, args);
             toolResult = JSON.stringify(result);
             displayData = display;
+            // ─── خصم 5 نقاط لكل مستند ERP يُنشأ بنجاح (فاتورة/دفعة/قيد) ───
+            try {
+              const DOC_TOOLS = new Set(["create_invoice", "create_purchase_invoice", "create_payment_entry", "create_journal_entry"]);
+              const resObj = result as { error?: unknown; needs_clarification?: unknown; duplicate_prevented?: unknown } | null;
+              const succeeded = resObj && typeof resObj === "object" && !resObj.error && !resObj.needs_clarification && !resObj.duplicate_prevented;
+              if (DOC_TOOLS.has(tc.function.name) && succeeded) {
+                await credits.deductCredits(ctx.user.id, credits.DOCUMENT_COST, "document", `إنشاء مستند (${tc.function.name})`).catch(() => {});
+              }
+            } catch { /* خصم النقاط لا يوقف التنفيذ */ }
             // إشعار داخل الموقع + push عند إنشاء/اعتماد فاتورة عبر الوكيل
             try {
               if (displayData.startsWith("__INVOICE_CREATED__")) {

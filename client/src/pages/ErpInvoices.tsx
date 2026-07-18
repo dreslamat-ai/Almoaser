@@ -1,10 +1,11 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import InvoicePrintView from "@/components/InvoicePrintView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, FileText, RefreshCw } from "lucide-react";
+import { AlertCircle, FileText, Printer, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
@@ -26,6 +27,7 @@ const FILTERS = [
 
 export default function ErpInvoices() {
   const [statusFilter, setStatusFilter] = useState("");
+  const [printInvoice, setPrintInvoice] = useState<string | null>(null);
   const { data, isLoading, error, refetch } = trpc.erpnext.getSalesInvoices.useQuery(
     { limit: 50 },
     { staleTime: 60 * 1000 },
@@ -100,6 +102,7 @@ export default function ErpInvoices() {
                       <th className="text-right p-3 font-medium">الإجمالي</th>
                       <th className="text-right p-3 font-medium">المتبقي</th>
                       <th className="text-right p-3 font-medium">الحالة</th>
+                      <th className="text-right p-3 font-medium">عرض</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -113,6 +116,17 @@ export default function ErpInvoices() {
                           <td className="p-3 font-semibold">{(inv.grand_total ?? 0).toLocaleString("ar-SA")}</td>
                           <td className="p-3 text-xs">{(inv.outstanding_amount ?? 0).toLocaleString("ar-SA")}</td>
                           <td className="p-3"><Badge variant="outline" className={`text-[10px] ${st.cls}`}>{st.label}</Badge></td>
+                          <td className="p-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => setPrintInvoice(inv.name)}
+                            >
+                              <Printer className="w-3 h-3" />
+                              الفاتورة
+                            </Button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -123,6 +137,9 @@ export default function ErpInvoices() {
           </CardContent>
         </Card>
       </div>
+      {printInvoice && (
+        <InvoicePrintView invoiceName={printInvoice} onClose={() => setPrintInvoice(null)} />
+      )}
     </DashboardLayout>
   );
 }

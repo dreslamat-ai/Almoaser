@@ -19,6 +19,7 @@ import ErpCustomers from "./pages/ErpCustomers";
 import ErpReports from "./pages/ErpReports";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import PaymentCallback from "./pages/PaymentCallback";
 
 function Router() {
   return (
@@ -31,6 +32,7 @@ function Router() {
       <Route path="/tasks" component={Tasks} />
       <Route path="/invoices" component={Invoices} />
       <Route path="/subscription" component={Subscription} />
+      <Route path="/payment/callback" component={PaymentCallback} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/erp" component={ERPNextDashboard} />
       <Route path="/erp/invoices" component={ErpInvoices} />

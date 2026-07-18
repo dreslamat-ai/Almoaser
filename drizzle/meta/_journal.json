@@ -57,6 +57,13 @@
       "when": 1784329438147,
       "tag": "0007_dusty_pete_wisdom",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1784333866339,
+      "tag": "0008_awesome_mephistopheles",
+      "breakpoints": true
     }
   ]
 }

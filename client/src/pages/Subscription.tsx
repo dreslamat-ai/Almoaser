@@ -1,21 +1,39 @@
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { CheckCircle2, Zap, Bot, BookOpen, Crown } from "lucide-react";
+import { CheckCircle2, Zap, Bot, BookOpen, Crown, Coins, Plus, History } from "lucide-react";
 
 export default function Subscription() {
   const { isAuthenticated, loading } = useAuth();
   const utils = trpc.useUtils();
+  const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
+  const [showHistory, setShowHistory] = useState(false);
   const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: isAuthenticated });
   const { data: plans } = trpc.plans.list.useQuery();
+  const { data: creditsInfo } = trpc.credits.balance.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: txns } = trpc.credits.transactions.useQuery(undefined, { enabled: isAuthenticated && showHistory });
+  const { data: payCfg } = trpc.payments.isConfigured.useQuery(undefined, { enabled: isAuthenticated });
+
   const createMutation = trpc.subscription.create.useMutation({
-    onSuccess: () => { toast.success("تم تفعيل الاشتراك بنجاح!"); utils.subscription.get.invalidate(); },
+    onSuccess: () => { toast.success("تم تفعيل الاشتراك بنجاح!"); utils.subscription.get.invalidate(); utils.credits.balance.invalidate(); },
     onError: (e) => toast.error(e.message),
   });
   const upgradeMutation = trpc.subscription.upgrade.useMutation({
-    onSuccess: () => { toast.success("تم ترقية الاشتراك بنجاح!"); utils.subscription.get.invalidate(); },
+    onSuccess: () => { toast.success("تم ترقية الاشتراك بنجاح!"); utils.subscription.get.invalidate(); utils.credits.balance.invalidate(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const topupMutation = trpc.payments.createTopupPayment.useMutation({
+    onSuccess: (res) => { window.location.href = res.paymentUrl; },
+    onError: (e) => toast.error(e.message),
+  });
+  const switchBillingMutation = trpc.subscription.switchBilling.useMutation({
+    onSuccess: (_res, vars) => {
+      toast.success(vars.billing === "yearly" ? "تم التحويل إلى الفوترة السنوية بخصم 15%!" : "تم التحويل إلى الفوترة الشهرية");
+      utils.subscription.get.invalidate();
+    },
     onError: (e) => toast.error(e.message),
   });
 
@@ -24,6 +42,19 @@ export default function Subscription() {
 
   const planIcons = [<BookOpen className="w-6 h-6" />, <Zap className="w-6 h-6" />, <Bot className="w-6 h-6" />];
   const currentPlan = plans?.find(p => p.id === subscription?.planId);
+  const paymentsReady = payCfg?.configured ?? false;
+
+  const creditsPct = creditsInfo && creditsInfo.monthlyCredits > 0
+    ? Math.min(100, Math.round((creditsInfo.balance / creditsInfo.monthlyCredits) * 100))
+    : 0;
+
+  const handleTopup = (credits: number) => {
+    if (!paymentsReady) {
+      toast.info("بوابة الدفع قيد التفعيل — سيتوفر شحن النقاط قريباً");
+      return;
+    }
+    topupMutation.mutate({ credits });
+  };
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
@@ -31,39 +62,162 @@ export default function Subscription() {
       <main className="flex-1 p-4 md:p-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">إدارة الاشتراك</h1>
-          <p className="text-muted-foreground mt-1">اختر الباقة المناسبة لعملك</p>
+          <p className="text-muted-foreground mt-1">اختر الباقة المناسبة لعملك وتابع رصيد نقاطك — الأسعار لا تشمل ضريبة القيمة المضافة (15%)</p>
         </div>
 
+        {/* بطاقة الاشتراك الحالي + الرصيد */}
         {subscription && (
-          <div className="bg-navy-gradient rounded-2xl p-6 text-white mb-8">
-            <div className="flex items-center gap-4">
-              <Crown className="w-10 h-10 text-gold" />
-              <div>
-                <div className="font-bold text-xl">{currentPlan?.nameAr ?? "باقة نشطة"}</div>
-                <div className="text-white/70 text-sm">
-                  الحالة: {subscription.status === "active" ? "✅ نشط" : "🔄 تجريبي"} •
-                  {currentPlan ? ` ${Number(currentPlan.price).toLocaleString("ar-SA")} ريال/شهر` : ""}
+          <div className="grid md:grid-cols-2 gap-4 mb-8">
+            <div className="bg-navy-gradient rounded-2xl p-6 text-white">
+              <div className="flex items-center gap-4">
+                <Crown className="w-10 h-10 text-gold" />
+                <div>
+                  <div className="font-bold text-xl">{currentPlan?.nameAr ?? "باقة نشطة"}</div>
+                  <div className="text-white/70 text-sm">
+                    الحالة: {subscription.status === "active" ? "✅ نشط" : "🔄 تجريبي"} •
+                    {currentPlan ? ` ${Number(currentPlan.price).toLocaleString("ar-SA")} ريال/شهر` : ""}
+                    {subscription.billing === "yearly" ? " • فوترة سنوية (خصم 15%)" : ""}
+                  </div>
                 </div>
               </div>
+              {/* زر التحويل الشهري ⇄ السنوي مع عرض المبلغ والخصم */}
+              {currentPlan && subscription.billing !== "yearly" && (() => {
+                const monthly = Number(currentPlan.price);
+                const pct = currentPlan.yearlyDiscountPct ?? 15;
+                const yearlyTotal = Math.round(monthly * 12 * (1 - pct / 100));
+                const saved = monthly * 12 - yearlyTotal;
+                return (
+                  <div className="mt-4 pt-4 border-t border-white/15">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="text-sm">
+                        <span className="text-white/80">الدفع السنوي: </span>
+                        <span className="font-bold text-gold">{yearlyTotal.toLocaleString("ar-SA")} ريال/سنة</span>
+                        <span className="text-white/60 text-xs"> بدلاً من {(monthly * 12).toLocaleString("ar-SA")} ريال</span>
+                        <div className="text-xs text-emerald-300 mt-0.5">توفّر {saved.toLocaleString("ar-SA")} ريال (خصم {pct}%)</div>
+                      </div>
+                      <Button size="sm" className="bg-gold text-navy hover:bg-gold/90 font-bold"
+                        disabled={switchBillingMutation.isPending}
+                        onClick={() => switchBillingMutation.mutate({ billing: "yearly" })}>
+                        التحويل إلى سنوي
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-white/50 mt-1.5">الأسعار لا تشمل ضريبة القيمة المضافة (15%)</p>
+                  </div>
+                );
+              })()}
+              {currentPlan && subscription.billing === "yearly" && (
+                <div className="mt-4 pt-4 border-t border-white/15 flex items-center justify-between gap-3 flex-wrap">
+                  <span className="text-xs text-emerald-300">أنت على الفوترة السنوية — توفّر {Math.round(Number(currentPlan.price) * 12 * ((currentPlan.yearlyDiscountPct ?? 15) / 100)).toLocaleString("ar-SA")} ريال سنوياً</span>
+                  <Button size="sm" variant="outline" className="border-white/30 text-white hover:bg-white/10 text-xs h-7"
+                    disabled={switchBillingMutation.isPending}
+                    onClick={() => switchBillingMutation.mutate({ billing: "monthly" })}>
+                    العودة للشهري
+                  </Button>
+                </div>
+              )}
+            </div>
+            {/* بطاقة رصيد النقاط */}
+            <div className="bg-white rounded-2xl p-6 border-2 border-gold/40">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-6 h-6 text-gold-dark" />
+                  <span className="font-bold text-navy">رصيد النقاط</span>
+                </div>
+                <button onClick={() => setShowHistory(v => !v)} className="text-xs text-muted-foreground hover:text-navy flex items-center gap-1">
+                  <History className="w-3.5 h-3.5" /> السجل
+                </button>
+              </div>
+              <div className="flex items-baseline gap-2 mb-2">
+                <span className="text-3xl font-bold text-navy">{creditsInfo?.balance ?? 0}</span>
+                <span className="text-muted-foreground text-sm">/ {creditsInfo?.monthlyCredits ?? 0} نقطة شهرياً</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-gray-100 mb-3">
+                <div className="h-2 rounded-full bg-gold transition-all" style={{ width: `${creditsPct}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">كل رسالة للوكيل = نقطة واحدة • كل مستند = 5 نقاط • يتجدد الرصيد شهرياً</p>
+              <div className="flex flex-wrap gap-2">
+                {[100, 200, 500].map(c => (
+                  <Button key={c} size="sm" variant="outline" className="border-gold/50 text-gold-dark hover:bg-gold/10 gap-1"
+                    disabled={topupMutation.isPending} onClick={() => handleTopup(c)}>
+                    <Plus className="w-3.5 h-3.5" /> {c} نقطة — {c} ريال
+                  </Button>
+                ))}
+              </div>
+              {!paymentsReady && <p className="text-[11px] text-muted-foreground mt-2">بوابة الدفع قيد التفعيل — شحن النقاط سيتوفر قريباً</p>}
             </div>
           </div>
         )}
 
-        <h2 className="text-lg font-bold text-navy mb-4">{subscription ? "ترقية الباقة" : "اختر باقتك"}</h2>
+        {/* سجل حركات النقاط */}
+        {showHistory && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-8">
+            <h3 className="font-bold text-navy mb-3 text-sm">سجل حركات النقاط</h3>
+            {!txns?.length ? (
+              <p className="text-sm text-muted-foreground">لا توجد حركات بعد.</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {txns.map(t => (
+                  <div key={t.id} className="flex items-center justify-between text-sm border-b border-gray-50 pb-2">
+                    <span className="text-muted-foreground">{t.note ?? t.type}</span>
+                    <div className="flex items-center gap-3">
+                      <span className={`font-bold ${t.amount > 0 ? "text-green-600" : "text-red-500"}`}>{t.amount > 0 ? `+${t.amount}` : t.amount}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString("ar-SA")}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <h2 className="text-lg font-bold text-navy">{subscription ? "ترقية الباقة" : "اختر باقتك"}</h2>
+          {/* مبدّل الفوترة */}
+          <div className="inline-flex items-center gap-1 p-1 rounded-full bg-white border border-gray-200">
+            <button onClick={() => setBilling("monthly")}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-navy text-white" : "text-muted-foreground"}`}>شهري</button>
+            <button onClick={() => setBilling("yearly")}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${billing === "yearly" ? "bg-navy text-white" : "text-muted-foreground"}`}>
+              سنوي <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-dark"}`}>-15%</span>
+            </button>
+          </div>
+        </div>
+
         <div className="grid md:grid-cols-3 gap-6">
           {plans?.map((plan, i) => {
             const features: string[] = plan.features ? JSON.parse(plan.features) : [];
             const isCurrent = subscription?.planId === plan.id;
             const isPopular = i === 1;
+            const monthly = Number(plan.price);
+            const discountPct = plan.yearlyDiscountPct ?? 15;
+            const yearlyTotal = Math.round(monthly * 12 * (1 - discountPct / 100));
+            const yearlyPerMonth = Math.round(yearlyTotal / 12);
             return (
               <div key={plan.id} className={`rounded-2xl border-2 bg-white p-6 relative ${isCurrent ? "border-gold" : isPopular ? "border-navy" : "border-gray-200"}`}>
                 {isCurrent && <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-gold text-white text-xs font-bold px-3 py-1 rounded-full">باقتك الحالية</div>}
                 {isPopular && !isCurrent && <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-navy text-white text-xs font-bold px-3 py-1 rounded-full">الأكثر طلباً</div>}
                 <div className={`w-12 h-12 rounded-xl mb-4 flex items-center justify-center ${isPopular ? "bg-navy-gradient text-white" : "bg-gray-100 text-navy"}`}>{planIcons[i]}</div>
                 <h3 className="text-xl font-bold text-navy mb-1">{plan.nameAr}</h3>
-                <div className="flex items-baseline gap-1 mb-5">
-                  <span className="text-3xl font-bold text-navy">{Number(plan.price).toLocaleString("ar-SA")}</span>
-                  <span className="text-muted-foreground text-sm">ريال / شهر</span>
+                {billing === "monthly" ? (
+                  <div className="flex items-baseline gap-1 mb-2">
+                    <span className="text-3xl font-bold text-navy">{monthly.toLocaleString("ar-SA")}</span>
+                    <span className="text-muted-foreground text-sm">ريال / شهر</span>
+                  </div>
+                ) : (
+                  <div className="mb-2">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-bold text-navy">{yearlyPerMonth.toLocaleString("ar-SA")}</span>
+                      <span className="text-muted-foreground text-sm">ريال / شهر</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      <span className="line-through">{(monthly * 12).toLocaleString("ar-SA")}</span>
+                      <span className="text-gold-dark font-bold mr-1"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mb-4 text-[11px] font-medium">
+                  <span className="px-2 py-0.5 rounded-full bg-navy/5 text-navy">{plan.maxDocuments ?? 30} مستنداً/شهر</span>
+                  <span className="px-2 py-0.5 rounded-full bg-gold/10 text-gold-dark">{plan.monthlyCredits ?? 150} نقطة/شهر</span>
                 </div>
                 <ul className="space-y-2 mb-6">
                   {features.map((f, j) => (
@@ -73,16 +227,16 @@ export default function Subscription() {
                     </li>
                   ))}
                 </ul>
-                {isCurrent ? (
+                {isCurrent && subscription?.billing === billing ? (
                   <Button disabled className="w-full" variant="outline">باقتك الحالية</Button>
                 ) : subscription ? (
-                  <Button onClick={() => upgradeMutation.mutate({ planId: plan.id })} disabled={upgradeMutation.isPending}
+                  <Button onClick={() => upgradeMutation.mutate({ planId: plan.id, billing })} disabled={upgradeMutation.isPending}
                     className={`w-full ${isPopular ? "bg-navy-gradient text-white" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
                     variant={isPopular ? "default" : "outline"}>
-                    {upgradeMutation.isPending ? "جاري الترقية..." : "ترقية إلى هذه الباقة"}
+                    {upgradeMutation.isPending ? "جاري التحديث..." : isCurrent ? "تغيير دورة الفوترة" : "ترقية إلى هذه الباقة"}
                   </Button>
                 ) : (
-                  <Button onClick={() => createMutation.mutate({ planId: plan.id })} disabled={createMutation.isPending}
+                  <Button onClick={() => createMutation.mutate({ planId: plan.id, billing })} disabled={createMutation.isPending}
                     className={`w-full ${isPopular ? "bg-navy-gradient text-white" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
                     variant={isPopular ? "default" : "outline"}>
                     {createMutation.isPending ? "جاري التفعيل..." : "اشترك الآن"}

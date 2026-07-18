@@ -233,12 +233,10 @@ function ServicesSection() {
 function HowItWorksSection() {
   const { ref, inView } = useInView();
   const steps = [
-    { num: "01", title: "مقابلة وتحليل النشاط", desc: "نفهم طبيعة عملك ومتطلباتك المحاسبية لنخصص الوكيل المناسب.", icon: <Users className="w-5 h-5" /> },
-    { num: "02", title: "تحديد الباقة المناسبة", desc: "تختار الباقة التي تناسب حجم عملياتك وميزانيتك.", icon: <Star className="w-5 h-5" /> },
-    { num: "03", title: "التعاقد والتوقيع", desc: "توقيع الاتفاقية وتحديد نطاق الخدمة وآلية التواصل.", icon: <FileText className="w-5 h-5" /> },
-    { num: "04", title: "تهيئة النظام المحاسبي", desc: "إعداد Almoaser AI ERP وضبط الوكلاء وفق خطة حسابات شركتك.", icon: <Bot className="w-5 h-5" /> },
-    { num: "05", title: "البدء في التنفيذ", desc: "ترسل أوامرك عبر واتساب والوكيل ينفذها فوراً في النظام.", icon: <MessageCircle className="w-5 h-5" /> },
-    { num: "06", title: "المراجعة والتحسين", desc: "تقارير دورية ومراجعة مستمرة لضمان دقة البيانات.", icon: <TrendingUp className="w-5 h-5" /> },
+    { num: "01", title: "سجّل حسابك", desc: "أنشئ حسابك في دقيقة واحدة — بياناتك الأساسية فقط، دون مقابلات أو أوراق.", icon: <Users className="w-5 h-5" /> },
+    { num: "02", title: "اختر باقتك وابدأ التجربة", desc: "اختر الباقة المناسبة لحجم أعمالك وابدأ تجربة مجانية 3 أيام كاملة المزايا، دون دفع مسبق.", icon: <Star className="w-5 h-5" /> },
+    { num: "03", title: "اربط نظامك المحاسبي", desc: "يتصل حسابك بنظام المعاصر ERP تلقائياً، ويحصل وكيلك الذكي على رصيد نقاطك الشهري فوراً.", icon: <Bot className="w-5 h-5" /> },
+    { num: "04", title: "تحدّث ونفّذ فوراً", desc: "اكتب طلبك بالعربية — فاتورة، قيد، سند، تقرير — والوكيل ينفذه في النظام خلال ثوانٍ.", icon: <MessageCircle className="w-5 h-5" /> },
   ];
   return (
     <section id="how" className="py-24" ref={ref}>
@@ -248,10 +246,10 @@ function HowItWorksSection() {
             <Clock className="w-4 h-4" />
             كيف نعمل
           </div>
-          <h2 className="text-4xl font-bold text-navy mb-4">ستة خطوات للبدء</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">من أول اتصال حتى تشغيل وكيل AI خاص بشركتك في أقل من أسبوع.</p>
+          <h2 className="text-4xl font-bold text-navy mb-4">أربع خطوات وتبدأ فوراً</h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">تفعيل ذاتي بالكامل — من التسجيل حتى أول فاتورة ينفذها وكيلك الذكي في أقل من 10 دقائق.</p>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           {steps.map((s, i) => (
             <div key={i} className={`relative p-6 rounded-2xl border border-gray-100 bg-white hover:shadow-md transition-shadow ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.08}s` }}>
               <div className="flex items-start gap-4">
@@ -492,6 +490,7 @@ function PricingSection() {
   const { ref, inView } = useInView();
   const { data: plans, isLoading } = trpc.plans.list.useQuery();
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+  const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
 
   const planIcons = [<BookOpen className="w-6 h-6" />, <Zap className="w-6 h-6" />, <Bot className="w-6 h-6" />];
   const planColors = ["border-gray-200", "border-navy shadow-lg scale-105", "border-gold"];
@@ -506,7 +505,24 @@ function PricingSection() {
             الباقات والأسعار
           </div>
           <h2 className="text-4xl font-bold text-navy mb-4">باقات تناسب جميع الأعمال</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">أسعار شهرية شاملة بدون رسوم خفية. يمكنك الترقية أو الإلغاء في أي وقت.</p>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">أسعار بدون رسوم خفية — جميع الباقات تشمل الربط مع نظام المعاصر ERP ورصيد نقاط شهرياً. يمكنك الترقية أو الإلغاء في أي وقت.</p>
+          <p className="text-xs text-muted-foreground mt-2">الأسعار لا تشمل ضريبة القيمة المضافة (15%)</p>
+          {/* مبدّل الفوترة الشهرية/السنوية */}
+          <div className="inline-flex items-center gap-1 mt-6 p-1 rounded-full bg-white border border-gray-200 shadow-sm">
+            <button
+              onClick={() => setBilling("monthly")}
+              className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-navy text-white shadow" : "text-muted-foreground hover:text-navy"}`}
+            >
+              شهري
+            </button>
+            <button
+              onClick={() => setBilling("yearly")}
+              className={`px-5 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${billing === "yearly" ? "bg-navy text-white shadow" : "text-muted-foreground hover:text-navy"}`}
+            >
+              سنوي
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-dark"}`}>خصم 15%</span>
+            </button>
+          </div>
         </div>
         {isLoading ? (
           <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>
@@ -515,6 +531,10 @@ function PricingSection() {
             {plans?.map((plan, i) => {
               const features: string[] = plan.features ? JSON.parse(plan.features) : [];
               const isPopular = i === 1;
+              const monthly = Number(plan.price);
+              const discountPct = plan.yearlyDiscountPct ?? 15;
+              const yearlyTotal = Math.round(monthly * 12 * (1 - discountPct / 100));
+              const yearlyPerMonth = Math.round(yearlyTotal / 12);
               return (
                 <div key={plan.id} className={`rounded-2xl border-2 ${planColors[i]} bg-white p-8 relative ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.1}s` }}>
                   {planBadges[i] && (
@@ -526,9 +546,26 @@ function PricingSection() {
                     {planIcons[i]}
                   </div>
                   <h3 className="text-xl font-bold text-navy mb-1">{plan.nameAr}</h3>
-                  <div className="flex items-baseline gap-1 mb-6">
-                    <span className="text-4xl font-bold text-navy">{Number(plan.price).toLocaleString("ar-SA")}</span>
-                    <span className="text-muted-foreground">ريال / شهر</span>
+                  {billing === "monthly" ? (
+                    <div className="flex items-baseline gap-1 mb-2">
+                      <span className="text-4xl font-bold text-navy">{monthly.toLocaleString("ar-SA")}</span>
+                      <span className="text-muted-foreground">ريال / شهر</span>
+                    </div>
+                  ) : (
+                    <div className="mb-2">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-4xl font-bold text-navy">{yearlyPerMonth.toLocaleString("ar-SA")}</span>
+                        <span className="text-muted-foreground">ريال / شهر</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        <span className="line-through">{(monthly * 12).toLocaleString("ar-SA")}</span>
+                        <span className="text-gold-dark font-bold mr-1"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mb-6 text-xs font-medium">
+                    <span className="px-2 py-1 rounded-full bg-navy/5 text-navy">{plan.maxDocuments ?? 30} مستنداً / شهر</span>
+                    <span className="px-2 py-1 rounded-full bg-gold/10 text-gold-dark">{plan.monthlyCredits ?? 150} نقطة / شهر</span>
                   </div>
                   <ul className="space-y-3 mb-8">
                     {features.map((f, j) => (
