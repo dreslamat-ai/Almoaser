@@ -709,6 +709,14 @@ function translateErpError(raw: string): string {
   if (/LinkValidationError|Could not find/i.test(raw)) {
     const m = raw.match(/Could not find ([^:]+): ([^"\\,}]+)/i);
     if (m) return `السجل المرتبط غير موجود: ${m[1]} "${m[2]}" — ابحث عنه أولاً أو أنشئه ثم أعد المحاولة`;
+    // رسائل ERPNext المعرّبة: "لا يمكن أن تجد طريقة الدفع: Cash" أو نص unicode-escaped في exception
+    const mAr = raw.match(/لا يمكن أن تجد ([^:]+): ([^"\\,}]+)/);
+    if (mAr) return `السجل المرتبط غير موجود: ${mAr[1].trim()} "${mAr[2].trim()}" — استخدم الاسم الفعلي كما هو مسجل في النظام (ابحث عنه أولاً)`;
+    try {
+      const unescaped = JSON.parse(`"${raw.match(/"exception":"([^"]+)"/)?.[1] ?? ""}"`);
+      const mU = unescaped.match(/لا يمكن أن تجد ([^:]+): (.+)$/) ?? unescaped.match(/Could not find ([^:]+): (.+)$/i);
+      if (mU) return `السجل المرتبط غير موجود: ${mU[1].trim()} "${mU[2].trim()}" — استخدم الاسم الفعلي كما هو مسجل في النظام (ابحث عنه أولاً)`;
+    } catch { /* تجاهل */ }
     return "أحد السجلات المرتبطة (عميل/صنف/حساب) غير موجود في النظام";
   }
   if (/DuplicateEntryError|already exists/i.test(raw)) return "السجل موجود مسبقاً — استخدم الموجود بدلاً من إنشاء نسخة مكررة";
@@ -1103,8 +1111,37 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         posting_date: today,
         paid_amount: amount,
         received_amount: amount,
-        ...(args.mode_of_payment ? { mode_of_payment: args.mode_of_payment } : {}),
       };
+      // حل طريقة الدفع بمطابقة ذكية مع طرق الدفع الفعلية في النظام
+      if (args.mode_of_payment) {
+        const requested = String(args.mode_of_payment);
+        const mopData = await erpGET(`/api/resource/Mode%20of%20Payment?fields=${encodeURIComponent(JSON.stringify(["name"]))}&filters=${encodeURIComponent(JSON.stringify([["enabled", "=", 1]]))}`) as { data: Array<{ name: string }> };
+        const mops = (mopData?.data ?? []).map(m => m.name);
+        // مطابقة مباشرة أو تقريبية أو ترجمة إنجليزي→عربي شائعة
+        const EN_AR: Record<string, string[]> = {
+          cash: ["نقد", "نقدي", "كاش"],
+          "bank transfer": ["حوالة مصرفية", "تحويل بنكي", "حوالة"],
+          "wire transfer": ["حوالة مصرفية", "تحويل بنكي"],
+          cheque: ["شيك"],
+          check: ["شيك"],
+          "credit card": ["بطاقة ائتمان", "بطاقة"],
+          card: ["بطاقة ائتمان", "بطاقة"],
+          "bank draft": ["مسودة بنكية"],
+        };
+        const norm = (s: string) => normalizeArabic(s.trim().toLowerCase());
+        let resolvedMop = mops.find(m => norm(m) === norm(requested))
+          ?? mops.find(m => norm(m).includes(norm(requested)) || norm(requested).includes(norm(m)));
+        if (!resolvedMop) {
+          const aliases = EN_AR[requested.trim().toLowerCase()] ?? [];
+          resolvedMop = mops.find(m => aliases.some(a => norm(m) === norm(a) || norm(m).includes(norm(a))));
+        }
+        if (resolvedMop) {
+          paymentDoc.mode_of_payment = resolvedMop;
+        } else if (mops.length) {
+          return { result: { needs_clarification: true, reason: "mode_of_payment_not_found", requested, available_modes: mops, hint: "اختر إحدى طرق الدفع المتاحة في النظام" }, display: "" };
+        }
+        // إن لم توجد أي طرق دفع معرفة، نتجاهل الحقل ونكمل بالحسابات الافتراضية
+      }
       // جلب الحسابات الافتراضية: حساب الطرف (مدينون/دائنون) وحساب النقد
       const companyData = await erpGET(`/api/resource/Company/${encodeURIComponent(company)}`) as { data: { default_receivable_account?: string; default_payable_account?: string; default_cash_account?: string; default_bank_account?: string } };
       const cd = companyData?.data ?? {};
@@ -1399,7 +1436,7 @@ export const agentRouter = router({
 - **المبيعات**: فواتير مبيعات (إنشاء/عرض/اعتماد/تعديل/إلغاء/حذف)، عملاء (بحث/إنشاء/تعديل/حذف)
 - **المشتريات**: فواتير مشتريات (create_purchase_invoice/get_purchase_invoices)، موردين (get_suppliers/create_supplier) — نفس قاعدة منع التكرار تنطبق على الموردين
 - **التعديل والحذف الشامل**: update_document (تعديل أي حقل في فاتورة مسودة/عميل/مورد/صنف/قيد/دفعة)، cancel_document (إلغاء مستند معتمد)، delete_document (حذف نهائي مع إلغاء تلقائي للمعتمد) — أمثلة: "عدّل رقم جوال العميل محمود" → find_customer ثم update_document | "غيّر سعر صنف الاستشارة إلى 500" → find_item ثم update_document | "احذف الفاتورة SINV-0042" → تأكيد ثم delete_document | "ألغِ القيد JV-0010" → تأكيد ثم cancel_document
-- **الدفعات**: create_payment_entry — تسجيل قبض من عميل (Receive) أو صرف لمورد (Pay)، مع إمكانية ربط الدفعة بفاتورة محددة لسدادها (reference_invoice). عند قول المستخدم "سجّل دفعة/سداد/قبض/تحصيل من عميل" → Receive، "دفعنا/سددنا لمورد" → Pay
+- **الدفعات**: create_payment_entry — تسجيل قبض من عميل (Receive) أو صرف لمورد (Pay)، مع إمكانية ربط الدفعة بفاتورة محددة لسدادها (reference_invoice). عند قول المستخدم "سجّل دفعة/سداد/قبض/تحصيل من عميل" → Receive، "دفعنا/سددنا لمورد" → Pay. طريقة الدفع (mode_of_payment) اختيارية وتُحل تلقائياً بمطابقة ذكية مع طرق الدفع المسجلة في النظام (نقد/شيك/حوالة مصرفية...) — إن أعادت الأداة needs_clarification مع available_modes فاعرضها على المستخدم ليختار. لا تتوقف عن تسجيل الدفعة بحجة الإعدادات — الحسابات الافتراضية تُجلب تلقائياً من إعدادات الشركة
 - **قيود اليومية**: create_journal_entry — قيد مزدوج (مدين/دائن متساويان). قبل إنشاء القيد ابحث عن أسماء الحسابات الفعلية بـ get_accounts (الأسماء تتضمن اختصار الشركة مثل "Cash - X"). مثال: "سجل قيد: مدين الصندوق 3000 دائن المبيعات 3000" → get_accounts للصندوق والمبيعات ثم create_journal_entry
 - **سير سداد فاتورة**: "سجل سداد فاتورة SINV-XXX" → get_invoice_detail لمعرفة العميل والمبلغ المتبقي → create_payment_entry مع reference_invoice → اعرض الاعتماد
 - **إعدادات النظام لكافة الموديولات والمستندات**: get_settings لقراءة أي DocType إعدادات وupdate_settings لتعديله — يشمل ذلك بيانات الشركة، إعدادات البيع/الشراء/المخزون/الحسابات/النظام، قوالب الضرائب، **طرق الدفع (Mode of Payment) وربطها بحسابات الخزينة/الصندوق**، POS Profile، شروط الدفع، السنة المالية، مراكز التكلفة، المستودعات، وأي DocType آخر. أمثلة: "حدّث الرقم الضريبي للشركة" → update_settings(Company, {tax_id}) | "اربط طريقة الدفع نقدي بحساب الصندوق" → get_settings(Mode of Payment, name) لقراءة الوضع الحالي ثم update_settings(Mode of Payment, name, {accounts: [{company, default_account}]}) — ابحث عن اسم الحساب الفعلي بـ get_accounts أولاً | "غيّر العملة الافتراضية" → update_settings(Global Defaults). قبل أي تعديل إعدادات اقرأ القيم الحالية ولخّص التغيير للمستخدم
