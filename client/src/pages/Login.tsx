@@ -21,7 +21,7 @@ export default function Login() {
     onSuccess: async (data) => {
       toast.success(`مرحباً ${data.name}! تم تسجيل الدخول بنجاح`);
       await utils.auth.me.invalidate();
-      navigate("/dashboard");
+      navigate("/erp");
     },
     onError: (err) => {
       toast.error(err.message || "تعذّر تسجيل الدخول");

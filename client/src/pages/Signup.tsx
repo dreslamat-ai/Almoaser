@@ -29,7 +29,7 @@ export default function Signup() {
     onSuccess: async (data) => {
       toast.success(`مرحباً ${data.name}! بدأت فترتك التجريبية المجانية (3 أيام)`);
       await utils.auth.me.invalidate();
-      navigate("/dashboard");
+      navigate("/erp");
     },
     onError: (err) => {
       toast.error(err.message || "تعذّر إنشاء الحساب");

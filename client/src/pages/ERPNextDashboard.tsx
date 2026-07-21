@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -80,15 +81,16 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 export default function ERPNextDashboard() {
   const [, setLocation] = useLocation();
   const [refreshKey, setRefreshKey] = useState(0);
+  const { isAuthenticated } = useAuth();
 
   const { data: stats, isLoading: statsLoading, error: statsError, refetch } =
-    trpc.erpnext.getDashboardStats.useQuery(undefined, { staleTime: 3 * 60 * 1000, retry: 1 });
+    trpc.erpnext.getDashboardStats.useQuery(undefined, { staleTime: 3 * 60 * 1000, retry: 1, enabled: isAuthenticated });
 
   const { data: invoicesData, isLoading: invoicesLoading } =
-    trpc.erpnext.getSalesInvoices.useQuery({ limit: 6 }, { staleTime: 3 * 60 * 1000 });
+    trpc.erpnext.getSalesInvoices.useQuery({ limit: 6 }, { staleTime: 3 * 60 * 1000, enabled: isAuthenticated });
 
   const { data: customersData, isLoading: customersLoading } =
-    trpc.erpnext.getCustomers.useQuery({ limit: 5 }, { staleTime: 3 * 60 * 1000 });
+    trpc.erpnext.getCustomers.useQuery({ limit: 5 }, { staleTime: 3 * 60 * 1000, enabled: isAuthenticated });
 
   const invoices = (invoicesData?.data ?? []) as Array<{
     name: string; customer: string; posting_date: string;

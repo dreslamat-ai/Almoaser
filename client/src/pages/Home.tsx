@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   BookOpen, Bot, CheckCircle2, ChevronDown, DollarSign, FileText,
   BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
-  ArrowLeft, Star, Clock, TrendingUp
+  ArrowLeft, Star, Clock, TrendingUp, Send
 } from "lucide-react";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
@@ -110,7 +110,7 @@ function Navbar() {
         </div>
         <div className="flex items-center gap-3">
           {isAuthenticated ? (
-            <Button onClick={() => navigate("/dashboard")} className="bg-navy-gradient text-white hover:opacity-90">
+            <Button onClick={() => navigate("/erp")} className="bg-navy-gradient text-white hover:opacity-90">
               لوحة التحكم
             </Button>
           ) : (
@@ -142,19 +142,19 @@ function HeroSection() {
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 mb-8 animate-fade-in-up">
             <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
-            <span className="text-white/80 text-sm">منصة مسك الدفاتر الذكية #1 في المملكة</span>
+            <span className="text-white/80 text-sm">مكتب المحاسبة الذكي #1 في المملكة</span>
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-            وكلاء ذكاء اصطناعي<br />
+            محاسبون محترفون<br />
             <span className="text-gold">يمسكون دفاترك</span><br />
-            بدلاً عنك
+            بمساعدة النظام الذكي
           </h1>
           <p className="text-white/70 text-xl leading-relaxed mb-10 max-w-2xl animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
-            بدلاً من محاسب يعمل 8 ساعات، وظّف وكيل AI يعمل 24/7 — يُدخل الفواتير، يُسجّل القيود، ويُنتج التقارير عبر رسالة واتساب واحدة.
+            فريق محاسبي محترف يدعمه نظام ذكي يعمل 24/7 — يُدخل الفواتير، يُسجّل القيود، ويُنتج التقارير برسالة واحدة عبر تليجرام أو من الموقع مباشرة.
           </p>
           <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
             {isAuthenticated ? (
-              <Button size="lg" onClick={() => navigate("/dashboard")}
+              <Button size="lg" onClick={() => navigate("/erp")}
                 className="bg-gold text-white hover:bg-gold/90 text-base px-8 py-4 h-auto">
                 الذهاب للوحة التحكم
                 <ArrowLeft className="w-5 h-5 mr-2" />
@@ -198,9 +198,9 @@ function HeroSection() {
 function ServicesSection() {
   const { ref, inView } = useInView();
   const services = [
-    { icon: <BookOpen className="w-6 h-6" />, title: "مسك الدفاتر", desc: "تسجيل جميع العمليات المالية اليومية بدقة واحترافية عبر وكيل AI متخصص.", color: "text-blue-600", bg: "bg-blue-50" },
-    { icon: <FileText className="w-6 h-6" />, title: "إدارة الفواتير", desc: "إنشاء واعتماد فواتير المبيعات والمشتريات تلقائياً عبر رسالة واتساب.", color: "text-green-600", bg: "bg-green-50" },
-    { icon: <DollarSign className="w-6 h-6" />, title: "القيود المحاسبية", desc: "تسجيل القيود اليومية والتسويات بدقة مع مراجعة فورية من الوكيل.", color: "text-yellow-600", bg: "bg-yellow-50" },
+    { icon: <BookOpen className="w-6 h-6" />, title: "مسك الدفاتر", desc: "محاسبون محترفون يسجّلون عملياتك المالية اليومية بدقة، يدعمهم نظام ذكي متخصص.", color: "text-blue-600", bg: "bg-blue-50" },
+    { icon: <FileText className="w-6 h-6" />, title: "إدارة الفواتير", desc: "إنشاء واعتماد فواتير المبيعات والمشتريات فوراً برسالة عبر تليجرام أو من الموقع.", color: "text-green-600", bg: "bg-green-50" },
+    { icon: <DollarSign className="w-6 h-6" />, title: "القيود المحاسبية", desc: "تسجيل القيود اليومية والتسويات بدقة مع مراجعة محاسبية فورية.", color: "text-yellow-600", bg: "bg-yellow-50" },
     { icon: <BarChart3 className="w-6 h-6" />, title: "التقارير المالية", desc: "ميزانية، قائمة دخل، تقرير الذمم — جاهزة في ثوانٍ بأمر نصي.", color: "text-purple-600", bg: "bg-purple-50" },
     { icon: <Users className="w-6 h-6" />, title: "إدارة الرواتب", desc: "حساب الرواتب والمستحقات وإنشاء قيودها المحاسبية تلقائياً.", color: "text-red-600", bg: "bg-red-50" },
     { icon: <Shield className="w-6 h-6" />, title: "الامتثال الضريبي", desc: "احتساب ضريبة القيمة المضافة وإعداد الإقرارات الضريبية الدورية.", color: "text-teal-600", bg: "bg-teal-50" },
@@ -214,7 +214,7 @@ function ServicesSection() {
             خدماتنا
           </div>
           <h2 className="text-4xl font-bold text-navy mb-4">كل ما تحتاجه لإدارة محاسبتك</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">وكلاء AI متخصصون لكل قسم، يعملون بتناسق تام مع نظام Almoaser AI ERP الخاص بك.</p>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">محاسبون متخصصون لكل قسم، يعملون بتناسق تام مع نظام Almoaser AI ERP الخاص بك.</p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {services.map((s, i) => (
@@ -235,8 +235,8 @@ function HowItWorksSection() {
   const steps = [
     { num: "01", title: "سجّل حسابك", desc: "أنشئ حسابك في دقيقة واحدة — بياناتك الأساسية فقط، دون مقابلات أو أوراق.", icon: <Users className="w-5 h-5" /> },
     { num: "02", title: "اختر باقتك وابدأ التجربة", desc: "اختر الباقة المناسبة لحجم أعمالك وابدأ تجربة مجانية 3 أيام كاملة المزايا، دون دفع مسبق.", icon: <Star className="w-5 h-5" /> },
-    { num: "03", title: "اربط نظامك المحاسبي", desc: "يتصل حسابك بنظام المعاصر ERP تلقائياً، ويحصل وكيلك الذكي على رصيد نقاطك الشهري فوراً.", icon: <Bot className="w-5 h-5" /> },
-    { num: "04", title: "تحدّث ونفّذ فوراً", desc: "اكتب طلبك بالعربية — فاتورة، قيد، سند، تقرير — والوكيل ينفذه في النظام خلال ثوانٍ.", icon: <MessageCircle className="w-5 h-5" /> },
+    { num: "03", title: "اربط نظامك المحاسبي", desc: "يتصل حسابك بنظام المعاصر ERP تلقائياً، ويحصل حسابك على رصيد نقاطك الشهري فوراً.", icon: <Bot className="w-5 h-5" /> },
+    { num: "04", title: "تحدّث ونفّذ فوراً", desc: "اكتب طلبك بالعربية — فاتورة، قيد، سند، تقرير — والنظام الذكي ينفذه بإشراف محاسبينا خلال ثوانٍ.", icon: <MessageCircle className="w-5 h-5" /> },
   ];
   return (
     <section id="how" className="py-24" ref={ref}>
@@ -247,7 +247,7 @@ function HowItWorksSection() {
             كيف نعمل
           </div>
           <h2 className="text-4xl font-bold text-navy mb-4">أربع خطوات وتبدأ فوراً</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">تفعيل ذاتي بالكامل — من التسجيل حتى أول فاتورة ينفذها وكيلك الذكي في أقل من 10 دقائق.</p>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">تفعيل ذاتي بالكامل — من التسجيل حتى أول فاتورة ينفذها النظام الذكي في أقل من 10 دقائق.</p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           {steps.map((s, i) => (
@@ -267,8 +267,8 @@ function HowItWorksSection() {
     </section>
   );
 }
-// ─── قسم المحاكاة التفاعلية لواتساب ────────────────────────────────────────
-function WhatsAppDemoSection() {
+// ─── قسم المحاكاة التفاعلية لتليجرام ───────────────────────────────────────
+function TelegramDemoSection() {
   const { ref, inView } = useInView();
   const [activeScenario, setActiveScenario] = useState(0);
   const [visibleMessages, setVisibleMessages] = useState<number>(0);
@@ -308,15 +308,15 @@ function WhatsAppDemoSection() {
       <div className="container">
         {/* Header */}
         <div className={`text-center mb-14 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-100 text-green-700 text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-sky-100 text-sky-700 text-sm font-medium mb-4">
             <MessageCircle className="w-4 h-4" />
             محاكاة حية
           </div>
           <h2 className="text-4xl font-bold text-navy mb-4">
-            شاهد الوكيل الذكي <span className="text-gold">يعمل الآن</span>
+            شاهد النظام الذكي <span className="text-gold">يعمل الآن</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            أرسل أمراً بالعربية عبر واتساب — الوكيل يفهمه وينفذه في النظام المحاسبي خلال ثوانٍ.
+            أرسل أمراً بالعربية عبر تليجرام أو من الموقع مباشرة — النظام يفهمه وينفذه في نظامك المحاسبي خلال ثوانٍ.
           </p>
         </div>
 
@@ -339,13 +339,13 @@ function WhatsAppDemoSection() {
             </div>
           </div>
 
-          {/* يمين: هاتف واتساب */}
+          {/* يمين: هاتف تليجرام */}
           <div className="flex justify-center">
             <div className="relative w-[320px]">
               {/* إطار الهاتف */}
-              <div className="bg-[#111b21] rounded-[2.5rem] p-3 shadow-2xl border-4 border-gray-800">
+              <div className="bg-[#17212b] rounded-[2.5rem] p-3 shadow-2xl border-4 border-gray-800">
                 {/* شريط الحالة */}
-                <div className="bg-[#111b21] rounded-t-[2rem] px-4 pt-2 pb-1 flex items-center justify-between">
+                <div className="bg-[#17212b] rounded-t-[2rem] px-4 pt-2 pb-1 flex items-center justify-between">
                   <span className="text-white/50 text-[10px]">9:41</span>
                   <div className="flex gap-1">
                     <div className="w-3 h-1.5 bg-white/40 rounded-sm" />
@@ -353,19 +353,19 @@ function WhatsAppDemoSection() {
                   </div>
                 </div>
                 {/* رأس المحادثة */}
-                <div className="bg-[#1f2c34] px-4 py-3 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-navy-gradient flex items-center justify-center text-white font-bold text-sm flex-shrink-0">AI</div>
+                <div className="bg-[#242f3d] px-4 py-3 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#2ea6da] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">AI</div>
                   <div>
-                    <p className="text-white font-semibold text-sm">Almoaser AI Agent</p>
-                    <p className="text-green-400 text-xs flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block animate-pulse" />
+                    <p className="text-white font-semibold text-sm">Almoaser Bot</p>
+                    <p className="text-[#5eb5f7] text-xs flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#5eb5f7] inline-block animate-pulse" />
                       متصل الآن
                     </p>
                   </div>
                 </div>
                 {/* منطقة الرسائل */}
-                <div className="bg-[#0b141a] rounded-b-[2rem] px-3 py-4 min-h-[380px] max-h-[380px] overflow-y-auto space-y-3 flex flex-col">
-                  {/* خلفية نمط واتساب */}
+                <div className="bg-[#0e1621] rounded-b-[2rem] px-3 py-4 min-h-[380px] max-h-[380px] overflow-y-auto space-y-3 flex flex-col">
+                  {/* خلفية نمط تليجرام */}
                   <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
                   }} />
@@ -375,10 +375,10 @@ function WhatsAppDemoSection() {
                       className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"} animate-fade-in-up`}>
                       {msg.type === "pdf" ? (
                         /* ─── بطاقة PDF ─── */
-                        <div className="max-w-[88%] bg-[#202c33] rounded-2xl rounded-tl-sm shadow-sm overflow-hidden">
-                          <p className="text-green-400 text-[10px] font-semibold px-3 pt-2">Almoaser AI ✓</p>
+                        <div className="max-w-[88%] bg-[#182533] rounded-2xl rounded-tl-sm shadow-sm overflow-hidden">
+                          <p className="text-[#5eb5f7] text-[10px] font-semibold px-3 pt-2">Almoaser Bot ✓</p>
                           {/* معاينة PDF */}
-                          <div className="mx-3 my-2 bg-[#111b21] rounded-xl overflow-hidden border border-white/10">
+                          <div className="mx-3 my-2 bg-[#0e1621] rounded-xl overflow-hidden border border-white/10">
                             {/* شريط PDF أحمر */}
                             <div className="bg-red-600 px-3 py-2 flex items-center gap-2">
                               <div className="bg-white/20 rounded px-1.5 py-0.5 text-white text-[9px] font-bold tracking-wider">PDF</div>
@@ -405,7 +405,7 @@ function WhatsAppDemoSection() {
                               </div>
                             </div>
                             {/* شريط أسفل */}
-                            <div className="bg-[#1a2530] px-3 py-1.5 flex items-center justify-between">
+                            <div className="bg-[#242f3d] px-3 py-1.5 flex items-center justify-between">
                               <span className="text-gray-400 text-[9px]">{msg.pdfSize}</span>
                               <span className="text-blue-400 text-[9px] font-medium">اضغط للفتح ↓</span>
                             </div>
@@ -419,11 +419,11 @@ function WhatsAppDemoSection() {
                         /* ─── رسالة نصية عادية ─── */
                         <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-line shadow-sm ${
                           msg.from === "user"
-                            ? "bg-[#005c4b] text-white rounded-tr-sm"
-                            : "bg-[#202c33] text-gray-100 rounded-tl-sm"
+                            ? "bg-[#2b5278] text-white rounded-tr-sm"
+                            : "bg-[#182533] text-gray-100 rounded-tl-sm"
                         }`}>
                           {msg.from === "agent" && (
-                            <p className="text-green-400 text-[10px] font-semibold mb-1">Almoaser AI ✓</p>
+                            <p className="text-[#5eb5f7] text-[10px] font-semibold mb-1">Almoaser Bot ✓</p>
                           )}
                           {msg.text}
                           <p className={`text-[9px] mt-1 text-left ${msg.from === "user" ? "text-white/50" : "text-gray-500"}`}>
@@ -438,7 +438,7 @@ function WhatsAppDemoSection() {
                   {/* مؤشر الكتابة */}
                   {isPlaying && visibleMessages < scenario.messages.length && (
                     <div className="flex justify-start animate-fade-in-up">
-                      <div className="bg-[#202c33] px-4 py-3 rounded-2xl rounded-tl-sm">
+                      <div className="bg-[#182533] px-4 py-3 rounded-2xl rounded-tl-sm">
                         <div className="flex gap-1 items-center">
                           <div className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
                           <div className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -470,7 +470,7 @@ function WhatsAppDemoSection() {
             {[
               { icon: "⚡", title: "سرعة فائقة", desc: "ما كان يستغرق 15 دقيقة يتم في 5 ثوانٍ" },
               { icon: "🎯", title: "دقة 100%", desc: "لا أخطاء إدخال يدوي، البيانات تُسجَّل مباشرة" },
-              { icon: "🌙", title: "24/7 بلا توقف", desc: "الوكيل يعمل حتى في العطل والإجازات" },
+              { icon: "🌙", title: "24/7 بلا توقف", desc: "النظام يعمل حتى في العطل والإجازات" },
               { icon: "💬", title: "بالعربية الفصحى والعامية", desc: "يفهم طلبك بأي أسلوب تكتب به" },
             ].map((v, i) => (
               <div key={i} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-center hover:shadow-md transition-shadow">
@@ -686,6 +686,7 @@ function ContactSection() {
               {[
                 { icon: <Phone className="w-5 h-5" />, text: "+966 56 467 7377", href: "tel:+966564677377" },
                 { icon: <Mail className="w-5 h-5" />, text: "info@almoaser.com", href: "mailto:info@almoaser.com" },
+                { icon: <Send className="w-5 h-5" />, text: "تليجرام متاح 24/7", href: "https://t.me/AlmoaserBot" },
                 { icon: <MessageCircle className="w-5 h-5" />, text: "واتساب متاح 24/7", href: "https://wa.me/966564677377" },
               ].map((c, i) => (
                 <a key={i} href={c.href} target="_blank" rel="noopener noreferrer"
@@ -926,7 +927,7 @@ export default function Home() {
       <HeroSection />
       <ServicesSection />
       <HowItWorksSection />
-      <WhatsAppDemoSection />
+      <TelegramDemoSection />
       <PricingSection />
       <ContactSection />
       <Footer />

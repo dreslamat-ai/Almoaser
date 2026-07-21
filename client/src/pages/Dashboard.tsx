@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { InstallAppButton } from "@/components/InstallAppButton";
 import NotificationBell from "@/components/NotificationBell";
+import FloatingChatButton from "@/components/FloatingChatButton";
 import { useState } from "react";
 import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu } from "lucide-react";
 
@@ -228,14 +229,15 @@ export default function Dashboard() {
               <MessageCircle className="w-6 h-6 text-gold" />
             </div>
             <div className="flex-1">
-              <h3 className="font-bold text-lg">وكيل AI جاهز لمساعدتك</h3>
-              <p className="text-white/70 text-sm">أرسل أوامرك عبر واتساب وسينفذها الوكيل فوراً في Almoaser AI ERP</p>
+            <h3 className="font-bold text-lg">وكيل AI جاهز لمساعدتك</h3>
+              <p className="text-white/70 text-sm">أرسل أوامرك عبر تليجرام وسينفذها النظام الذكي فوراً بإشراف محاسبينا</p>
             </div>
-            <a href="https://wa.me/966564677377?text=مرحباً، أريد التواصل مع وكيل Almoaser AI ERP" target="_blank" rel="noopener noreferrer">
-              <Button className="bg-gold text-white hover:bg-gold/90 flex-shrink-0">تواصل عبر واتساب</Button>
+            <a href="https://t.me/AlmoaserBot" target="_blank" rel="noopener noreferrer">
+              <Button className="bg-gold text-white hover:bg-gold/90 flex-shrink-0">تواصل عبر تليجرام</Button>
             </a>
           </div>
         </div>
+        <FloatingChatButton />
       </main>
     </div>
   );

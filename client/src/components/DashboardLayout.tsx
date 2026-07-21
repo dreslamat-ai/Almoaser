@@ -20,15 +20,17 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Bot, Settings, FileText, BarChart3, Users, Download, X } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Bot, Settings, FileText, BarChart3, Users, Download, X, Home as HomeIcon } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import FloatingChatButton from "./FloatingChatButton";
 
 const menuItems = [
+  { icon: HomeIcon, label: "ملخص الحساب", path: "/dashboard" },
   { icon: LayoutDashboard, label: "الداشبورد", path: "/erp" },
-  { icon: Bot, label: "وكيل الذكاء الاصطناعي", path: "/agent" },
+  { icon: Bot, label: "المحادثة الذكية", path: "/agent" },
   { icon: FileText, label: "الفواتير", path: "/erp/invoices" },
   { icon: Users, label: "العملاء", path: "/erp/customers" },
   { icon: BarChart3, label: "التقارير", path: "/erp/reports" },
@@ -172,8 +174,9 @@ function DashboardLayoutContent({
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
 
-      const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
-      const newWidth = e.clientX - sidebarLeft;
+      // RTL: sidebar is on the right, so width grows toward the left
+      const sidebarRight = sidebarRef.current?.getBoundingClientRect().right ?? 0;
+      const newWidth = sidebarRight - e.clientX;
       if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
         setSidebarWidth(newWidth);
       }
@@ -202,8 +205,9 @@ function DashboardLayoutContent({
     <>
       <div className="relative" ref={sidebarRef}>
         <Sidebar
+          side="right"
           collapsible="icon"
-          className="border-r-0"
+          className="border-l border-sidebar-border"
           disableTransition={isResizing}
         >
           <SidebarHeader className="h-16 justify-center">
@@ -290,7 +294,7 @@ function DashboardLayoutContent({
           </SidebarFooter>
         </Sidebar>
         <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
+          className={`absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);
@@ -316,6 +320,7 @@ function DashboardLayoutContent({
           </div>
         )}
         <main className="flex-1 p-4">{children}</main>
+        <FloatingChatButton />
       </SidebarInset>
     </>
   );

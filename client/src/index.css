@@ -34,6 +34,16 @@
   --color-input: oklch(0.88 0.02 245);
   --color-ring: oklch(0.22 0.08 245);
 
+  /* ─── Sidebar Tokens (خلفية صلبة كحلية — إصلاح شفافية الشريط الجانبي) ─── */
+  --color-sidebar: oklch(0.18 0.08 245);
+  --color-sidebar-foreground: oklch(0.97 0.005 245);
+  --color-sidebar-primary: oklch(0.72 0.14 75);
+  --color-sidebar-primary-foreground: oklch(0.15 0.05 245);
+  --color-sidebar-accent: oklch(0.26 0.08 245);
+  --color-sidebar-accent-foreground: oklch(1 0 0);
+  --color-sidebar-border: oklch(0.30 0.07 245);
+  --color-sidebar-ring: oklch(0.72 0.14 75);
+
   --radius: 0.75rem;
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
@@ -127,4 +137,3 @@
     animation: slideInRight 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
   }
 }
-
