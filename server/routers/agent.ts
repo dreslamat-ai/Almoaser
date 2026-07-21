@@ -4,6 +4,7 @@
  */
 import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
+import { invokeAgentLLM } from "../llmProvider";
 import { storagePut, storageGetSignedUrl } from "../storage";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
@@ -1504,7 +1505,7 @@ ${buildExpertSkillsSection()}
       for (let iter = 0; iter < 8; iter++) {
         let response;
         try {
-          response = await invokeLLM({
+          response = await invokeAgentLLM({
             messages: llmMessages,
             tools: TOOLS,
             tool_choice: "auto",
@@ -1512,8 +1513,14 @@ ${buildExpertSkillsSection()}
           });
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : "LLM invocation failed";
-          console.error("[agent.chat] invokeLLM error:", errMsg);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذر الاتصال بالنموذج الذكي مؤقتاً — يرجى المحاولة مرة أخرى" });
+          console.error("[agent.chat] invokeAgentLLM error:", errMsg);
+          const quotaHit = /usage exhausted|insufficient_quota|412|429/i.test(errMsg);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: quotaHit
+              ? "رصيد النموذج الذكي غير كافٍ حالياً — يرجى شحن رصيد مزود النموذج (OpenAI) أو التواصل مع مدير النظام"
+              : "تعذر الاتصال بالنموذج الذكي مؤقتاً — يرجى المحاولة مرة أخرى",
+          });
         }
 
         const msg = response?.choices?.[0]?.message;
