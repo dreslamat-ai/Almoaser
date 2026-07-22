@@ -8,7 +8,7 @@ import { invokeAgentLLM } from "../llmProvider";
 import { storagePut, storageGetSignedUrl } from "../storage";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
-import { notifyUser } from "../notifications";
+import { notifyUser, notifyAdmins } from "../notifications";
 import { buildExpertSkillsSection } from "./agentPersona";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -1515,11 +1515,11 @@ ${buildExpertSkillsSection()}
           const errMsg = e instanceof Error ? e.message : "LLM invocation failed";
           console.error("[agent.chat] invokeAgentLLM error:", errMsg);
           const quotaHit = /usage exhausted|insufficient_quota|412|429/i.test(errMsg);
+          // السبب التقني للمدير فقط — العميل يرى رسالة عامة دون أي تفاصيل
+          alertAdminsProviderFailure(quotaHit ? `نفاد رصيد مزود النموذج: ${errMsg}` : errMsg);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: quotaHit
-              ? "رصيد النموذج الذكي غير كافٍ حالياً — يرجى شحن رصيد مزود النموذج (OpenAI) أو التواصل مع مدير النظام"
-              : "تعذر الاتصال بالنموذج الذكي مؤقتاً — يرجى المحاولة مرة أخرى",
+            message: "عذراً، المساعد الذكي مشغول حالياً — يرجى المحاولة بعد قليل 🙏",
           });
         }
 
@@ -1812,3 +1812,16 @@ ${buildExpertSkillsSection()}
       return { extracted, imageUrl: url };
     }),
 });
+// ─── إشعار المدير بأعطال مزود النموذج (مع منع التكرار خلال ساعة) ─────────────
+let lastProviderAlertAt = 0;
+function alertAdminsProviderFailure(technicalReason: string) {
+  const now = Date.now();
+  if (now - lastProviderAlertAt < 60 * 60 * 1000) return; // إشعار واحد كحد أقصى كل ساعة
+  lastProviderAlertAt = now;
+  notifyAdmins({
+    type: "provider_error",
+    title: "عطل في مزود النموذج الذكي — العملاء يتلقون رسالة انشغال",
+    body: `السبب التقني: ${technicalReason.slice(0, 300)}\n\nإن كان السبب نفاد الرصيد: اشحن رصيد OpenAI من platform.openai.com/settings/organization/billing`,
+    link: "/admin",
+  }).catch(() => {});
+}

@@ -317,3 +317,9 @@
 - [x] طلب ERPNEXT_URL / ERPNEXT_USERNAME / ERPNEXT_PASSWORD من المستخدم في حقول آمنة
 - [x] التحقق من صحة البيانات الجديدة — تسجيل دخول فعلي ناجح: loggedInAs "AI Accountant" (status 200)
 - [x] نشر النسخة والتأكد من عمل عمليات الوكيل في الإنتاج — فحص batch على almoaser.manus.space: openaiPing ok=true + erpPing ok=true (loggedInAs: AI Accountant)
+
+## إخفاء الأخطاء التقنية عن العملاء (بلاغ المستخدم Jul 22)
+- [x] استبدال رسائل الأخطاء التقنية (رصيد OpenAI/المزود) برسالة عامة لطيفة للعميل: "عذراً، المساعد الذكي مشغول حالياً — يرجى المحاولة بعد قليل 🙏"
+- [x] إشعار المدير (owner) تلقائياً بالسبب التقني الحقيقي عند حدوث خطأ مزود النموذج (alertAdminsProviderFailure مع throttle ساعة لمنع إغراق الإشعارات)
+- [x] التحقق من حالة رصيد OpenAI الحالية — openaiPing يعيد 200 ok=true (الرصيد سليم حالياً)
+- [x] اختبار + نشر (TypeScript نظيف، erpPing وopenaiPing ناجحان)
