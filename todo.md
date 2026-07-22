@@ -308,7 +308,7 @@
 - [x] حفظ OPENAI_API_KEY كسر آمن في بيئة المشروع
 - [x] تعديل استدعاء LLM في agent.chat لاستخدام OpenAI (gpt-4.1) مع fallback تلقائي للنموذج المدمج عند فشل المفتاح (server/llmProvider.ts)
 - [x] اختبار vitest يتحقق من مسار OpenAI والـ fallback (server/llmProvider.test.ts — 4 اختبارات ناجحة)
-- [ ] نشر والتحقق من عمل الوكيل في الإنتاج — ⚠ محجوب: حساب OpenAI للمستخدم بلا رصيد (429 insufficient_quota)؛ سيعمل تلقائياً فور شحن الرصيد
+- [x] نشر والتحقق من عمل الوكيل في الإنتاج — المستخدم شحن الرصيد، فحص openaiPing يعيد 200 ok=true (gpt-4.1 يستجيب بمفتاح المستخدم)
 
 ## ملاحظة صيانة (Jul 22)
 - [ ] ⚠ اختبارات erpnext.test.ts الأربعة تفشل لأن بيانات اعتماد ERPNext التجريبية (demo.almoaser.cloud / egcwebhost@gmail.com) لم تعد صالحة — 401 Invalid login credentials من الخادم الخارجي؛ غير مرتبط بتعديلات الكود، يتطلب من المستخدم تحديث ERPNEXT_PASSWORD

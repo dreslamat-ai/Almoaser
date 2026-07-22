@@ -94,3 +94,48 @@ export async function invokeAgentLLM(
   const result = await invokeLLM(params);
   return { ...result, _provider: "builtin" };
 }
+
+/**
+ * فحص خفيف لمفتاح OpenAI: استدعاء بأقل تكلفة ممكنة (max_tokens=1).
+ * يُستخدم للتشخيص فقط — لا يكشف قيمة المفتاح.
+ */
+export async function pingOpenAI(): Promise<{
+  hasKey: boolean;
+  keyHasNul?: boolean;
+  status?: number;
+  ok?: boolean;
+  error?: string;
+}> {
+  const raw = process.env.OPENAI_API_KEY;
+  if (!raw || raw.trim().length === 0) return { hasKey: false };
+  const keyHasNul = raw.includes("\u0000");
+  const key = raw.replace(/\u0000/g, "").trim();
+  try {
+    const r = await fetch(OPENAI_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 1,
+      }),
+    });
+    const body = await r.text().catch(() => "");
+    return {
+      hasKey: true,
+      keyHasNul,
+      status: r.status,
+      ok: r.ok,
+      error: r.ok ? undefined : body.slice(0, 200),
+    };
+  } catch (e) {
+    return {
+      hasKey: true,
+      keyHasNul,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
