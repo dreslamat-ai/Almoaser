@@ -316,4 +316,4 @@
 ## تحديث بيانات اعتماد ERPNext (طلب المستخدم Jul 22)
 - [x] طلب ERPNEXT_URL / ERPNEXT_USERNAME / ERPNEXT_PASSWORD من المستخدم في حقول آمنة
 - [x] التحقق من صحة البيانات الجديدة — تسجيل دخول فعلي ناجح: loggedInAs "AI Accountant" (status 200)
-- [ ] نشر النسخة والتأكد من عمل عمليات الوكيل في الإنتاج
+- [x] نشر النسخة والتأكد من عمل عمليات الوكيل في الإنتاج — فحص batch على almoaser.manus.space: openaiPing ok=true + erpPing ok=true (loggedInAs: AI Accountant)
