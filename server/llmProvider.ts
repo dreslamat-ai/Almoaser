@@ -139,3 +139,42 @@ export async function pingOpenAI(): Promise<{
     };
   }
 }
+/**
+ * فحص خفيف لبيانات اعتماد ERPNext الافتراضية: تسجيل دخول فعلي.
+ * لا يكشف كلمة المرور — يعيد فقط حالة النجاح واسم المستخدم المسجَّل.
+ */
+export async function pingErpNext(): Promise<{
+  hasConfig: boolean;
+  url?: string;
+  status?: number;
+  ok?: boolean;
+  loggedInAs?: string;
+  error?: string;
+}> {
+  const url = (process.env.ERPNEXT_URL ?? "").replace(/\u0000/g, "").trim().replace(/\/+$/, "");
+  const usr = (process.env.ERPNEXT_USERNAME ?? "").replace(/\u0000/g, "").trim();
+  const pwd = (process.env.ERPNEXT_PASSWORD ?? "").replace(/\u0000/g, "");
+  if (!url || !usr || !pwd) return { hasConfig: false };
+  try {
+    const r = await fetch(`${url}/api/method/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usr, pwd }),
+    });
+    const sid = (r.headers.get("set-cookie") ?? "").match(/sid=([^;]+)/)?.[1];
+    const body = await r.text().catch(() => "");
+    let fullName: string | undefined;
+    try { fullName = (JSON.parse(body) as { full_name?: string }).full_name; } catch { /* ignore */ }
+    const ok = r.ok && !!sid && sid !== "Guest";
+    return {
+      hasConfig: true,
+      url,
+      status: r.status,
+      ok,
+      loggedInAs: ok ? fullName : undefined,
+      error: ok ? undefined : body.slice(0, 150),
+    };
+  } catch (e) {
+    return { hasConfig: true, url, error: e instanceof Error ? e.message : String(e) };
+  }
+}

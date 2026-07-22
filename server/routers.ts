@@ -8,7 +8,7 @@ import { invokeLLM } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
 import { agentRouter } from "./routers/agent";
 import { paymentsRouter } from "./routers/payments";
-import { pingOpenAI } from "./llmProvider";
+import { pingOpenAI, pingErpNext } from "./llmProvider";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, testErpConnection, encryptPassword } from "./erpConnection";
 import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
 import { notifyUser, notifyAdmins, maybeNotifyTrialEnding } from "./notifications";
@@ -62,6 +62,7 @@ export const appRouter = router({
   // ─── تشخيص خفيف لمزود النموذج (لا يكشف الأسرار) ──────────────────────────
   diagnostics: router({
     openaiPing: publicProcedure.query(() => pingOpenAI()),
+    erpPing: publicProcedure.query(() => pingErpNext()),
   }),
   // ─── إعدادات اتصال ERPNext لكل مستخدم ─────────────────────────────────────
   erpConnection: router({
