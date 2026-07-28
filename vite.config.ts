@@ -192,6 +192,11 @@ const plugins = [
       globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
       maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MiB — الحزمة الرئيسية تتجاوز حد 2MiB الافتراضي
       importScripts: ["push-sw.js"], // معالج إشعارات Web Push
+      // بدون هذين الخيارين، الـ service worker الجديد يفضل "منتظر" (waiting) لحد ما
+      // المستخدم يقفل كل تبويبات الموقع — فيشوف نسخة قديمة من الكود حتى بعد نشر تحديث
+      skipWaiting: true,
+      clientsClaim: true,
+      cleanupOutdatedCaches: true,
       runtimeCaching: [
         {
           urlPattern: /^https:\/\/demo\.almoaser\.cloud\/.*/i,

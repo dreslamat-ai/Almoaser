@@ -4,9 +4,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
+import { registerSW } from "virtual:pwa-register";
+import { toast } from "sonner";
 import App from "./App";
 import { startLogin } from "./const";
 import "./index.css";
+
+// نُخطر المستخدم بوجود تحديث جديد بدل الاعتماد على skipWaiting فقط —
+// بدونها ممكن يفضل يشوف نسخة قديمة من الواجهة لحد ما يعمل تحديث يدوي
+const updateSW = registerSW({
+  onNeedRefresh() {
+    toast.info("تحديث جديد متاح", {
+      description: "أعد تحميل الصفحة لرؤية آخر التحديثات",
+      duration: Infinity,
+      action: { label: "تحديث الآن", onClick: () => updateSW(true) },
+    });
+  },
+});
 
 const queryClient = new QueryClient();
 

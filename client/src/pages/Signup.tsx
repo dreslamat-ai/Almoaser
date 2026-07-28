@@ -36,7 +36,11 @@ export default function Signup() {
     },
   });
 
-  const goToStep2 = (e: React.FormEvent) => {
+  // نتحقق من بيانات ERPNext فوراً هنا بدل الانتظار لنهاية الخطوة الثانية —
+  // لو غلط، المستخدم يعرف فوراً بدل ما يختار باقة ويكتشف الخطأ بعدها
+  const testCredsMutation = trpc.auth.testErpCredentials.useMutation();
+
+  const goToStep2 = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!erpUrl.trim() || !/^https?:\/\/.+/.test(erpUrl.trim())) {
       toast.error("أدخل رابط نظامك بشكل صحيح — يجب أن يبدأ بـ https://");
@@ -50,6 +54,12 @@ export default function Signup() {
       toast.error("أدخل كلمة المرور");
       return;
     }
+    const result = await testCredsMutation.mutateAsync({ erpUrl: erpUrl.trim(), email: email.trim(), password });
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`تم التحقق من حسابك — مرحباً ${result.fullName}`);
     setStep(2);
   };
 
@@ -138,8 +148,10 @@ export default function Signup() {
                 <Input id="s-phone" dir="ltr" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+9665xxxxxxxx" className="text-left" />
               </div>
             </div>
-            <Button type="submit" className="w-full h-11 gap-2">
-              التالي: اختيار الباقة <ArrowLeft className="w-4 h-4" />
+            <Button type="submit" className="w-full h-11 gap-2" disabled={testCredsMutation.isPending}>
+              {testCredsMutation.isPending
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق من حسابك...</>
+                : <>التالي: اختيار الباقة <ArrowLeft className="w-4 h-4" /></>}
             </Button>
           </form>
         )}

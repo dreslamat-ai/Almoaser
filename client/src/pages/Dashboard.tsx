@@ -102,6 +102,40 @@ function Sidebar({ active }: { active: string }) {
 
 export { Sidebar };
 
+function GettingStartedCard({ hasErpConnection, hasConversation, isOwner }: {
+  hasErpConnection: boolean; hasConversation: boolean; isOwner: boolean;
+}) {
+  const [, navigate] = useLocation();
+  const steps = [
+    { done: hasErpConnection, label: "اربط نظام ERPNext أو Odoo الخاص بشركتك", path: "/channels", cta: "اربط الآن" },
+    { done: hasConversation, label: "جرّب محادثة مع الوكيل الذكي المحاسبي", path: "/agent", cta: "ابدأ محادثة" },
+    ...(isOwner ? [{ done: false, label: "ادعُ زملاءك للعمل معك على نفس الحساب (اختياري)", path: "/team", cta: "إدارة الفريق" }] : []),
+  ];
+  const remaining = steps.filter(s => !s.done);
+  if (remaining.length === 0 || (remaining.length === 1 && remaining[0].path === "/team")) return null;
+
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm mb-6">
+      <h2 className="font-bold text-navy mb-3 text-sm">ابدأ من هنا 🚀</h2>
+      <div className="space-y-2">
+        {steps.map(s => (
+          <div key={s.path} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-gray-50">
+            <div className="flex items-center gap-2 min-w-0">
+              {s.done
+                ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                : <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />}
+              <span className={`text-sm truncate ${s.done ? "text-muted-foreground line-through" : "text-navy"}`}>{s.label}</span>
+            </div>
+            {!s.done && (
+              <Button size="sm" variant="outline" className="text-xs h-7 shrink-0" onClick={() => navigate(s.path)}>{s.cta}</Button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, navigate] = useLocation();
@@ -109,6 +143,8 @@ export default function Dashboard() {
   const { data: invoices } = trpc.invoices.list.useQuery(undefined, { enabled: isAuthenticated });
   const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: isAuthenticated });
   const { data: plans } = trpc.plans.list.useQuery();
+  const { data: erpConn } = trpc.erpConnection.get.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: conversations } = trpc.agent.listConversations.useQuery(undefined, { enabled: isAuthenticated });
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>;
   if (!isAuthenticated) {
@@ -149,6 +185,12 @@ export default function Dashboard() {
             <NotificationBell />
           </div>
         </div>
+
+        <GettingStartedCard
+          hasErpConnection={Boolean(erpConn)}
+          hasConversation={(conversations?.length ?? 0) > 0}
+          isOwner={user?.orgRole === "owner"}
+        />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {stats.map((s, i) => (
