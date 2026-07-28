@@ -14,26 +14,38 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isPending, setIsPending] = useState(false);
   const utils = trpc.useUtils();
 
-  const loginMutation = trpc.auth.loginWithErp.useMutation({
-    onSuccess: async (data) => {
-      toast.success(`مرحباً ${data.name}! تم تسجيل الدخول بنجاح`);
-      await utils.auth.me.invalidate();
-      navigate("/erp");
-    },
-    onError: (err) => {
-      toast.error(err.message || "تعذّر تسجيل الدخول");
-    },
-  });
+  const loginMemberMutation = trpc.auth.loginMember.useMutation();
+  const loginErpMutation = trpc.auth.loginWithErp.useMutation();
 
-  const submit = (e: React.FormEvent) => {
+  // نجرّب أولاً دخول المستخدم الفرعي (باسورد محلي) — أسرع وأخف على ERPNext.
+  // لو الحساب مش مستخدماً فرعياً، نجرّب دخول ERPNext المعتاد (لمالكي الحسابات).
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
       toast.error("أدخل البريد الإلكتروني وكلمة المرور");
       return;
     }
-    loginMutation.mutate({ email: email.trim(), password });
+    setIsPending(true);
+    try {
+      const data = await loginMemberMutation.mutateAsync({ email: email.trim(), password });
+      toast.success(`مرحباً ${data.name}! تم تسجيل الدخول بنجاح`);
+      await utils.auth.me.invalidate();
+      navigate("/erp");
+    } catch {
+      try {
+        const data = await loginErpMutation.mutateAsync({ email: email.trim(), password });
+        toast.success(`مرحباً ${data.name}! تم تسجيل الدخول بنجاح`);
+        await utils.auth.me.invalidate();
+        navigate("/erp");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "تعذّر تسجيل الدخول");
+      }
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (
@@ -62,7 +74,7 @@ export default function Login() {
               placeholder="you@example.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              disabled={loginMutation.isPending}
+              disabled={isPending}
               className="text-left"
             />
           </div>
@@ -77,7 +89,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                disabled={loginMutation.isPending}
+                disabled={isPending}
                 className="text-left pl-10"
               />
               <button
@@ -91,8 +103,8 @@ export default function Login() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full h-11 gap-2" disabled={loginMutation.isPending}>
-            {loginMutation.isPending
+          <Button type="submit" className="w-full h-11 gap-2" disabled={isPending}>
+            {isPending
               ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق من حسابك...</>
               : <><LogIn className="w-4 h-4" /> تسجيل الدخول</>}
           </Button>
