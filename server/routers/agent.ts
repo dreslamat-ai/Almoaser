@@ -10,8 +10,39 @@ import { transcribeAudio } from "../_core/voiceTranscription";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
 import { notifyUser, notifyAdmins } from "../notifications";
 import { buildExpertSkillsSection } from "./agentPersona";
+import { parsePermissions } from "../organizations";
+import type { MemberPermissions, User } from "../../drizzle/schema";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+
+// ─── صلاحيات المستخدمين الفرعيين على أدوات الوكيل ─────────────────────────────
+// null = القراءة/الاستخدام العام متاحة لكل المستخدمين (مالك أو فرعي) بلا قيد
+const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = {
+  get_invoices: "viewInvoices", get_invoice_detail: "viewInvoices",
+  get_customers: null, get_items: null, get_suppliers: null,
+  create_invoice: "createInvoices", submit_invoice: "createInvoices",
+  create_customer: "createInvoices", create_item: "createInvoices", create_supplier: "createInvoices",
+  get_sales_report: "viewInvoices",
+  get_purchase_invoices: "viewInvoices", create_purchase_invoice: "createInvoices",
+  get_payments: "viewInvoices", create_payment_entry: "managePayments",
+  get_accounts: null, get_journal_entries: "viewInvoices", create_journal_entry: "manageJournalEntries",
+  submit_document: "createInvoices",
+  update_document: "createInvoices",
+  cancel_document: "manageJournalEntries",
+  delete_document: "manageErpSettings",
+  get_settings: "viewInvoices",
+  update_settings: "manageErpSettings",
+};
+
+function requireToolPermission(user: User, toolName: string): void {
+  if (user.orgRole === "owner") return;
+  const required = TOOL_PERMISSIONS[toolName];
+  if (!required) return;
+  const perms = parsePermissions(user.permissions);
+  if (!perms[required]) {
+    throw new Error("ليس لديك صلاحية لتنفيذ هذا الإجراء — تواصل مع مدير الحساب لمنحك الصلاحية المطلوبة");
+  }
+}
 
 // ─── ERPNext Per-User Connection (AsyncLocalStorage) ─────────────────────────
 // كل طلب يحمل إعدادات اتصال المستخدم (رابطه/مستخدمه/كلمة مروره) عبر سياق غير متزامن،
@@ -1562,17 +1593,18 @@ ${buildExpertSkillsSection()}
           let toolResult: string;
           let displayData = "";
           try {
+            requireToolPermission(ctx.user, tc.function.name);
             const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
             const { result, display } = await executeTool(tc.function.name, args);
             toolResult = JSON.stringify(result);
             displayData = display;
-            // ─── خصم 5 نقاط لكل مستند ERP يُنشأ بنجاح (فاتورة/دفعة/قيد) ───
+            // ─── خصم 5 نقاط لكل مستند ERP يُنشأ بنجاح (فاتورة/دفعة/قيد) — من رصيد المنظمة المشترك ───
             try {
               const DOC_TOOLS = new Set(["create_invoice", "create_purchase_invoice", "create_payment_entry", "create_journal_entry"]);
               const resObj = result as { error?: unknown; needs_clarification?: unknown; duplicate_prevented?: unknown } | null;
               const succeeded = resObj && typeof resObj === "object" && !resObj.error && !resObj.needs_clarification && !resObj.duplicate_prevented;
-              if (DOC_TOOLS.has(tc.function.name) && succeeded) {
-                await credits.deductCredits(ctx.user.id, credits.DOCUMENT_COST, "document", `إنشاء مستند (${tc.function.name})`).catch(() => {});
+              if (DOC_TOOLS.has(tc.function.name) && succeeded && ctx.effectiveUserId) {
+                await credits.deductCredits(ctx.effectiveUserId, credits.DOCUMENT_COST, "document", `إنشاء مستند (${tc.function.name})`).catch(() => {});
               }
             } catch { /* خصم النقاط لا يوقف التنفيذ */ }
             // إشعار داخل الموقع + push عند إنشاء/اعتماد فاتورة عبر الوكيل

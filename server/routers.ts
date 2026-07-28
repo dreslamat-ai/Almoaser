@@ -10,6 +10,11 @@ import { paymentsRouter } from "./routers/payments";
 import { pingOpenAI, pingErpNext, pingOpenRouter } from "./llmProvider";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, testErpConnection, encryptPassword } from "./erpConnection";
 import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
+import {
+  getOrganizationForUser, listOrgMembers, inviteSubUser,
+  updateMemberPermissions, removeMember, loginSubUserWithPassword,
+  requireMemberPermission,
+} from "./organizations";
 import { notifyUser, notifyAdmins, maybeNotifyTrialEnding } from "./notifications";
 import { notificationsRouter } from "./routers/notificationsRouter";
 import { sdk } from "./_core/sdk";
@@ -69,8 +74,8 @@ export const appRouter = router({
     get: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import("./db");
       const db = await getDb();
-      if (!db) return null;
-      const rows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, ctx.user.id)).limit(1);
+      if (!db || !ctx.effectiveUserId) return null;
+      const rows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, ctx.effectiveUserId)).limit(1);
       const conn = rows[0];
       if (!conn) return null;
       // لا نرجع كلمة المرور أبداً
@@ -83,6 +88,7 @@ export const appRouter = router({
         password: z.string().min(1, "كلمة المرور مطلوبة"),
       }))
       .mutation(async ({ input, ctx }) => {
+        requireMemberPermission(ctx.user, "manageErpSettings");
         const cleanUrl = input.url.replace(/\/+$/, "");
         // اختبار الاتصال قبل الحفظ
         const test = await testErpConnection(cleanUrl, input.username, input.password);
@@ -91,8 +97,8 @@ export const appRouter = router({
         }
         const { getDb } = await import("./db");
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
-        const existing = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, ctx.user.id)).limit(1);
+        if (!db || !ctx.effectiveUserId) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+        const existing = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, ctx.effectiveUserId)).limit(1);
         const values = {
           url: cleanUrl,
           username: input.username,
@@ -100,9 +106,9 @@ export const appRouter = router({
           lastVerifiedAt: new Date(),
         };
         if (existing[0]) {
-          await db.update(erpnextConnections).set(values).where(eq(erpnextConnections.userId, ctx.user.id));
+          await db.update(erpnextConnections).set(values).where(eq(erpnextConnections.userId, ctx.effectiveUserId));
         } else {
-          await db.insert(erpnextConnections).values({ ...values, userId: ctx.user.id });
+          await db.insert(erpnextConnections).values({ ...values, userId: ctx.effectiveUserId });
         }
         return { success: true, loggedInAs: test.loggedInAs };
       }),
@@ -116,15 +122,34 @@ export const appRouter = router({
         return testErpConnection(input.url, input.username, input.password);
       }),
     remove: protectedProcedure.mutation(async ({ ctx }) => {
+      requireMemberPermission(ctx.user, "manageErpSettings");
       const { getDb } = await import("./db");
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
-      await db.delete(erpnextConnections).where(eq(erpnextConnections.userId, ctx.user.id));
+      if (!db || !ctx.effectiveUserId) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+      await db.delete(erpnextConnections).where(eq(erpnextConnections.userId, ctx.effectiveUserId));
       return { success: true };
     }),
   }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ?? null),
+    // تسجيل دخول مستخدم فرعي (بكلمة مرور محلية — لا يملك حساب ERPNext خاص به)
+    loginMember: publicProcedure
+      .input(z.object({
+        email: z.string().trim().min(3).max(320),
+        password: z.string().min(1).max(256),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await loginSubUserWithPassword(input.email, input.password);
+        if (!result.ok) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: result.error });
+        }
+        const sessionToken = await sdk.createSessionToken(result.user.openId, {
+          name: result.user.name ?? "",
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
+        return { success: true, name: result.user.name, email: result.user.email } as const;
+      }),
     // تسجيل الدخول بحساب ERPNext (نفس بريد وكلمة مرور النظام)
     loginWithErp: publicProcedure
       .input(z.object({
@@ -192,26 +217,29 @@ export const appRouter = router({
   }),
 
   credits: router({
-    // الرصيد الحالي مع ضمان التجديد الشهري
+    // الرصيد الحالي مع ضمان التجديد الشهري (مشترك بين كل مستخدمي المنظمة)
     balance: protectedProcedure.query(async ({ ctx }) => {
       const { getCreditsBalance } = await import("./credits");
-      return (await getCreditsBalance(ctx.user.id)) ?? null;
+      if (!ctx.effectiveUserId) return null;
+      return (await getCreditsBalance(ctx.effectiveUserId)) ?? null;
     }),
-    // سجل حركات النقاط
+    // سجل حركات النقاط (كل حركات المنظمة، من كل المستخدمين)
     transactions: protectedProcedure.query(async ({ ctx }) => {
       const { getCreditTransactions } = await import("./credits");
-      return getCreditTransactions(ctx.user.id);
+      if (!ctx.effectiveUserId) return [];
+      return getCreditTransactions(ctx.effectiveUserId);
     }),
   }),
 
   subscription: router({
     get: protectedProcedure.query(async ({ ctx }) => {
+      if (!ctx.effectiveUserId) return undefined;
       // إن انتهت فترة التجربة تُفعَّل الباقة المختارة تلقائياً قبل الإرجاع
-      await activateTrialIfExpired(ctx.user.id);
-      const sub = await getSubscriptionByUserId(ctx.user.id);
+      await activateTrialIfExpired(ctx.effectiveUserId);
+      const sub = await getSubscriptionByUserId(ctx.effectiveUserId);
       // إشعار اقتراب انتهاء التجربة (آخر 24 ساعة، بلا تكرار يومي)
       if (sub?.status === "trial" && sub.endDate) {
-        maybeNotifyTrialEnding(ctx.user.id, sub.endDate).catch(() => {});
+        maybeNotifyTrialEnding(ctx.effectiveUserId, sub.endDate).catch(() => {});
       }
       return sub;
     }),
@@ -225,6 +253,9 @@ export const appRouter = router({
         vatNumber: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        if (ctx.user.orgRole !== "owner") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الاشتراك متاحة لمالك الحساب فقط" });
+        }
         const existing = await getSubscriptionByUserId(ctx.user.id);
         if (existing) throw new TRPCError({ code: "CONFLICT", message: "لديك اشتراك بالفعل" });
         const { billing, ...rest } = input;
@@ -244,6 +275,9 @@ export const appRouter = router({
     upgrade: protectedProcedure
       .input(z.object({ planId: z.number(), billing: z.enum(["monthly", "yearly"]).optional() }))
       .mutation(async ({ ctx, input }) => {
+        if (ctx.user.orgRole !== "owner") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الاشتراك متاحة لمالك الحساب فقط" });
+        }
         const existing = await getSubscriptionByUserId(ctx.user.id);
         if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك" });
         const plan = await getPlanById(input.planId);
@@ -261,11 +295,84 @@ export const appRouter = router({
     switchBilling: protectedProcedure
       .input(z.object({ billing: z.enum(["monthly", "yearly"]) }))
       .mutation(async ({ ctx, input }) => {
+        if (ctx.user.orgRole !== "owner") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الاشتراك متاحة لمالك الحساب فقط" });
+        }
         const existing = await getSubscriptionByUserId(ctx.user.id);
         if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك" });
         if (existing.billing === input.billing) return { success: true, unchanged: true };
         await updateSubscription(existing.id, { billing: input.billing });
         return { success: true, unchanged: false };
+      }),
+  }),
+
+  organization: router({
+    // معلومات المنظمة الحالية (اسمها، دور المستخدم الحالي فيها)
+    get: protectedProcedure.query(async ({ ctx }) => {
+      const org = await getOrganizationForUser(ctx.user);
+      return org ? { id: org.id, name: org.name, isOwner: ctx.user.orgRole === "owner" } : null;
+    }),
+    // قائمة أعضاء المنظمة (لمالك الحساب فقط)
+    members: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.orgRole !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "لمالك الحساب فقط" });
+      const org = await getOrganizationForUser(ctx.user);
+      if (!org) return [];
+      return listOrgMembers(org.id);
+    }),
+    // دعوة مستخدم فرعي جديد بصلاحيات محددة
+    inviteMember: protectedProcedure
+      .input(z.object({
+        name: z.string().trim().min(1),
+        email: z.string().trim().email(),
+        password: z.string().min(6),
+        permissions: z.object({
+          viewInvoices: z.boolean().optional(),
+          createInvoices: z.boolean().optional(),
+          managePayments: z.boolean().optional(),
+          manageErpSettings: z.boolean().optional(),
+          manageJournalEntries: z.boolean().optional(),
+        }).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.orgRole !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "لمالك الحساب فقط" });
+        const org = await getOrganizationForUser(ctx.user);
+        if (!org) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّر تحديد المنظمة" });
+        const result = await inviteSubUser({
+          organizationId: org.id,
+          name: input.name,
+          email: input.email,
+          password: input.password,
+          permissions: input.permissions,
+        });
+        if (!result.ok) throw new TRPCError({ code: "BAD_REQUEST", message: result.error });
+        return { success: true, userId: result.userId };
+      }),
+    updateMemberPermissions: protectedProcedure
+      .input(z.object({
+        memberId: z.number(),
+        permissions: z.object({
+          viewInvoices: z.boolean().optional(),
+          createInvoices: z.boolean().optional(),
+          managePayments: z.boolean().optional(),
+          manageErpSettings: z.boolean().optional(),
+          manageJournalEntries: z.boolean().optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.orgRole !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "لمالك الحساب فقط" });
+        const org = await getOrganizationForUser(ctx.user);
+        if (!org) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّر تحديد المنظمة" });
+        await updateMemberPermissions(input.memberId, org.id, input.permissions);
+        return { success: true };
+      }),
+    removeMember: protectedProcedure
+      .input(z.object({ memberId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.orgRole !== "owner") throw new TRPCError({ code: "FORBIDDEN", message: "لمالك الحساب فقط" });
+        const org = await getOrganizationForUser(ctx.user);
+        if (!org) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّر تحديد المنظمة" });
+        await removeMember(input.memberId, org.id);
+        return { success: true };
       }),
   }),
 
