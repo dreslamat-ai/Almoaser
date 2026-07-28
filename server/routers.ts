@@ -5,7 +5,6 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
-import { notifyOwner } from "./_core/notification";
 import { agentRouter } from "./routers/agent";
 import { paymentsRouter } from "./routers/payments";
 import { pingOpenAI, pingErpNext } from "./llmProvider";
@@ -337,9 +336,9 @@ export const appRouter = router({
         });
         // إشعار المالك عند تعليق العميل على مهمة
         if (ctx.user.role !== "admin") {
-          notifyOwner({
+          notifyAdmins({
             title: "تعليق جديد على مهمة — Almoaser AI ERP",
-            content: `المهمة: ${task.title}\nمن: ${ctx.user.name ?? "عميل"}\nالتعليق: ${input.content.slice(0, 300)}`,
+            body: `المهمة: ${task.title}\nمن: ${ctx.user.name ?? "عميل"}\nالتعليق: ${input.content.slice(0, 300)}`,
           }).catch(() => {});
         }
         return { success: true };
@@ -365,9 +364,9 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await createRegistrationRequest(input);
         // إشعار المسؤول بطلب تسجيل جديد (لا يوقف العملية عند الفشل)
-        notifyOwner({
+        notifyAdmins({
           title: "طلب تسجيل جديد — Almoaser AI ERP",
-          content: `الاسم: ${input.name}\nالبريد: ${input.email}\nالجوال: ${input.phone}\nالشركة: ${input.companyName ?? "-"}\nالنشاط: ${input.companyType ?? "-"}`,
+          body: `الاسم: ${input.name}\nالبريد: ${input.email}\nالجوال: ${input.phone}\nالشركة: ${input.companyName ?? "-"}\nالنشاط: ${input.companyType ?? "-"}`,
         }).catch(() => {});
         return { success: true };
       }),
