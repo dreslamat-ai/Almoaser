@@ -9,7 +9,7 @@ import { agentRouter } from "./routers/agent";
 import { paymentsRouter } from "./routers/payments";
 import { pingOpenAI, pingErpNext, pingOpenRouter } from "./llmProvider";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, testConnectionByProvider, encryptPassword } from "./erpConnection";
-import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
+import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired, verifyErpCredentials } from "./erpAuth";
 import {
   getOrganizationForUser, listOrgMembers, inviteSubUser,
   updateMemberPermissions, removeMember, loginSubUserWithPassword,
@@ -175,6 +175,17 @@ export const appRouter = router({
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
         return { success: true, name: result.result.fullName, email: result.result.email } as const;
+      }),
+    // فحص بيانات ERPNext مبكراً أثناء التسجيل (قبل اختيار الباقة) — رد فعل أسرع للمستخدم
+    testErpCredentials: publicProcedure
+      .input(z.object({
+        erpUrl: z.string().trim().min(8).max(500),
+        email: z.string().trim().min(3).max(320),
+        password: z.string().min(1).max(256),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await verifyErpCredentials(input.erpUrl, input.email, input.password);
+        return result.ok ? { ok: true as const, fullName: result.fullName } : { ok: false as const, error: result.error };
       }),
     // تسجيل مستخدم جديد: رابط نظامه + بريده + كلمة مروره + الباقة، مع تجربة 3 أيام
     signupWithErp: publicProcedure
