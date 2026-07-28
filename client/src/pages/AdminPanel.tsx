@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
-import { Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar } from "lucide-react";
+import { Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -26,6 +26,7 @@ export default function AdminPanel() {
   const { data: tasks } = trpc.admin.tasks.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: plans } = trpc.plans.list.useQuery();
   const { data: allUsers } = trpc.admin.users.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
+  const { data: usageSummary } = trpc.admin.usageSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const utils = trpc.useUtils();
   const setRoleMutation = trpc.admin.setUserRole.useMutation({
     onSuccess: () => {
@@ -79,7 +80,7 @@ export default function AdminPanel() {
         </div>
 
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["tasks", "المهام"], ["users", "المستخدمون"]].map(([v, l]) => (
+          {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["tasks", "المهام"], ["users", "المستخدمون"]].map(([v, l]) => (
             <button key={v} onClick={() => setTab(v)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
               {l}
@@ -161,6 +162,40 @@ export default function AdminPanel() {
                   ))}
                   {(subscriptions?.length ?? 0) === 0 && (
                     <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">لا توجد اشتراكات بعد</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {tab === "usage" && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[750px]">
+                <thead className="bg-gray-50 border-b">
+                  <tr>{["العميل", "الباقة", "الحالة", "الرصيد المتبقي", "المستندات المستهلكة", "الرسائل المستهلكة", "إجمالي النقاط المستهلكة"].map(h => (
+                    <th key={h} className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {usageSummary?.map(o => (
+                    <tr key={o.subscriptionId} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 text-sm">
+                        <div className="font-medium text-navy">{o.organizationName}</div>
+                        <div className="text-xs text-muted-foreground">{o.ownerEmail}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-navy">{o.planNameAr}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${o.status === "active" ? "badge-completed" : o.status === "trial" ? "badge-trial" : "badge-cancelled"}`}>
+                          {o.status === "active" ? "نشط" : o.status === "trial" ? "تجريبي" : "ملغي"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium">{o.creditsBalance} نقطة</td>
+                      <td className="px-4 py-3 text-sm">{o.totalDocuments}</td>
+                      <td className="px-4 py-3 text-sm">{o.totalMessages}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-navy">{o.totalCreditsConsumed} نقطة</td>
+                    </tr>
+                  ))}
+                  {(usageSummary?.length ?? 0) === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد استهلاك بعد</td></tr>
                   )}
                 </tbody>
               </table>

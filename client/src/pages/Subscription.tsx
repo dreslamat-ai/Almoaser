@@ -4,7 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { CheckCircle2, Zap, Bot, BookOpen, Crown, Coins, Plus, History } from "lucide-react";
+import { CheckCircle2, Zap, Bot, BookOpen, Crown, Coins, Plus, History, BarChart3 } from "lucide-react";
 
 export default function Subscription() {
   const { isAuthenticated, loading } = useAuth();
@@ -14,6 +14,7 @@ export default function Subscription() {
   const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: isAuthenticated });
   const { data: plans } = trpc.plans.list.useQuery();
   const { data: creditsInfo } = trpc.credits.balance.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: usageSummary } = trpc.credits.usageSummary.useQuery(undefined, { enabled: isAuthenticated });
   const { data: txns } = trpc.credits.transactions.useQuery(undefined, { enabled: isAuthenticated && showHistory });
   const { data: payCfg } = trpc.payments.isConfigured.useQuery(undefined, { enabled: isAuthenticated });
 
@@ -145,6 +146,43 @@ export default function Subscription() {
               </div>
               {!paymentsReady && <p className="text-[11px] text-muted-foreground mt-2">بوابة الدفع قيد التفعيل — شحن النقاط سيتوفر قريباً</p>}
             </div>
+          </div>
+        )}
+
+        {/* ملخص الاستهلاك: إجمالي المستندات/الرسائل + تفصيل لكل مستخدم في الحساب */}
+        {usageSummary && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart3 className="w-5 h-5 text-navy" />
+              <h3 className="font-bold text-navy text-sm">استهلاك الحساب</h3>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-xl font-bold text-navy">{usageSummary.totalDocuments}</div>
+                <div className="text-xs text-muted-foreground">مستند</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-xl font-bold text-navy">{usageSummary.totalMessages}</div>
+                <div className="text-xs text-muted-foreground">رسالة</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-xl font-bold text-gold-dark">{usageSummary.totalCreditsConsumed}</div>
+                <div className="text-xs text-muted-foreground">نقطة مستهلكة</div>
+              </div>
+            </div>
+            {usageSummary.byMember.length > 1 && (
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground mb-2">التفصيل حسب المستخدم</h4>
+                <div className="space-y-2">
+                  {usageSummary.byMember.map(m => (
+                    <div key={m.userId} className="flex items-center justify-between text-sm border-b border-gray-50 pb-2">
+                      <span className="font-medium text-navy">{m.name}</span>
+                      <span className="text-xs text-muted-foreground">{m.documents} مستند • {m.messages} رسالة</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
