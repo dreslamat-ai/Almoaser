@@ -167,15 +167,123 @@ export async function addTopupCredits(userId: number, credits: number, note?: st
   return newBalance;
 }
 
-/** سجل حركات النقاط الأخيرة للمستخدم */
-export async function getCreditTransactions(userId: number, limit = 30) {
+/**
+ * سجل حركات النقاط الأخيرة للمنظمة (كل حركات كل أعضائها، وليس عضواً واحداً فقط)
+ * — يبحث عن الاشتراك عبر ownerUserId (مالك المنظمة) ثم يفلتر بـ subscriptionId
+ */
+export async function getCreditTransactions(ownerUserId: number, limit = 30) {
   const db = await getDb();
   if (!db) return [];
   const { desc } = await import("drizzle-orm");
+  const subRows = await db.select().from(subscriptions).where(eq(subscriptions.userId, ownerUserId)).limit(1);
+  const sub = subRows[0];
+  if (!sub) return [];
   return db
     .select()
     .from(creditTransactions)
-    .where(eq(creditTransactions.userId, userId))
+    .where(eq(creditTransactions.subscriptionId, sub.id))
     .orderBy(desc(creditTransactions.createdAt))
     .limit(limit);
+}
+
+/** ملخص استهلاك منظمة واحدة: إجمالي المستندات/الرسائل + تفصيل لكل عضو */
+export async function getOrgUsageSummary(ownerUserId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const { sql } = await import("drizzle-orm");
+  const subRows = await db.select().from(subscriptions).where(eq(subscriptions.userId, ownerUserId)).limit(1);
+  const sub = subRows[0];
+  if (!sub) return undefined;
+
+  const rows = await db
+    .select({
+      userId: creditTransactions.userId,
+      type: creditTransactions.type,
+      count: sql<number>`count(*)`,
+      totalAmount: sql<number>`sum(${creditTransactions.amount})`,
+    })
+    .from(creditTransactions)
+    .where(eq(creditTransactions.subscriptionId, sub.id))
+    .groupBy(creditTransactions.userId, creditTransactions.type);
+
+  const byMember = new Map<number, { userId: number; documents: number; messages: number }>();
+  let totalDocuments = 0;
+  let totalMessages = 0;
+  for (const r of rows) {
+    if (r.type !== "document" && r.type !== "message") continue;
+    const entry = byMember.get(r.userId) ?? { userId: r.userId, documents: 0, messages: 0 };
+    if (r.type === "document") { entry.documents += Number(r.count); totalDocuments += Number(r.count); }
+    if (r.type === "message") { entry.messages += Number(r.count); totalMessages += Number(r.count); }
+    byMember.set(r.userId, entry);
+  }
+
+  return {
+    subscriptionId: sub.id,
+    creditsBalance: sub.creditsBalance,
+    totalDocuments,
+    totalMessages,
+    totalCreditsConsumed: totalDocuments * DOCUMENT_COST + totalMessages * MESSAGE_COST,
+    byMember: Array.from(byMember.values()),
+  };
+}
+
+/** ملخص استهلاك كل المنظمات (لوحة تحكم الأدمن) */
+export async function getAllOrgsUsageSummary() {
+  const db = await getDb();
+  if (!db) return [];
+  const { sql, desc } = await import("drizzle-orm");
+  const { users, organizations } = await import("../drizzle/schema");
+
+  const rows = await db
+    .select({
+      subscriptionId: subscriptions.id,
+      ownerUserId: subscriptions.userId,
+      ownerName: users.name,
+      ownerEmail: users.email,
+      orgName: organizations.name,
+      planNameAr: plans.nameAr,
+      status: subscriptions.status,
+      creditsBalance: subscriptions.creditsBalance,
+      companyName: subscriptions.companyName,
+    })
+    .from(subscriptions)
+    .innerJoin(users, eq(subscriptions.userId, users.id))
+    .innerJoin(plans, eq(subscriptions.planId, plans.id))
+    .leftJoin(organizations, eq(organizations.ownerId, subscriptions.userId))
+    .orderBy(desc(subscriptions.createdAt));
+
+  const usageRows = await db
+    .select({
+      subscriptionId: creditTransactions.subscriptionId,
+      type: creditTransactions.type,
+      count: sql<number>`count(*)`,
+    })
+    .from(creditTransactions)
+    .where(sql`${creditTransactions.type} IN ('document', 'message')`)
+    .groupBy(creditTransactions.subscriptionId, creditTransactions.type);
+
+  const usageBySub = new Map<number, { documents: number; messages: number }>();
+  for (const u of usageRows) {
+    if (!u.subscriptionId) continue;
+    const entry = usageBySub.get(u.subscriptionId) ?? { documents: 0, messages: 0 };
+    if (u.type === "document") entry.documents += Number(u.count);
+    if (u.type === "message") entry.messages += Number(u.count);
+    usageBySub.set(u.subscriptionId, entry);
+  }
+
+  return rows.map(r => {
+    const usage = usageBySub.get(r.subscriptionId) ?? { documents: 0, messages: 0 };
+    return {
+      subscriptionId: r.subscriptionId,
+      organizationName: r.orgName ?? r.companyName ?? r.ownerName ?? r.ownerEmail,
+      ownerName: r.ownerName,
+      ownerEmail: r.ownerEmail,
+      planNameAr: r.planNameAr,
+      status: r.status,
+      creditsBalance: r.creditsBalance,
+      totalDocuments: usage.documents,
+      totalMessages: usage.messages,
+      totalCreditsConsumed: usage.documents * DOCUMENT_COST + usage.messages * MESSAGE_COST,
+    };
+  });
 }

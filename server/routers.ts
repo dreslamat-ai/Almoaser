@@ -229,6 +229,20 @@ export const appRouter = router({
       if (!ctx.effectiveUserId) return [];
       return getCreditTransactions(ctx.effectiveUserId);
     }),
+    // ملخص استهلاك المنظمة الحالية: إجمالي المستندات/الرسائل + تفصيل لكل عضو بالاسم
+    usageSummary: protectedProcedure.query(async ({ ctx }) => {
+      if (!ctx.effectiveUserId) return null;
+      const { getOrgUsageSummary } = await import("./credits");
+      const summary = await getOrgUsageSummary(ctx.effectiveUserId);
+      if (!summary) return null;
+      const org = await getOrganizationForUser(ctx.user);
+      const members = org ? await listOrgMembers(org.id) : [];
+      const nameById = new Map(members.map(m => [m.id, m.name ?? m.email ?? `#${m.id}`]));
+      return {
+        ...summary,
+        byMember: summary.byMember.map(m => ({ ...m, name: nameById.get(m.userId) ?? `#${m.userId}` })),
+      };
+    }),
   }),
 
   subscription: router({
@@ -545,6 +559,12 @@ export const appRouter = router({
         await setUserActive(input.userId, input.isActive);
         return { success: true };
       }),
+    // ملخص استهلاك كل العملاء (منظمات): الباقة، الرصيد، عدد المستندات/الرسائل المستهلكة
+    usageSummary: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getAllOrgsUsageSummary } = await import("./credits");
+      return getAllOrgsUsageSummary();
+    }),
   }),
 
   erpnext: router({
