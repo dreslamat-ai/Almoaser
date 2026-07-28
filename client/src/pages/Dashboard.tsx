@@ -8,10 +8,10 @@ import { InstallAppButton } from "@/components/InstallAppButton";
 import NotificationBell from "@/components/NotificationBell";
 import FloatingChatButton from "@/components/FloatingChatButton";
 import { useState } from "react";
-import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu } from "lucide-react";
+import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu, Users } from "lucide-react";
 
 function SidebarContent({ active, onNavigate }: { active: string; onNavigate?: () => void }) {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [, navigate] = useLocation();
   const go = (path: string) => { onNavigate?.(); navigate(path); };
   const navItems = [
@@ -20,6 +20,7 @@ function SidebarContent({ active, onNavigate }: { active: string; onNavigate?: (
     { path: "/invoices", label: "الفواتير", icon: <FileText className="w-5 h-5" /> },
     { path: "/subscription", label: "الاشتراك", icon: <DollarSign className="w-5 h-5" /> },
     { path: "/erp", label: "نظام ERP", icon: <Database className="w-5 h-5" /> },
+    ...(user?.orgRole === "owner" ? [{ path: "/team", label: "الفريق", icon: <Users className="w-5 h-5" /> }] : []),
   ];
   return (
     <div className="w-full h-full bg-navy-hero flex flex-col">

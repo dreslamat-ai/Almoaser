@@ -14,6 +14,7 @@ import ERPNextDashboard from "./pages/ERPNextDashboard";
 import AgentChat from "./pages/AgentChat";
 import ChannelSettings from "./pages/ChannelSettings";
 import AccountSettings from "./pages/AccountSettings";
+import Team from "./pages/Team";
 import ErpInvoices from "./pages/ErpInvoices";
 import ErpCustomers from "./pages/ErpCustomers";
 import ErpReports from "./pages/ErpReports";
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/agent" component={AgentChat} />
       <Route path="/channels" component={ChannelSettings} />
       <Route path="/settings" component={AccountSettings} />
+      <Route path="/team" component={Team} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
