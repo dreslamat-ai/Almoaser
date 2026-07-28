@@ -3,7 +3,7 @@
  * كل الاشتراك/الرصيد/اتصال ERPNext مرتبط بحساب المالك (owner) — المستخدمون الفرعيون
  * يستخدمون نفس البيانات عبر resolveOrgOwnerId، ولهم صلاحياتهم الخاصة داخل أدوات الوكيل.
  */
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { users, organizations, DEFAULT_MEMBER_PERMISSIONS, type MemberPermissions, type User } from "../drizzle/schema";
@@ -27,7 +27,12 @@ export function parsePermissions(raw: string | null | undefined): MemberPermissi
   }
 }
 
-/** ينشئ منظمة جديدة لمستخدم (مالك) لا ينتمي لأي منظمة بعد، ويربطه بها. */
+/**
+ * ينشئ منظمة جديدة لمستخدم (مالك) لا ينتمي لأي منظمة بعد، ويربطه بها.
+ * آمن عند التزامن: لو طلبان متزامنان استدعيا هذه الدالة لنفس المستخدم، الشرط
+ * "organizationId IS NULL" في التحديث يضمن فوز واحد فقط، والآخر يحذف منظمته
+ * الزائدة ويعيد استخدام منظمة الفائز.
+ */
 export async function ensureOrganizationForOwner(user: User, orgName?: string): Promise<number> {
   if (user.organizationId) return user.organizationId;
 
@@ -40,9 +45,17 @@ export async function ensureOrganizationForOwner(user: User, orgName?: string): 
   });
   const organizationId = Number((result as unknown as [{ insertId: number }])[0].insertId);
 
-  await db.update(users)
+  const updateResult = await db.update(users)
     .set({ organizationId, orgRole: "owner" })
-    .where(eq(users.id, user.id));
+    .where(and(eq(users.id, user.id), isNull(users.organizationId)));
+  const affectedRows = (updateResult as unknown as [{ affectedRows: number }])[0]?.affectedRows ?? 0;
+
+  if (affectedRows === 0) {
+    // طلب متزامن آخر فاز بالسباق — احذف المنظمة الزائدة واستخدم منظمة الفائز
+    await db.delete(organizations).where(eq(organizations.id, organizationId));
+    const rows = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+    return rows[0]?.organizationId ?? organizationId;
+  }
 
   return organizationId;
 }
