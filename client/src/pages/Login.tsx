@@ -6,9 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, LogIn, Eye, EyeOff, Server } from "lucide-react";
+import { Loader2, LogIn, Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
-import { startLogin } from "@/const";
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -98,17 +97,6 @@ export default function Login() {
               : <><LogIn className="w-4 h-4" /> تسجيل الدخول</>}
           </Button>
         </form>
-
-        <div className="flex items-center gap-2 my-6">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-muted-foreground">أو</span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
-
-        <Button variant="outline" className="w-full h-10 gap-2 text-sm" onClick={() => startLogin()}>
-          <Server className="w-4 h-4" />
-          الدخول عبر حساب Manus
-        </Button>
 
         <p className="text-sm text-muted-foreground text-center mt-5">
           ليس لديك حساب؟{" "}
