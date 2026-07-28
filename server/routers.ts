@@ -8,7 +8,7 @@ import { invokeLLM } from "./_core/llm";
 import { agentRouter } from "./routers/agent";
 import { paymentsRouter } from "./routers/payments";
 import { pingOpenAI, pingErpNext, pingOpenRouter } from "./llmProvider";
-import { getErpConfigForUser, getErpSession, invalidateErpSession, testErpConnection, encryptPassword } from "./erpConnection";
+import { getErpConfigForUser, getErpSession, invalidateErpSession, testConnectionByProvider, encryptPassword } from "./erpConnection";
 import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
 import {
   getOrganizationForUser, listOrgMembers, inviteSubUser,
@@ -69,7 +69,7 @@ export const appRouter = router({
     openrouterPing: publicProcedure.query(() => pingOpenRouter()),
     erpPing: publicProcedure.query(() => pingErpNext()),
   }),
-  // ─── إعدادات اتصال ERPNext لكل مستخدم ─────────────────────────────────────
+  // ─── إعدادات اتصال نظام ERP لكل منظمة (ERPNext أو Odoo) ───────────────────
   erpConnection: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import("./db");
@@ -79,19 +79,21 @@ export const appRouter = router({
       const conn = rows[0];
       if (!conn) return null;
       // لا نرجع كلمة المرور أبداً
-      return { url: conn.url, username: conn.username, lastVerifiedAt: conn.lastVerifiedAt, updatedAt: conn.updatedAt };
+      return { provider: conn.provider, url: conn.url, username: conn.username, database: conn.database, lastVerifiedAt: conn.lastVerifiedAt, updatedAt: conn.updatedAt };
     }),
     save: protectedProcedure
       .input(z.object({
+        provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
         url: z.string().url("رابط غير صالح — يجب أن يبدأ بـ https://"),
         username: z.string().min(1, "اسم المستخدم مطلوب"),
         password: z.string().min(1, "كلمة المرور مطلوبة"),
+        database: z.string().trim().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         requireMemberPermission(ctx.user, "manageErpSettings");
         const cleanUrl = input.url.replace(/\/+$/, "");
         // اختبار الاتصال قبل الحفظ
-        const test = await testErpConnection(cleanUrl, input.username, input.password);
+        const test = await testConnectionByProvider(input.provider, cleanUrl, input.username, input.password, input.database);
         if (!test.ok) {
           throw new TRPCError({ code: "BAD_REQUEST", message: test.error ?? "فشل اختبار الاتصال" });
         }
@@ -100,9 +102,11 @@ export const appRouter = router({
         if (!db || !ctx.effectiveUserId) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
         const existing = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, ctx.effectiveUserId)).limit(1);
         const values = {
+          provider: input.provider,
           url: cleanUrl,
           username: input.username,
           passwordEnc: encryptPassword(input.password),
+          database: input.database ?? null,
           lastVerifiedAt: new Date(),
         };
         if (existing[0]) {
@@ -114,12 +118,14 @@ export const appRouter = router({
       }),
     test: protectedProcedure
       .input(z.object({
+        provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
         url: z.string().url(),
         username: z.string().min(1),
         password: z.string().min(1),
+        database: z.string().trim().optional(),
       }))
       .mutation(async ({ input }) => {
-        return testErpConnection(input.url, input.username, input.password);
+        return testConnectionByProvider(input.provider, input.url, input.username, input.password, input.database);
       }),
     remove: protectedProcedure.mutation(async ({ ctx }) => {
       requireMemberPermission(ctx.user, "manageErpSettings");

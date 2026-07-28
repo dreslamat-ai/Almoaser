@@ -71,6 +71,13 @@
       "when": 1785279155087,
       "tag": "0009_high_ultimo",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1785281368371,
+      "tag": "0010_wild_hiroim",
+      "breakpoints": true
     }
   ]
 }

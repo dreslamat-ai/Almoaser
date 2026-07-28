@@ -189,16 +189,20 @@ export const taskComments = mysqlTable("task_comments", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-// ─── اتصالات ERPNext لكل مستخدم ───────────────────────────────────────────────
-// كل عميل يسجّل رابط نظامه واسم المستخدم وكلمة المرور من صفحة الإعدادات،
-// ويعمل الوكيل وجميع استدعاءات ERPNext على نظامه هو (fallback لاتصال المالك الافتراضي)
+// ─── اتصالات نظام ERP لكل منظمة (مالك الحساب) ─────────────────────────────────
+// كل عميل يسجّل نوع نظامه (ERPNext أو Odoo) ورابطه وبيانات اعتماده من صفحة الإعدادات،
+// ويعمل الوكيل وجميع استدعاءات ERP عبر ErpAdapter المناسب لنظامه (fallback لاتصال المالك الافتراضي)
 export const erpnextConnections = mysqlTable("erpnext_connections", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull().references(() => users.id),
+  // نوع نظام ERP: erpnext (افتراضي، للاتصالات القديمة قبل دعم تعدد الأنظمة) أو odoo
+  provider: mysqlEnum("provider", ["erpnext", "odoo"]).default("erpnext").notNull(),
   url: varchar("url", { length: 500 }).notNull(),
   username: varchar("username", { length: 255 }).notNull(),
   // كلمة المرور مشفرة AES-256-GCM (iv:tag:ciphertext) بمفتاح مشتق من JWT_SECRET
   passwordEnc: text("passwordEnc").notNull(),
+  // اسم قاعدة البيانات — مطلوب لـ Odoo فقط (ERPNext لا يحتاجه)
+  database: varchar("database", { length: 100 }),
   lastVerifiedAt: timestamp("lastVerifiedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
