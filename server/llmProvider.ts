@@ -2,11 +2,13 @@
  * llmProvider — مزود النموذج الذكي للوكيل.
  *
  * الاستراتيجية:
- * 1. إن وُجد OPENAI_API_KEY: استدعاء OpenAI مباشرة (gpt-4.1) — يدفع المستخدم
- *    لمزود النموذج مباشرةً بدل استهلاك رصيد Manus.
- * 2. عند فشل OpenAI (مفتاح بلا رصيد 429، مفتاح خاطئ 401، عطل 5xx...):
- *    fallback تلقائي إلى النموذج المدمج (Manus built-in LLM).
- * 3. إن لم يوجد مفتاح OpenAI أصلاً: النموذج المدمج مباشرة.
+ * 1. إن وُجد OPENROUTER_API_KEY: تجربة موديلات OpenRouter بترتيب LLM_MODEL
+ *    (قائمة مفصولة بفواصل، افتراضياً qwen/qwen3.5-397b-a17b ثم
+ *    deepseek/deepseek-v4-flash) — أول موديل ينجح يُستخدم.
+ * 2. عند فشل كل موديلات OpenRouter: fallback إلى OpenAI مباشرة (gpt-4.1) إن
+ *    وُجد مفتاحه.
+ * 3. عند فشل الاثنين (أو غياب مفاتيحهما): fallback أخير للنموذج المدمج
+ *    (Manus built-in LLM).
  */
 import { invokeLLM } from "./_core/llm";
 
@@ -17,23 +19,44 @@ type InvokeResult = Awaited<ReturnType<typeof invokeLLM>>;
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 export const OPENAI_MODEL = "gpt-4.1";
 
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_OPENROUTER_MODELS = [
+  "qwen/qwen3.5-397b-a17b",
+  "deepseek/deepseek-v4-flash",
+];
+
+/** قائمة موديلات OpenRouter بترتيب الأولوية (من LLM_MODEL أو الافتراضي). */
+export const getOpenRouterModels = (): string[] => {
+  const raw = process.env.LLM_MODEL?.trim();
+  if (!raw) return DEFAULT_OPENROUTER_MODELS;
+  const list = raw.split(",").map(m => m.trim()).filter(Boolean);
+  return list.length > 0 ? list : DEFAULT_OPENROUTER_MODELS;
+};
+
 const getOpenAiKey = (): string | undefined => {
   const key = process.env.OPENAI_API_KEY?.trim();
   return key && key.length > 0 ? key : undefined;
 };
 
+const getOpenRouterKey = (): string | undefined => {
+  const key = process.env.OPENROUTER_API_KEY?.trim();
+  return key && key.length > 0 ? key : undefined;
+};
+
 /**
- * تحويل معاملات invokeLLM إلى payload متوافق مع OpenAI chat/completions.
- * صيغة الرسائل والأدوات متطابقة تقريباً (OpenAI-compatible)، مع فروقات:
- * - model يُفرض على gpt-4.1
+ * تحويل معاملات invokeLLM إلى payload متوافق مع OpenAI-style chat/completions
+ * (يستخدمه كل من OpenAI و OpenRouter — نفس الصيغة تقريباً).
+ * صيغة الرسائل والأدوات متطابقة تقريباً، مع فروقات:
+ * - model يُمرَّر صراحة (gpt-4.1 لـ OpenAI أو أحد موديلات LLM_MODEL لـ OpenRouter)
  * - حقول thinking/reasoning الخاصة بـ forge تُحذف
- * - max_tokens تُمرر كما هي (مدعومة في gpt-4.1)
+ * - max_tokens تُمرر كما هي
  */
 export const buildOpenAiPayload = (
-  params: InvokeParams
+  params: InvokeParams,
+  model: string = OPENAI_MODEL
 ): Record<string, unknown> => {
   const payload: Record<string, unknown> = {
-    model: OPENAI_MODEL,
+    model,
     messages: params.messages,
   };
   if (params.tools && params.tools.length > 0) {
@@ -59,26 +82,84 @@ const invokeOpenAI = async (
       "content-type": "application/json",
       authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify(buildOpenAiPayload(params)),
+    body: JSON.stringify(buildOpenAiPayload(params, OPENAI_MODEL)),
   });
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
     throw new Error(
-      `OpenAI invoke failed: ${response.status} ${response.statusText} – ${errorText.slice(0, 300)}`
+      `OpenAI invoke failed: ${response.status} ${response.statusText} - ${errorText.slice(0, 300)}`
     );
   }
   return (await response.json()) as InvokeResult;
 };
 
+/** استدعاء OpenRouter بموديل محدد. يرمي خطأً عند أي فشل. */
+const invokeOpenRouterModel = async (
+  params: InvokeParams,
+  apiKey: string,
+  model: string
+): Promise<InvokeResult> => {
+  const response = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(buildOpenAiPayload(params, model)),
+  });
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(
+      `OpenRouter invoke failed (${model}): ${response.status} ${response.statusText} - ${errorText.slice(0, 300)}`
+    );
+  }
+  return (await response.json()) as InvokeResult;
+};
+
+/** يجرّب موديلات OpenRouter بالترتيب حتى ينجح واحد منها. */
+const invokeOpenRouter = async (
+  params: InvokeParams,
+  apiKey: string
+): Promise<InvokeResult & { _model: string }> => {
+  const models = getOpenRouterModels();
+  let lastError: unknown;
+  for (const model of models) {
+    try {
+      const result = await invokeOpenRouterModel(params, apiKey, model);
+      return { ...result, _model: model };
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        `[llmProvider] OpenRouter model ${model} failed:`,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("All OpenRouter models failed");
+};
+
 /**
- * نقطة الاستدعاء الموحدة للوكيل: OpenAI أولاً (إن وُجد المفتاح) ثم fallback
- * للنموذج المدمج. تُرجع أيضاً اسم المزود المستخدم لأغراض السجلات.
+ * نقطة الاستدعاء الموحدة للوكيل: OpenRouter أولاً (بترتيب موديلات LLM_MODEL)،
+ * ثم OpenAI المباشر، ثم fallback أخير للنموذج المدمج. تُرجع أيضاً اسم المزود
+ * المستخدم لأغراض السجلات.
  */
 export async function invokeAgentLLM(
   params: InvokeParams
 ): Promise<InvokeResult & { _provider?: string }> {
-  const openAiKey = getOpenAiKey();
+  const openRouterKey = getOpenRouterKey();
+  if (openRouterKey) {
+    try {
+      const result = await invokeOpenRouter(params, openRouterKey);
+      return { ...result, _provider: `openrouter:${result._model}` };
+    } catch (error) {
+      console.warn(
+        "[llmProvider] OpenRouter (all models) failed, falling back to OpenAI:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
 
+  const openAiKey = getOpenAiKey();
   if (openAiKey) {
     try {
       const result = await invokeOpenAI(params, openAiKey);
@@ -93,6 +174,50 @@ export async function invokeAgentLLM(
 
   const result = await invokeLLM(params);
   return { ...result, _provider: "builtin" };
+}
+
+/**
+ * فحص خفيف لمفتاح OpenRouter: استدعاء بأقل تكلفة ممكنة (max_tokens=1) لكل
+ * موديل في القائمة. يُستخدم للتشخيص فقط — لا يكشف قيمة المفتاح.
+ */
+export async function pingOpenRouter(): Promise<{
+  hasKey: boolean;
+  results?: Array<{ model: string; status?: number; ok?: boolean; error?: string }>;
+}> {
+  const raw = process.env.OPENROUTER_API_KEY;
+  if (!raw || raw.trim().length === 0) return { hasKey: false };
+  const key = raw.replace(/\u0000/g, "").trim();
+  const models = getOpenRouterModels();
+
+  const results = await Promise.all(
+    models.map(async model => {
+      try {
+        const r = await fetch(OPENROUTER_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1,
+          }),
+        });
+        const body = await r.text().catch(() => "");
+        return {
+          model,
+          status: r.status,
+          ok: r.ok,
+          error: r.ok ? undefined : body.slice(0, 200),
+        };
+      } catch (e) {
+        return { model, error: e instanceof Error ? e.message : String(e) };
+      }
+    })
+  );
+
+  return { hasKey: true, results };
 }
 
 /**
