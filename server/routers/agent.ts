@@ -8,6 +8,7 @@ import { invokeAgentLLM } from "../llmProvider";
 import { storagePut, storageGetSignedUrl } from "../storage";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
+import { executeOdooTool } from "../odooTools";
 import { notifyUser, notifyAdmins } from "../notifications";
 import { buildExpertSkillsSection } from "./agentPersona";
 import { parsePermissions } from "../organizations";
@@ -64,6 +65,7 @@ function currentErpConfig(): ErpConfig {
     username: process.env.ERPNEXT_USERNAME ?? "",
     password: process.env.ERPNEXT_PASSWORD ?? "",
     source: "system",
+    provider: "erpnext",
   };
 }
 
@@ -1595,7 +1597,10 @@ ${buildExpertSkillsSection()}
           try {
             requireToolPermission(ctx.user, tc.function.name);
             const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
-            const { result, display } = await executeTool(tc.function.name, args);
+            const activeConfig = currentErpConfig();
+            const { result, display } = activeConfig.provider === "odoo" && activeConfig.database
+              ? await executeOdooTool(tc.function.name, args, activeConfig as ErpConfig & { database: string })
+              : await executeTool(tc.function.name, args);
             toolResult = JSON.stringify(result);
             displayData = display;
             // ─── خصم 5 نقاط لكل مستند ERP يُنشأ بنجاح (فاتورة/دفعة/قيد) — من رصيد المنظمة المشترك ───

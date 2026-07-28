@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { erpnextConnections, users } from "../drizzle/schema";
 import { resolveOrgOwnerId } from "./organizations";
+import { testOdooConnection } from "./odooTools";
 
 // ─── تشفير كلمة المرور ────────────────────────────────────────────────────────
 function getKey(): Buffer {
@@ -32,13 +33,21 @@ export function decryptPassword(encStr: string): string {
 }
 
 // ─── إعدادات الاتصال ─────────────────────────────────────────────────────────
-export type ErpConfig = { url: string; username: string; password: string; source: "user" | "system" };
+export type ErpConfig = {
+  url: string;
+  username: string;
+  password: string;
+  source: "user" | "system";
+  provider: "erpnext" | "odoo";
+  /** مطلوب لـ Odoo فقط */
+  database?: string;
+};
 
 export async function getErpConfigForUser(userId: number): Promise<ErpConfig> {
   try {
     const db = await getDb();
     if (db) {
-      // المستخدمون الفرعيون يستخدمون اتصال ERPNext الخاص بمالك منظمتهم
+      // المستخدمون الفرعيون يستخدمون اتصال ERP الخاص بمالك منظمتهم
       const userRows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       const effectiveUserId = userRows[0] ? await resolveOrgOwnerId(userRows[0]) : userId;
       const rows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, effectiveUserId)).limit(1);
@@ -49,6 +58,8 @@ export async function getErpConfigForUser(userId: number): Promise<ErpConfig> {
           username: conn.username,
           password: decryptPassword(conn.passwordEnc),
           source: "user",
+          provider: conn.provider,
+          database: conn.database ?? undefined,
         };
       }
     }
@@ -60,6 +71,7 @@ export async function getErpConfigForUser(userId: number): Promise<ErpConfig> {
     username: process.env.ERPNEXT_USERNAME ?? "",
     password: process.env.ERPNEXT_PASSWORD ?? "",
     source: "system",
+    provider: "erpnext",
   };
 }
 
@@ -92,7 +104,7 @@ export function invalidateErpSession(config: ErpConfig): void {
   sessionCache.delete(`${config.url}|${config.username}`);
 }
 
-/** اختبار اتصال مباشر — يرجع اسم المستخدم المسجل عند النجاح */
+/** اختبار اتصال مباشر بـ ERPNext — يرجع اسم المستخدم المسجل عند النجاح */
 export async function testErpConnection(url: string, username: string, password: string): Promise<{ ok: boolean; loggedInAs?: string; error?: string }> {
   try {
     const cleanUrl = url.replace(/\/+$/, "");
@@ -110,5 +122,20 @@ export async function testErpConnection(url: string, username: string, password:
   } catch (e) {
     return { ok: false, error: `تعذّر الوصول إلى الخادم: ${e instanceof Error ? e.message : "خطأ غير معروف"}` };
   }
+}
+
+/** اختبار اتصال حسب نوع النظام (ERPNext أو Odoo) */
+export async function testConnectionByProvider(
+  provider: "erpnext" | "odoo",
+  url: string,
+  username: string,
+  password: string,
+  database?: string
+): Promise<{ ok: boolean; loggedInAs?: string; error?: string }> {
+  if (provider === "odoo") {
+    if (!database) return { ok: false, error: "اسم قاعدة البيانات مطلوب لـ Odoo" };
+    return testOdooConnection({ url: url.replace(/\/+$/, ""), username, password, database, source: "user", provider: "odoo" });
+  }
+  return testErpConnection(url, username, password);
 }
 

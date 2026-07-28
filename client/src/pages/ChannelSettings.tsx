@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   MessageSquare, Send, Settings, CheckCircle2, XCircle,
@@ -27,11 +28,11 @@ function FieldGroup({ label, description, children }: { label: string; descripti
 function ErpConnectionCard() {
   const utils = trpc.useUtils();
   const { data: erpConn } = trpc.erpConnection.get.useQuery();
-  const [erp, setErp] = useState({ url: "", username: "", password: "" });
+  const [erp, setErp] = useState({ provider: "erpnext" as "erpnext" | "odoo", url: "", username: "", password: "", database: "" });
   const [showPwd, setShowPwd] = useState(false);
 
   useEffect(() => {
-    if (erpConn) setErp(prev => ({ ...prev, url: erpConn.url, username: erpConn.username }));
+    if (erpConn) setErp(prev => ({ ...prev, provider: erpConn.provider, url: erpConn.url, username: erpConn.username, database: erpConn.database ?? "" }));
   }, [erpConn]);
 
   const erpSaveMutation = trpc.erpConnection.save.useMutation({
@@ -52,7 +53,7 @@ function ErpConnectionCard() {
   const erpRemoveMutation = trpc.erpConnection.remove.useMutation({
     onSuccess: () => {
       toast.success("تم حذف الاتصال — سيُستخدم اتصال النظام الافتراضي");
-      setErp({ url: "", username: "", password: "" });
+      setErp({ provider: "erpnext", url: "", username: "", password: "", database: "" });
       utils.erpConnection.get.invalidate();
     },
     onError: (e) => toast.error(e.message),
@@ -67,8 +68,8 @@ function ErpConnectionCard() {
               <Server className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-sm font-semibold">اتصال نظام ERPNext الخاص بك</CardTitle>
-              <CardDescription className="text-xs">اربط الوكيل الذكي ولوحات البيانات بنظام ERPNext الخاص بشركتك</CardDescription>
+              <CardTitle className="text-sm font-semibold">اتصال نظام ERP الخاص بك</CardTitle>
+              <CardDescription className="text-xs">اربط الوكيل الذكي ولوحات البيانات بنظام ERPNext أو Odoo الخاص بشركتك</CardDescription>
             </div>
           </div>
           <Badge variant={erpConn ? "default" : "secondary"} className="text-xs">
@@ -78,9 +79,23 @@ function ErpConnectionCard() {
       </CardHeader>
       <CardContent className="px-5 pb-5 space-y-4">
         <form onSubmit={e => { e.preventDefault(); erpSaveMutation.mutate(erp); }} className="space-y-4">
-          <FieldGroup label="رابط النظام" description="عنوان نظام ERPNext الخاص بشركتك">
-            <Input value={erp.url} onChange={e => setErp(p => ({ ...p, url: e.target.value }))} placeholder="https://your-company.erpnext.com" dir="ltr" className="font-mono text-xs" />
+          <FieldGroup label="نوع النظام">
+            <Select value={erp.provider} onValueChange={v => setErp(p => ({ ...p, provider: v as "erpnext" | "odoo" }))}>
+              <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="erpnext">ERPNext</SelectItem>
+                <SelectItem value="odoo">Odoo</SelectItem>
+              </SelectContent>
+            </Select>
           </FieldGroup>
+          <FieldGroup label="رابط النظام" description={`عنوان نظام ${erp.provider === "odoo" ? "Odoo" : "ERPNext"} الخاص بشركتك`}>
+            <Input value={erp.url} onChange={e => setErp(p => ({ ...p, url: e.target.value }))} placeholder={erp.provider === "odoo" ? "https://your-company.odoo.com" : "https://your-company.erpnext.com"} dir="ltr" className="font-mono text-xs" />
+          </FieldGroup>
+          {erp.provider === "odoo" && (
+            <FieldGroup label="اسم قاعدة البيانات" description="اسم قاعدة بيانات Odoo (يظهر في رابط تسجيل الدخول أو من مدير قواعد البيانات)">
+              <Input value={erp.database} onChange={e => setErp(p => ({ ...p, database: e.target.value }))} placeholder="my_company_db" dir="ltr" className="font-mono text-xs" />
+            </FieldGroup>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <FieldGroup label="اسم المستخدم">
               <Input value={erp.username} onChange={e => setErp(p => ({ ...p, username: e.target.value }))} placeholder="user@example.com" dir="ltr" className="font-mono text-xs" />
@@ -95,18 +110,18 @@ function ErpConnectionCard() {
             </FieldGroup>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm" disabled={erpSaveMutation.isPending || !erp.url || !erp.username || !erp.password} className="gap-1.5">
+            <Button type="submit" size="sm" disabled={erpSaveMutation.isPending || !erp.url || !erp.username || !erp.password || (erp.provider === "odoo" && !erp.database)} className="gap-1.5">
               <Save className="w-3.5 h-3.5" />
               {erpSaveMutation.isPending ? "جاري الاختبار والحفظ..." : "اختبار وحفظ الاتصال"}
             </Button>
-            <Button type="button" variant="outline" size="sm" disabled={erpTestMutation.isPending || !erp.url || !erp.username || !erp.password}
+            <Button type="button" variant="outline" size="sm" disabled={erpTestMutation.isPending || !erp.url || !erp.username || !erp.password || (erp.provider === "odoo" && !erp.database)}
               onClick={() => erpTestMutation.mutate(erp)} className="gap-1.5">
               <Plug className="w-3.5 h-3.5" />
               {erpTestMutation.isPending ? "جاري الاختبار..." : "اختبار فقط"}
             </Button>
             {erpConn && (
               <Button type="button" variant="outline" size="sm" disabled={erpRemoveMutation.isPending}
-                onClick={() => { if (confirm("هل تريد حذف اتصال ERPNext الخاص بك؟ سيعود النظام للاتصال الافتراضي.")) erpRemoveMutation.mutate(); }}
+                onClick={() => { if (confirm("هل تريد حذف اتصال ERP الخاص بك؟ سيعود النظام للاتصال الافتراضي.")) erpRemoveMutation.mutate(); }}
                 className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50">
                 <Trash2 className="w-3.5 h-3.5" />
                 حذف الاتصال
