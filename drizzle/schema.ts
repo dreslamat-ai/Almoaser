@@ -1,13 +1,51 @@
 import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean } from "drizzle-orm/mysql-core";
 
+// ─── المنظمات (حساب الشركة) ───────────────────────────────────────────────────
+// كل حساب عميل هو "منظمة" واحدة: مالك (owner) واحد + مستخدمون فرعيون (members)
+// يشاركون نفس الاشتراك/الرصيد/اتصال ERPNext، كل واحد له صلاحياته الخاصة
+export const organizations = mysqlTable("organizations", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  ownerId: int("ownerId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Organization = typeof organizations.$inferSelect;
+
+// صلاحيات المستخدم الفرعي داخل المنظمة — كل حقل true/false لتفعيل قدرة معينة
+export type MemberPermissions = {
+  viewInvoices: boolean;
+  createInvoices: boolean;
+  managePayments: boolean;
+  manageErpSettings: boolean;
+  manageJournalEntries: boolean;
+};
+
+export const DEFAULT_MEMBER_PERMISSIONS: MemberPermissions = {
+  viewInvoices: true,
+  createInvoices: true,
+  managePayments: false,
+  manageErpSettings: false,
+  manageJournalEntries: false,
+};
+
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  // دور على مستوى المنصة (admin = موظف المعاصر) — لا علاقة له بدور المستخدم داخل منظمته
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
+  // المنظمة التي ينتمي إليها المستخدم (null مؤقتاً لحسابات ما قبل الترحيل)
+  organizationId: int("organizationId"),
+  // دور المستخدم داخل منظمته: owner (مالك الحساب، كل الصلاحيات) أو member (مستخدم فرعي بصلاحيات محددة)
+  orgRole: mysqlEnum("orgRole", ["owner", "member"]).default("owner").notNull(),
+  // صلاحيات المستخدم الفرعي (JSON من MemberPermissions) — تُتجاهل لو orgRole = owner
+  permissions: text("permissions"),
+  // كلمة مرور محلية (scrypt) — للمستخدمين الفرعيين فقط، الذين ليس لهم حساب ERPNext خاص بهم
+  passwordHash: text("passwordHash"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

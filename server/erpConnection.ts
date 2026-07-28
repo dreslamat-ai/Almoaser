@@ -7,7 +7,8 @@
 import crypto from "crypto";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
-import { erpnextConnections } from "../drizzle/schema";
+import { erpnextConnections, users } from "../drizzle/schema";
+import { resolveOrgOwnerId } from "./organizations";
 
 // ─── تشفير كلمة المرور ────────────────────────────────────────────────────────
 function getKey(): Buffer {
@@ -37,7 +38,10 @@ export async function getErpConfigForUser(userId: number): Promise<ErpConfig> {
   try {
     const db = await getDb();
     if (db) {
-      const rows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, userId)).limit(1);
+      // المستخدمون الفرعيون يستخدمون اتصال ERPNext الخاص بمالك منظمتهم
+      const userRows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      const effectiveUserId = userRows[0] ? await resolveOrgOwnerId(userRows[0]) : userId;
+      const rows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, effectiveUserId)).limit(1);
       const conn = rows[0];
       if (conn) {
         return {
