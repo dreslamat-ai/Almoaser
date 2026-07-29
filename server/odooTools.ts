@@ -123,6 +123,19 @@ async function findSimilarPartners(config: OdooConfig, name: string, rankField: 
   return searchReadPartnersResilient(config, [[rankField, ">", 0], ["name", "ilike", name]], 20);
 }
 
+/** نفس منطق التساهل مع الحقول عند الإنشاء — لو "mobile" غير معرَّف على res.partner نحوّله لـ phone بدل فشل الإنشاء بالكامل */
+async function createPartnerResilient(config: OdooConfig, values: Record<string, unknown>): Promise<number> {
+  try {
+    return await execute<number>(config, "res.partner", "create", [values]);
+  } catch (e) {
+    if (e instanceof Error && /Invalid field 'mobile'/i.test(e.message) && "mobile" in values) {
+      const { mobile, ...rest } = values;
+      return await execute<number>(config, "res.partner", "create", [rest.phone ? rest : { ...rest, phone: mobile }]);
+    }
+    throw e;
+  }
+}
+
 async function resolvePartnerId(config: OdooConfig, nameOrId: string, rankField: "customer_rank" | "supplier_rank"): Promise<{ id: number } | { candidates: Partner[] } | { notFound: true }> {
   if (/^\d+$/.test(nameOrId)) return { id: Number(nameOrId) };
   const matches = await findSimilarPartners(config, nameOrId, rankField);
@@ -170,13 +183,13 @@ export async function executeOdooTool(
       if (existing.length > 0) {
         return { result: { duplicate_prevented: true, message: `يوجد ${existing.length} عميل مشابه بالفعل`, candidates: existing.map(partnerToCustomer) }, display: "" };
       }
-      const id = await execute<number>(config, "res.partner", "create", [{
+      const id = await createPartnerResilient(config, {
         name: args.customer_name,
         customer_rank: 1,
         company_type: (args.customer_type as string) === "Individual" ? "person" : "company",
         ...(args.mobile_no ? { mobile: args.mobile_no } : {}),
         ...(args.email_id ? { email: args.email_id } : {}),
-      }]);
+      });
       const created = { name: String(id), customer_name: args.customer_name, customer_type: args.customer_type ?? "Company" };
       return { result: created, display: `__CUSTOMER_CREATED__${JSON.stringify(created)}` };
     }
@@ -193,13 +206,13 @@ export async function executeOdooTool(
       if (existing.length > 0) {
         return { result: { duplicate_prevented: true, message: `يوجد ${existing.length} مورد مشابه بالفعل`, candidates: existing.map(partnerToSupplier) }, display: "" };
       }
-      const id = await execute<number>(config, "res.partner", "create", [{
+      const id = await createPartnerResilient(config, {
         name: args.supplier_name,
         supplier_rank: 1,
         company_type: (args.supplier_type as string) === "Individual" ? "person" : "company",
         ...(args.mobile_no ? { mobile: args.mobile_no } : {}),
         ...(args.email_id ? { email: args.email_id } : {}),
-      }]);
+      });
       const created = { name: String(id), supplier_name: args.supplier_name, supplier_type: args.supplier_type ?? "Company" };
       return { result: created, display: `__SUPPLIER_CREATED__${JSON.stringify(created)}` };
     }
