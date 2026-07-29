@@ -98,11 +98,29 @@ const CUSTOMER_FIELDS = ["id", "name", "email", "phone", "mobile", "company_type
 const PRODUCT_FIELDS = ["id", "name", "default_code", "list_price", "type"];
 const MOVE_FIELDS = ["id", "name", "partner_id", "invoice_date", "invoice_date_due", "amount_total", "amount_residual", "state", "payment_state", "currency_id"];
 
+/**
+ * بعض نسخ/تخصيصات Odoo تحذف حقولاً قياسية من res.partner (مثل mobile) — بدل ما
+ * يفشل طلب العملاء/الموردين بالكامل، نعيد المحاولة تدريجياً بحقول أقل عند خطأ
+ * "Invalid field" بدل تعطيل الميزة على تلك النسخة كلياً.
+ */
+async function searchReadPartnersResilient(
+  config: OdooConfig, domain: unknown[], limit: number
+): Promise<Partner[]> {
+  const fieldSets = [CUSTOMER_FIELDS, ["id", "name", "email", "phone", "company_type"], ["id", "name", "email", "company_type"]];
+  let lastError: unknown;
+  for (const fields of fieldSets) {
+    try {
+      return await execute<Partner[]>(config, "res.partner", "search_read", [domain, fields], { limit });
+    } catch (e) {
+      lastError = e;
+      if (!(e instanceof Error) || !/Invalid field/i.test(e.message)) throw e;
+    }
+  }
+  throw lastError;
+}
+
 async function findSimilarPartners(config: OdooConfig, name: string, rankField: "customer_rank" | "supplier_rank") {
-  const rows = await execute<Partner[]>(config, "res.partner", "search_read", [
-    [[rankField, ">", 0], ["name", "ilike", name]], CUSTOMER_FIELDS,
-  ], { limit: 20 });
-  return rows;
+  return searchReadPartnersResilient(config, [[rankField, ">", 0], ["name", "ilike", name]], 20);
 }
 
 async function resolvePartnerId(config: OdooConfig, nameOrId: string, rankField: "customer_rank" | "supplier_rank"): Promise<{ id: number } | { candidates: Partner[] } | { notFound: true }> {
@@ -143,7 +161,7 @@ export async function executeOdooTool(
       const limit = (args.limit as number) ?? 20;
       const domain: unknown[] = [["customer_rank", ">", 0]];
       if (args.search) domain.push(["name", "ilike", args.search]);
-      const rows = await execute<Partner[]>(config, "res.partner", "search_read", [domain, CUSTOMER_FIELDS], { limit });
+      const rows = await searchReadPartnersResilient(config, domain, limit);
       const out = rows.map(partnerToCustomer);
       return { result: out, display: `__CUSTOMERS__${JSON.stringify(out)}` };
     }
@@ -166,7 +184,7 @@ export async function executeOdooTool(
       const limit = (args.limit as number) ?? 20;
       const domain: unknown[] = [["supplier_rank", ">", 0]];
       if (args.search) domain.push(["name", "ilike", args.search]);
-      const rows = await execute<Partner[]>(config, "res.partner", "search_read", [domain, CUSTOMER_FIELDS], { limit });
+      const rows = await searchReadPartnersResilient(config, domain, limit);
       const out = rows.map(partnerToSupplier);
       return { result: out, display: `__SUPPLIERS__${JSON.stringify(out)}` };
     }
