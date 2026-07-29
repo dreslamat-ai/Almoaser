@@ -2,9 +2,172 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
-import { Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap, ChevronDown, ChevronUp, Coins, Hash, StickyNote } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap,
+  ChevronDown, ChevronUp, Coins, Hash, StickyNote, Gift, PlusCircle, CalendarPlus, Receipt, Ban,
+} from "lucide-react";
 import { useState, Fragment } from "react";
 import { toast } from "sonner";
+
+const subStatusOptions = [
+  { value: "active", label: "نشط" },
+  { value: "trial", label: "تجريبي" },
+  { value: "inactive", label: "معطّل" },
+  { value: "cancelled", label: "ملغي" },
+] as const;
+
+function SubscriptionActionsPanel({ userId, plans }: { userId: number; plans: Array<{ id: number; nameAr: string }> | undefined }) {
+  const utils = trpc.useUtils();
+  const [activatePlanId, setActivatePlanId] = useState<string>("");
+  const [activateBilling, setActivateBilling] = useState<"monthly" | "yearly">("monthly");
+  const [creditsAmount, setCreditsAmount] = useState("");
+  const [extendDays, setExtendDays] = useState("");
+
+  const { data: paymentHistory } = trpc.admin.paymentsForUser.useQuery({ userId });
+  const { data: invoices } = trpc.admin.invoicesForUser.useQuery({ userId });
+
+  const invalidateAll = () => {
+    utils.admin.subscriptions.invalidate();
+    utils.admin.usageSummary.invalidate();
+    utils.admin.paymentsForUser.invalidate({ userId });
+  };
+
+  const statusMutation = trpc.admin.setSubscriptionStatus.useMutation({
+    onSuccess: () => { toast.success("تم تحديث حالة الاشتراك"); invalidateAll(); },
+    onError: e => toast.error(e.message),
+  });
+  const activateMutation = trpc.admin.activateSubscription.useMutation({
+    onSuccess: () => { toast.success("تم تفعيل الباقة بدون دفع"); invalidateAll(); },
+    onError: e => toast.error(e.message),
+  });
+  const creditsMutation = trpc.admin.grantCredits.useMutation({
+    onSuccess: () => { toast.success("تم منح النقاط"); setCreditsAmount(""); invalidateAll(); },
+    onError: e => toast.error(e.message),
+  });
+  const extendMutation = trpc.admin.extendSubscriptionDays.useMutation({
+    onSuccess: () => { toast.success("تم تمديد الاشتراك"); setExtendDays(""); invalidateAll(); },
+    onError: e => toast.error(e.message),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* حالة الاشتراك */}
+        <div className="bg-white rounded-xl p-3 border border-gray-100">
+          <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1.5"><Ban className="w-3.5 h-3.5" /> حالة الاشتراك</div>
+          <Select value="" onValueChange={v => statusMutation.mutate({ userId, status: v as typeof subStatusOptions[number]["value"] })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="تغيير الحالة..." /></SelectTrigger>
+            <SelectContent>
+              {subStatusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* تفعيل بدون دفع */}
+        <div className="bg-white rounded-xl p-3 border border-gray-100">
+          <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1.5"><Gift className="w-3.5 h-3.5" /> تفعيل بدون دفع</div>
+          <div className="flex gap-1">
+            <Select value={activatePlanId} onValueChange={setActivatePlanId}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="اختر باقة" /></SelectTrigger>
+              <SelectContent>
+                {plans?.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nameAr}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button size="sm" className="h-8 text-xs shrink-0" disabled={!activatePlanId || activateMutation.isPending}
+              onClick={() => activateMutation.mutate({ userId, planId: Number(activatePlanId), billing: activateBilling })}>
+              تفعيل
+            </Button>
+          </div>
+        </div>
+
+        {/* منح نقاط */}
+        <div className="bg-white rounded-xl p-3 border border-gray-100">
+          <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1.5"><PlusCircle className="w-3.5 h-3.5" /> منح نقاط</div>
+          <div className="flex gap-1">
+            <Input type="number" min={1} value={creditsAmount} onChange={e => setCreditsAmount(e.target.value)} placeholder="عدد النقاط" className="h-8 text-xs" />
+            <Button size="sm" className="h-8 text-xs shrink-0" disabled={!creditsAmount || creditsMutation.isPending}
+              onClick={() => creditsMutation.mutate({ userId, credits: Number(creditsAmount) })}>
+              منح
+            </Button>
+          </div>
+        </div>
+
+        {/* تمديد أيام */}
+        <div className="bg-white rounded-xl p-3 border border-gray-100">
+          <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1.5"><CalendarPlus className="w-3.5 h-3.5" /> تمديد أيام إضافية</div>
+          <div className="flex gap-1">
+            <Input type="number" min={1} value={extendDays} onChange={e => setExtendDays(e.target.value)} placeholder="عدد الأيام" className="h-8 text-xs" />
+            <Button size="sm" className="h-8 text-xs shrink-0" disabled={!extendDays || extendMutation.isPending}
+              onClick={() => extendMutation.mutate({ userId, days: Number(extendDays) })}>
+              تمديد
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* سجل المدفوعات */}
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="px-3 py-2 border-b border-gray-100 text-xs font-medium text-navy flex items-center gap-1.5">
+          <Receipt className="w-3.5 h-3.5" /> سجل المدفوعات
+        </div>
+        <div className="max-h-48 overflow-y-auto">
+          {(paymentHistory?.length ?? 0) === 0 ? (
+            <div className="px-3 py-4 text-xs text-muted-foreground text-center">لا توجد مدفوعات بعد</div>
+          ) : (
+            <table className="w-full text-xs">
+              <tbody className="divide-y divide-gray-50">
+                {paymentHistory?.map(p => (
+                  <tr key={p.id}>
+                    <td className="px-3 py-2 text-muted-foreground">{new Date(p.createdAt).toLocaleDateString("ar-SA")}</td>
+                    <td className="px-3 py-2">{p.purpose === "subscription" ? "اشتراك" : "شحن نقاط"}</td>
+                    <td className="px-3 py-2 font-medium text-navy">{Number(p.amount).toLocaleString("ar-SA")} {p.currency}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-1.5 py-0.5 rounded-full font-medium ${p.status === "paid" ? "badge-completed" : p.status === "pending" ? "badge-trial" : "badge-cancelled"}`}>
+                        {p.status === "paid" ? "مدفوع" : p.status === "pending" ? "معلق" : p.status === "failed" ? "فشل" : "منتهي"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* الفواتير */}
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="px-3 py-2 border-b border-gray-100 text-xs font-medium text-navy flex items-center gap-1.5">
+          <FileText className="w-3.5 h-3.5" /> فواتير الخدمة
+        </div>
+        <div className="max-h-48 overflow-y-auto">
+          {(invoices?.length ?? 0) === 0 ? (
+            <div className="px-3 py-4 text-xs text-muted-foreground text-center">لا توجد فواتير بعد</div>
+          ) : (
+            <table className="w-full text-xs">
+              <tbody className="divide-y divide-gray-50">
+                {invoices?.map(inv => (
+                  <tr key={inv.id}>
+                    <td className="px-3 py-2 text-muted-foreground">{inv.invoiceNumber}</td>
+                    <td className="px-3 py-2 font-medium text-navy">{Number(inv.amount).toLocaleString("ar-SA")} {inv.currency}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-1.5 py-0.5 rounded-full font-medium ${inv.status === "paid" ? "badge-completed" : inv.status === "overdue" ? "badge-cancelled" : "badge-trial"}`}>
+                        {inv.status === "paid" ? "مدفوعة" : inv.status === "overdue" ? "متأخرة" : inv.status === "cancelled" ? "ملغاة" : "معلقة"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString("ar-SA")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const taskTypeLabels: Record<string, string> = {
   bookkeeping: "مسك الدفاتر", invoice: "فاتورة", journal_entry: "قيد محاسبي",
@@ -201,6 +364,9 @@ export default function AdminPanel() {
                                     <div className="text-sm text-navy whitespace-pre-wrap">{s.notes}</div>
                                   </div>
                                 )}
+                              </div>
+                              <div className="pt-3">
+                                <SubscriptionActionsPanel userId={s.userId} plans={plans} />
                               </div>
                             </td>
                           </tr>
