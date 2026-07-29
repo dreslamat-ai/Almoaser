@@ -838,29 +838,31 @@ async function inspectTaxSetup(): Promise<TaxSetupOk | TaxSetupGap> {
   } catch { /* غير حرج للفحص */ }
 
   // قالب ضريبة المبيعات الافتراضي + صفوفه
+  let template: string | null = null;
+  let taxRows: Array<Record<string, unknown>> = [];
   try {
     const tplFields = encodeURIComponent(JSON.stringify(["name", "is_default"]));
     const tplData = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template?limit=10&fields=${tplFields}&filters=${encodeURIComponent(JSON.stringify([["disabled", "=", 0]]))}`) as { data?: Array<{ name: string; is_default: number }> };
     const templates = tplData?.data ?? [];
-    const template = templates.find(t => t.is_default === 1)?.name ?? templates[0]?.name ?? null;
+    template = templates.find(t => t.is_default === 1)?.name ?? templates[0]?.name ?? null;
     if (!template) {
       missing.push("لا يوجد قالب ضريبة مبيعات (Sales Taxes and Charges Template) في النظام");
     } else {
       const tplDoc = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template/${encodeURIComponent(template)}`) as { data?: { taxes?: Array<{ charge_type: string; account_head: string; rate: number; description: string }> } };
-      const taxRows = (tplDoc?.data?.taxes ?? []).map(t => ({
+      taxRows = (tplDoc?.data?.taxes ?? []).map(t => ({
         charge_type: t.charge_type, account_head: t.account_head, rate: t.rate, description: t.description,
       }));
       if (taxRows.length === 0) {
         missing.push(`قالب الضريبة "${template}" موجود لكنه فارغ (لا يحتوي أي نسبة ضريبة)`);
-      } else if (missing.length === 0) {
-        return { ok: true, template, taxRows, companyTaxId };
-      } else {
-        // القالب سليم لكن الرقم الضريبي ناقص — نكمل الفاتورة بالضريبة وننبّه لاحقاً
-        return { ok: true, template, taxRows, companyTaxId };
       }
     }
   } catch (e) {
     missing.push(`تعذّر قراءة قوالب الضريبة من النظام: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+  }
+
+  // كل الإعدادات سليمة: قالب فيه نسبة فعلية + رقم ضريبي للشركة (يظهر على كل فاتورة ضريبية)
+  if (missing.length === 0 && template) {
+    return { ok: true, template, taxRows, companyTaxId };
   }
 
   // حسابات ضريبية متاحة لبناء القالب
@@ -1484,6 +1486,15 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       if (args.company_tax_id) {
         await erpPUT(`/api/resource/Company/${encodeURIComponent(comp.name)}`, { tax_id: String(args.company_tax_id).trim() });
         done.push(`سُجّل الرقم الضريبي للشركة: ${String(args.company_tax_id).trim()}`);
+      }
+
+      // إن كان قالب الضريبة سليماً بالفعل ولم يكن الناقص إلا الرقم الضريبي، لا نُنشئ قالباً مكرراً
+      const existing = await inspectTaxSetup();
+      if (existing.ok) {
+        return {
+          result: { success: true, template: existing.template, already_configured: true, done },
+          display: `__TAX_SETUP_DONE__${JSON.stringify({ template: existing.template, rate: (existing.taxRows[0]?.rate as number) ?? rate, account_head: (existing.taxRows[0]?.account_head as string) ?? "", done: [...done, `قالب الضريبة "${existing.template}" مضبوط بالفعل — لم يُنشأ قالب جديد`] })}`,
+        };
       }
 
       // 2) حل الحساب الضريبي (أو استخدام ما حدده العميل)
