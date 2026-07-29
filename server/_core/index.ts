@@ -7,6 +7,8 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { startScheduledJobs } from "../scheduler";
+import { registerMyFatoorahWebhook } from "../myfatoorahWebhook";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -34,6 +36,9 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
+  // Webhook إشعار الدفع من MyFatoorah — يُنهي تفعيل الاشتراك/الشحن تلقائياً حتى
+  // لو لم يعد العميل لصفحة الكولباك بعد الدفع
+  registerMyFatoorahWebhook(app);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -59,6 +64,7 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+  startScheduledJobs();
 }
 
 startServer().catch(console.error);

@@ -5,6 +5,7 @@
 import { protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { invokeAgentLLM } from "../llmProvider";
+import { logLlmUsage } from "../llmUsage";
 import { storagePut, storageGetSignedUrl } from "../storage";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
@@ -1563,6 +1564,11 @@ ${buildExpertSkillsSection(hasCfoSkill)}
             tools: TOOLS,
             tool_choice: "auto",
             maxTokens: 2000,
+          });
+          void logLlmUsage({
+            userId: ctx.effectiveUserId ?? ctx.user.id,
+            provider: response._provider ?? "builtin",
+            usage: response.usage,
           });
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : "LLM invocation failed";

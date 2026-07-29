@@ -190,3 +190,96 @@ export async function maybeNotifyTrialEnding(
     link: "/subscription",
   });
 }
+
+/** إشعار العميل باقتراب انتهاء اشتراكه (خارج التجربة) — يُستدعى من الفحص الدوري */
+async function notifySubscriptionEnding(userId: number, daysLeft: number): Promise<void> {
+  const db = await requireDb();
+  const recent = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.type, "subscription_ending"),
+        sql`${notifications.createdAt} > (NOW() - INTERVAL 1 DAY)`,
+      ),
+    )
+    .limit(1);
+  if (recent.length > 0) return;
+  await notifyUser({
+    userId,
+    type: "subscription_ending",
+    title: "اشتراكك على وشك الانتهاء",
+    body: `تبقّى ${daysLeft} ${daysLeft === 1 ? "يوم" : "أيام"} على انتهاء اشتراكك الحالي. جدّده الآن لتجنّب انقطاع الخدمة.`,
+    link: "/subscription",
+  });
+}
+
+/** إشعار كل الأدمن باقتراب انتهاء اشتراك ممنوح إدارياً (منحة مجانية) لمتابعته */
+async function notifyAdminsGrantEnding(userId: number, ownerLabel: string, daysLeft: number): Promise<void> {
+  const db = await requireDb();
+  const recent = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.type, "admin_grant_ending"),
+        sql`${notifications.body} LIKE ${`%user:${userId}%`}`,
+        sql`${notifications.createdAt} > (NOW() - INTERVAL 1 DAY)`,
+      ),
+    )
+    .limit(1);
+  if (recent.length > 0) return;
+  await notifyAdmins({
+    type: "admin_grant_ending",
+    title: "اشتراك ممنوح إدارياً على وشك الانتهاء",
+    body: `اشتراك ${ownerLabel} (user:${userId}) الممنوح إدارياً بدون دفع سينتهي خلال ${daysLeft} ${daysLeft === 1 ? "يوم" : "أيام"} — راجع الحساب من لوحة الإدارة.`,
+    link: "/admin",
+  });
+}
+
+/**
+ * فحص دوري لكل الاشتراكات القريبة من الانتهاء (٣ أيام أو أقل): تنبيه للعميل
+ * دائماً، وتنبيه إضافي للأدمن إن كان الاشتراك ممنوحاً إدارياً بدون دفع.
+ * يُستدعى من جدولة دورية (server/scheduler.ts) — كل استدعاء آمن للتكرار
+ * (idempotent) بفضل فحص الإشعارات الأخيرة.
+ */
+export async function checkExpiringSubscriptions(): Promise<void> {
+  const db = await requireDb();
+  const { subscriptions, payments } = await import("../drizzle/schema");
+  const { eq: eqOp, and: andOp, sql: sqlOp } = await import("drizzle-orm");
+
+  const rows = await db
+    .select({
+      userId: subscriptions.userId,
+      endDate: subscriptions.endDate,
+      status: subscriptions.status,
+      companyName: subscriptions.companyName,
+      ownerName: users.name,
+      ownerEmail: users.email,
+    })
+    .from(subscriptions)
+    .innerJoin(users, eqOp(subscriptions.userId, users.id))
+    .where(
+      andOp(
+        eqOp(subscriptions.status, "active"),
+        sqlOp`${subscriptions.endDate} IS NOT NULL AND ${subscriptions.endDate} BETWEEN NOW() AND (NOW() + INTERVAL 3 DAY)`,
+      ),
+    );
+
+  for (const r of rows) {
+    if (!r.endDate) continue;
+    const daysLeft = Math.max(1, Math.ceil((new Date(r.endDate).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+    await notifySubscriptionEnding(r.userId, daysLeft).catch(() => {});
+
+    const grantRows = await db
+      .select({ id: payments.id })
+      .from(payments)
+      .where(andOp(eqOp(payments.userId, r.userId), eqOp(payments.grantedByAdmin, true)))
+      .limit(1);
+    if (grantRows.length > 0) {
+      const label = r.companyName || r.ownerName || r.ownerEmail || `#${r.userId}`;
+      await notifyAdminsGrantEnding(r.userId, label, daysLeft).catch(() => {});
+    }
+  }
+}

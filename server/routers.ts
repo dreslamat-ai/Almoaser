@@ -30,7 +30,7 @@ import {
   getTaskCommentsByTaskId, createTaskComment, getTaskById,
   updateUserProfile,
   getAllUsers, setUserRole,
-  setUserActive,
+  setUserActive, getUserById,
 } from "./db";
 
 // ─── ERPNext Per-User Fetch ───────────────────────────────────────────────────
@@ -564,6 +564,13 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكنك إزالة صلاحية المسؤول عن حسابك" });
         }
         await setUserRole(input.userId, input.role);
+        const { logAdminAction } = await import("./adminAudit");
+        const target = await getUserById(input.userId);
+        await logAdminAction({
+          adminId: ctx.user.id, adminName: ctx.user.name ?? undefined,
+          action: "set_user_role", targetUserId: input.userId, targetUserEmail: target?.email ?? undefined,
+          details: `تغيير الدور إلى ${input.role === "admin" ? "مسؤول" : "عميل"}`,
+        });
         return { success: true };
       }),
     setUserActive: protectedProcedure
@@ -574,6 +581,13 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكنك تعطيل حسابك" });
         }
         await setUserActive(input.userId, input.isActive);
+        const { logAdminAction } = await import("./adminAudit");
+        const target = await getUserById(input.userId);
+        await logAdminAction({
+          adminId: ctx.user.id, adminName: ctx.user.name ?? undefined,
+          action: "set_user_active", targetUserId: input.userId, targetUserEmail: target?.email ?? undefined,
+          details: input.isActive ? "إعادة تفعيل الحساب" : "تعطيل الحساب",
+        });
         return { success: true };
       }),
     // ملخص استهلاك كل العملاء (منظمات): الباقة، الرصيد، عدد المستندات/الرسائل المستهلكة
@@ -588,7 +602,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const { activateSubscriptionWithoutPayment } = await import("./adminSubscriptions");
-        await activateSubscriptionWithoutPayment({ ...input, adminName: ctx.user.name ?? undefined });
+        await activateSubscriptionWithoutPayment({ ...input, adminId: ctx.user.id, adminName: ctx.user.name ?? undefined });
         return { success: true };
       }),
     // تفعيل/تعطيل حالة اشتراك عميل (بدون حذف حسابه أو منعه من تسجيل الدخول)
@@ -599,6 +613,13 @@ export const appRouter = router({
         const sub = await getSubscriptionByUserId(input.userId);
         if (!sub) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك لهذا العميل" });
         await updateSubscription(sub.id, { status: input.status });
+        const { logAdminAction } = await import("./adminAudit");
+        const target = await getUserById(input.userId);
+        await logAdminAction({
+          adminId: ctx.user.id, adminName: ctx.user.name ?? undefined,
+          action: "set_subscription_status", targetUserId: input.userId, targetUserEmail: target?.email ?? undefined,
+          details: `تغيير حالة الاشتراك إلى ${input.status}`,
+        });
         return { success: true };
       }),
     // منح نقاط رصيد إضافية لعميل بدون دفع
@@ -607,7 +628,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const { grantCreditsManual } = await import("./adminSubscriptions");
-        await grantCreditsManual({ ...input, adminName: ctx.user.name ?? undefined });
+        await grantCreditsManual({ ...input, adminId: ctx.user.id, adminName: ctx.user.name ?? undefined });
         return { success: true };
       }),
     // تمديد اشتراك عميل بعدد أيام محدد خارج دورة الباقة
@@ -616,7 +637,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const { extendSubscriptionDays: extend } = await import("./adminSubscriptions");
-        await extend(input);
+        await extend({ ...input, adminId: ctx.user.id, adminName: ctx.user.name ?? undefined });
         return { success: true };
       }),
     // سجل مدفوعات عميل محدد
@@ -635,6 +656,30 @@ export const appRouter = router({
         const { getServiceInvoicesForUser } = await import("./adminSubscriptions");
         return getServiceInvoicesForUser(input.userId);
       }),
+    // سجل تدقيق كل الإجراءات الإدارية الحساسة
+    auditLog: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getAdminActionLog } = await import("./adminAudit");
+      return getAdminActionLog();
+    }),
+    // ملخص الإيرادات الفعلية مقابل قيمة المنح الإدارية المجانية
+    revenueSummary: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getRevenueSummary } = await import("./revenue");
+      return getRevenueSummary();
+    }),
+    // ملخص تكلفة استدعاءات النماذج الذكية بالدولار (اليوم/الشهر/الإجمالي) لكل موديل
+    llmCostSummary: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getLlmCostSummary } = await import("./llmUsage");
+      return getLlmCostSummary();
+    }),
+    // تصدير تقرير مالي كامل (CSV) لكل المدفوعات والمنح الإدارية
+    exportFinancialReport: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { exportFinancialReportCsv } = await import("./revenue");
+      return { csv: await exportFinancialReportCsv() };
+    }),
   }),
 
   erpnext: router({
