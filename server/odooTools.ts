@@ -485,6 +485,14 @@ export async function executeOdooTool(
     case "get_settings":
     case "update_settings":
       return { result: { error: "إعدادات النظام غير مدعومة حالياً عند استخدام Odoo — هذه الميزة متاحة فقط مع ERPNext" }, display: "" };
+    case "check_tax_setup":
+    case "setup_tax_settings":
+      // في Odoo الضرائب تُدار كسجلات account.tax لكل بند وتُطبَّق تلقائياً من إعداد المنتج/العميل،
+      // ولا يوجد مكافئ مباشر لقالب ضريبة افتراضي — نوجّه العميل بدل الادعاء بالقدرة
+      return {
+        result: { error: "فحص وضبط إعدادات الضريبة آلياً غير مدعوم حالياً على Odoo — الضرائب في Odoo تُضبط من إعدادات المحاسبة (account.tax) وتُطبَّق على مستوى الصنف/العميل. أبلغ العميل أن يضبطها من نظامه أو يتواصل مع الدعم" },
+        display: "",
+      };
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

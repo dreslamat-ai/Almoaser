@@ -35,6 +35,8 @@ const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = {
   delete_document: "manageErpSettings",
   get_settings: "viewInvoices",
   update_settings: "manageErpSettings",
+  check_tax_setup: "viewInvoices",
+  setup_tax_settings: "manageErpSettings",
 };
 
 function requireToolPermission(user: User, toolName: string): void {
@@ -524,6 +526,32 @@ const TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "check_tax_setup",
+      description: "فحص إعدادات الضريبة في نظام العميل (قالب ضريبة المبيعات + الرقم الضريبي للشركة). استخدمها في بداية التعامل مع عميل جديد أو عند أي شك، وأبلغ العميل بنتيجتها إن كان هناك نقص",
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "setup_tax_settings",
+      description: "ضبط إعدادات الضريبة للعميل: إنشاء قالب ضريبة مبيعات افتراضي بالنسبة المطلوبة و/أو تسجيل الرقم الضريبي للشركة. **لا تستدعِها أبداً قبل أن تُبلغ العميل بما هو ناقص وتحصل على موافقته الصريحة** — الأداة ترفض التنفيذ إن لم تُمرّر confirmed: true",
+      parameters: {
+        type: "object",
+        properties: {
+          confirmed: { type: "boolean", description: "اجعلها true فقط بعد أن يوافق العميل صراحةً على أن تضبط له إعدادات الضريبة" },
+          rate: { type: "number", description: "نسبة الضريبة المئوية (15 للسعودية، 14 لمصر، 5 للإمارات... اسأل العميل إن لم تكن متأكداً)" },
+          company_tax_id: { type: "string", description: "الرقم الضريبي للشركة (البائع) إن كان ناقصاً وأعطاه العميل" },
+          account_head: { type: "string", description: "اسم الحساب الضريبي في شجرة الحسابات (اختياري — يُحل تلقائياً إن تُرك فارغاً)" },
+        },
+        required: ["confirmed", "rate"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "print_document",
       description: "استخدمها دائماً عندما يطلب العميل طباعة أو تنزيل PDF أو إرسال نسخة من أي مستند موجود بالفعل (فاتورة مبيعات، فاتورة مشتريات، دفعة، أو قيد يومية). تعرض للعميل زر تحميل PDF فوري بنموذج الطباعة الفعلي المُعدّ في نظامه. لا ترفض طلب الطباعة أبداً — استخدم هذه الأداة دوماً بدل الاعتذار",
       parameters: {
@@ -790,6 +818,69 @@ const SINGLE_DOCTYPES = new Set([
   "Projects Settings", "Domain Settings",
 ]);
 
+// ─── فحص إعدادات الضريبة في نظام العميل ───────────────────────────────────────
+// يرجع القالب الافتراضي وصفوفه إن كانت الإعدادات سليمة، أو تفصيل ما هو ناقص
+// حتى يبلّغ الوكيل العميل ويأخذ موافقته على ضبطها (setup_tax_settings)
+type TaxSetupOk = { ok: true; template: string; taxRows: Array<Record<string, unknown>>; companyTaxId?: string | null };
+type TaxSetupGap = { ok: false; missing: string[]; message: string; company?: string; companyTaxId?: string | null; availableTaxAccounts?: string[] };
+
+async function inspectTaxSetup(): Promise<TaxSetupOk | TaxSetupGap> {
+  const missing: string[] = [];
+  let company: string | undefined;
+  let companyTaxId: string | null = null;
+
+  // الرقم الضريبي للشركة (البائع) — بدونه الفاتورة الضريبية غير مكتملة
+  try {
+    const compList = await erpGET(`/api/resource/Company?limit=1&fields=${encodeURIComponent(JSON.stringify(["name", "tax_id"]))}`) as { data?: Array<{ name: string; tax_id?: string }> };
+    company = compList?.data?.[0]?.name;
+    companyTaxId = compList?.data?.[0]?.tax_id ?? null;
+    if (!companyTaxId) missing.push("الرقم الضريبي للشركة (البائع) غير مسجّل في بيانات الشركة");
+  } catch { /* غير حرج للفحص */ }
+
+  // قالب ضريبة المبيعات الافتراضي + صفوفه
+  try {
+    const tplFields = encodeURIComponent(JSON.stringify(["name", "is_default"]));
+    const tplData = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template?limit=10&fields=${tplFields}&filters=${encodeURIComponent(JSON.stringify([["disabled", "=", 0]]))}`) as { data?: Array<{ name: string; is_default: number }> };
+    const templates = tplData?.data ?? [];
+    const template = templates.find(t => t.is_default === 1)?.name ?? templates[0]?.name ?? null;
+    if (!template) {
+      missing.push("لا يوجد قالب ضريبة مبيعات (Sales Taxes and Charges Template) في النظام");
+    } else {
+      const tplDoc = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template/${encodeURIComponent(template)}`) as { data?: { taxes?: Array<{ charge_type: string; account_head: string; rate: number; description: string }> } };
+      const taxRows = (tplDoc?.data?.taxes ?? []).map(t => ({
+        charge_type: t.charge_type, account_head: t.account_head, rate: t.rate, description: t.description,
+      }));
+      if (taxRows.length === 0) {
+        missing.push(`قالب الضريبة "${template}" موجود لكنه فارغ (لا يحتوي أي نسبة ضريبة)`);
+      } else if (missing.length === 0) {
+        return { ok: true, template, taxRows, companyTaxId };
+      } else {
+        // القالب سليم لكن الرقم الضريبي ناقص — نكمل الفاتورة بالضريبة وننبّه لاحقاً
+        return { ok: true, template, taxRows, companyTaxId };
+      }
+    }
+  } catch (e) {
+    missing.push(`تعذّر قراءة قوالب الضريبة من النظام: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+  }
+
+  // حسابات ضريبية متاحة لبناء القالب
+  let availableTaxAccounts: string[] | undefined;
+  try {
+    const accFilters = encodeURIComponent(JSON.stringify([["is_group", "=", 0], ["root_type", "=", "Liability"]]));
+    const accData = await erpGET(`/api/resource/Account?limit=25&fields=${encodeURIComponent(JSON.stringify(["name", "account_type"]))}&filters=${accFilters}`) as { data?: Array<{ name: string; account_type?: string }> };
+    availableTaxAccounts = (accData?.data ?? [])
+      .filter(a => a.account_type === "Tax" || /vat|tax|ضريب/i.test(a.name))
+      .map(a => a.name);
+  } catch { /* غير حرج */ }
+
+  return {
+    ok: false,
+    missing,
+    message: "إعدادات الضريبة غير مضبوطة في نظام العميل — أبلغ العميل بما هو ناقص واطلب موافقته الصريحة قبل ضبطها بـ setup_tax_settings",
+    company, companyTaxId, availableTaxAccounts,
+  };
+}
+
 async function executeTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown; display: string }> {
   switch (name) {
     case "get_invoices": {
@@ -897,24 +988,14 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       let taxTemplate: string | null = null;
       let taxRows: Array<Record<string, unknown>> = [];
       if (applyVat) {
-        try {
-          const tplFields = encodeURIComponent(JSON.stringify(["name", "is_default"]));
-          const tplData = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template?limit=10&fields=${tplFields}&filters=${encodeURIComponent(JSON.stringify([["disabled", "=", 0]]))}`) as { data: Array<{ name: string; is_default: number }> };
-          const templates = tplData?.data ?? [];
-          taxTemplate = templates.find(t => t.is_default === 1)?.name ?? templates[0]?.name ?? null;
-          if (taxTemplate) {
-            // جلب صفوف الضريبة من القالب لتضمينها في الفاتورة
-            const tplDoc = await erpGET(`/api/resource/Sales%20Taxes%20and%20Charges%20Template/${encodeURIComponent(taxTemplate)}`) as { data: { taxes?: Array<{ charge_type: string; account_head: string; rate: number; description: string }> } };
-            taxRows = (tplDoc?.data?.taxes ?? []).map(t => ({
-              charge_type: t.charge_type,
-              account_head: t.account_head,
-              rate: t.rate,
-              description: t.description,
-            }));
-          }
-        } catch (e) {
-          console.warn("[create_invoice] failed to load tax template:", e instanceof Error ? e.message : e);
+        // لا نُصدر فاتورة ضريبية بصمت بدون ضريبة: إن لم تكن إعدادات الضريبة مضبوطة
+        // نوقف الإنشاء ونطلب من الوكيل إبلاغ العميل وأخذ موافقته على ضبطها
+        const taxSetup = await inspectTaxSetup();
+        if (!taxSetup.ok) {
+          return { result: { needs_clarification: true, reason: "tax_settings_not_configured", ...taxSetup }, display: "" };
         }
+        taxTemplate = taxSetup.template;
+        taxRows = taxSetup.taxRows;
       }
       const invoiceDoc = {
         customer: resolvedCustomer,
@@ -1367,6 +1448,88 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
       };
     }
+    case "check_tax_setup": {
+      const setup = await inspectTaxSetup();
+      if (setup.ok) {
+        return {
+          result: {
+            configured: true,
+            template: setup.template,
+            rates: setup.taxRows.map(r => r.rate),
+            company_tax_id: setup.companyTaxId ?? null,
+            note: setup.companyTaxId ? undefined : "قالب الضريبة سليم لكن الرقم الضريبي للشركة غير مسجّل — أبلغ العميل واطلب موافقته على تسجيله",
+          },
+          display: "",
+        };
+      }
+      return { result: { configured: false, ...setup }, display: "" };
+    }
+    case "setup_tax_settings": {
+      // الموافقة الصريحة شرط مُنفَّذ في الكود، لا مجرد تعليمات للوكيل
+      if (args.confirmed !== true) {
+        return { result: { error: "مطلوب موافقة العميل الصريحة أولاً — أبلغه بما هو ناقص في إعدادات الضريبة واطلب إذنه، ثم استدعِ الأداة بـ confirmed: true" }, display: "" };
+      }
+      const rate = Number(args.rate);
+      if (!Number.isFinite(rate) || rate <= 0 || rate > 100) {
+        return { result: { error: "نسبة ضريبة غير صالحة — اسأل العميل عن النسبة المطبقة في بلده" }, display: "" };
+      }
+      const done: string[] = [];
+
+      // الشركة الحالية
+      const compList = await erpGET(`/api/resource/Company?limit=1&fields=${encodeURIComponent(JSON.stringify(["name", "tax_id", "abbr"]))}`) as { data?: Array<{ name: string; tax_id?: string; abbr?: string }> };
+      const comp = compList?.data?.[0];
+      if (!comp) return { result: { error: "لم يُعثر على شركة في النظام" }, display: "" };
+
+      // 1) تسجيل الرقم الضريبي للشركة إن أُعطي
+      if (args.company_tax_id) {
+        await erpPUT(`/api/resource/Company/${encodeURIComponent(comp.name)}`, { tax_id: String(args.company_tax_id).trim() });
+        done.push(`سُجّل الرقم الضريبي للشركة: ${String(args.company_tax_id).trim()}`);
+      }
+
+      // 2) حل الحساب الضريبي (أو استخدام ما حدده العميل)
+      let accountHead = args.account_head ? String(args.account_head) : null;
+      if (!accountHead) {
+        const accFilters = encodeURIComponent(JSON.stringify([["is_group", "=", 0], ["root_type", "=", "Liability"]]));
+        const accData = await erpGET(`/api/resource/Account?limit=50&fields=${encodeURIComponent(JSON.stringify(["name", "account_type"]))}&filters=${accFilters}`) as { data?: Array<{ name: string; account_type?: string }> };
+        const accounts = accData?.data ?? [];
+        accountHead = accounts.find(a => a.account_type === "Tax" && /vat|ضريب/i.test(a.name))?.name
+          ?? accounts.find(a => a.account_type === "Tax")?.name
+          ?? accounts.find(a => /vat|ضريب/i.test(a.name))?.name
+          ?? null;
+        if (!accountHead) {
+          return {
+            result: {
+              needs_clarification: true, reason: "no_tax_account_found",
+              message: "لم أجد حساباً ضريبياً في شجرة الحسابات — اسأل العميل عن الحساب الذي يريد ترحيل الضريبة إليه",
+              available: accounts.map(a => a.name).slice(0, 25),
+            },
+            display: "",
+          };
+        }
+      }
+
+      // 3) إنشاء قالب ضريبة المبيعات وتعيينه افتراضياً
+      const templateName = `ضريبة القيمة المضافة ${rate}%`;
+      const tplDoc = {
+        title: templateName,
+        company: comp.name,
+        is_default: 1,
+        taxes: [{
+          charge_type: "On Net Total",
+          account_head: accountHead,
+          rate,
+          description: `ضريبة القيمة المضافة ${rate}%`,
+        }],
+      };
+      const created = await erpPOST("/api/resource/Sales%20Taxes%20and%20Charges%20Template", tplDoc) as { data?: { name?: string } };
+      const createdName = created?.data?.name ?? templateName;
+      done.push(`أُنشئ قالب ضريبة "${createdName}" بنسبة ${rate}% على حساب "${accountHead}" وعُيّن افتراضياً`);
+
+      return {
+        result: { success: true, template: createdName, rate, account_head: accountHead, done },
+        display: `__TAX_SETUP_DONE__${JSON.stringify({ template: createdName, rate, account_head: accountHead, done })}`,
+      };
+    }
     case "get_settings": {
       const settingsType = args.settings_type as string;
       const recName = args.name as string | undefined;
@@ -1578,7 +1741,8 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 11. **المستندات المستخرجة من الصور**: إذا احتوت المحادثة على "بيانات مستخرجة" من صورة (فاتورة/سند) وأكّد المستخدم التسجيل (نعم/سجّل/أكّد) → نفّذ فوراً حسب النوع: فاتورة مبيعات → سير إنشاء الفاتورة المعتاد (بحث عميل/أصناف ثم create_invoice) | فاتورة مشتريات → بحث مورد ثم create_purchase_invoice | سند قبض → create_payment_entry بنوع Receive | سند صرف → create_payment_entry بنوع Pay. إن صحّح المستخدم بيانات، استخدم البيانات المصحّحة
 12. **التعديل**: لتعديل بيانات عميل/مورد/صنف → update_document مباشرة. لتعديل فاتورة/قيد/دفعة: إن كانت مسودة → update_document، وإن كانت معتمدة → أخبر المستخدم أنها تتطلب الإلغاء أولاً واعرض عليه: cancel_document ثم إنشاء مستند بديل بالبيانات الصحيحة
 13. **الحذف والإلغاء**: delete_document حذف نهائي (يلغي المستند المعتمد تلقائياً قبل حذفه). **اطلب تأكيداً صريحاً من المستخدم قبل أي حذف أو إلغاء** واذكر رقم المستند وأثره (مثال: "إلغاء الفاتورة سيعكس أثرها من الحسابات — هل تؤكد؟"). لا تحذف أبداً دون تأكيد
-14. **ضريبة القيمة المضافة (VAT)**: الضريبة تأتي **جاهزة من إعدادات نظام المعاصر** — create_invoice تطبّق قالب الضريبة الافتراضي (Sales Taxes and Charges Template) تلقائياً دون أي إعداد منك. لا تحسب الضريبة يدوياً ولا تضفها كصنف. الأسعار المُمررة rate هي قبل الضريبة، والنظام يحتسب 15% ويظهرها في الفاتورة. إن طلب المستخدم فاتورة بدون ضريبة/معفاة → apply_vat: false. عند إخبار المستخدم بإجمالي الفاتورة اذكر: الإجمالي قبل الضريبة، الضريبة، والمجموع شامل الضريبة
+14. **ضريبة القيمة المضافة (VAT)**: الضريبة تأتي **جاهزة من إعدادات نظام العميل** — create_invoice تطبّق قالب الضريبة الافتراضي (Sales Taxes and Charges Template) تلقائياً دون أي إعداد منك. لا تحسب الضريبة يدوياً ولا تضفها كصنف. الأسعار المُمررة rate هي قبل الضريبة، والنظام يحتسب النسبة ويظهرها في الفاتورة. إن طلب المستخدم فاتورة بدون ضريبة/معفاة → apply_vat: false. عند إخبار المستخدم بإجمالي الفاتورة اذكر: الإجمالي قبل الضريبة، الضريبة، والمجموع شامل الضريبة
+14أ. **إعدادات الضريبة غير المضبوطة — إبلاغ ثم موافقة (مهم)**: إذا أعادت create_invoice نتيجة needs_clarification بسبب tax_settings_not_configured، أو أظهرت check_tax_setup نقصاً: **لا تُصدر الفاتورة بدون ضريبة بصمت أبداً**. بدلاً من ذلك: 1) أبلغ العميل بوضوح بما هو ناقص بالتحديد (من حقل missing) وأثره — "فاتورتك لن تكون فاتورة ضريبية نظامية بدون هذا" 2) اسأله عن نسبة الضريبة المطبقة في بلده إن لم تكن معروفة (15% السعودية، 14% مصر، 5% الإمارات) وعن الرقم الضريبي للشركة إن كان ناقصاً 3) **اطلب موافقته الصريحة**: "هل تسمح لي أضبط لك إعدادات الضريبة الآن؟" 4) بعد موافقته فقط، استدعِ setup_tax_settings مع confirmed: true 5) ثم أعد إنشاء الفاتورة. الأداة نفسها ترفض التنفيذ بدون confirmed: true — فلا تحاول تجاوز خطوة الموافقة. إن رفض العميل، أخبره أن الفاتورة ستُصدر بدون ضريبة وانتظر تأكيده على ذلك (apply_vat: false)
 15. **الرقم الضريبي للعملاء (إلزامي لا اختياري)**: أي عميل من نوع شركة/مؤسسة **يجب** أن يكون له رقم ضريبي مسجّل قبل إصدار أي فاتورة مبيعات له. عند إنشاء عميل جديد اسأل عن الرقم الضريبي وامرّره في tax_id فوراً. إن حاولت إنشاء فاتورة مبيعات لعميل شركة بلا رقم ضريبي، ستُعيد create_invoice نتيجة needs_clarification بسبب missing_tax_id — عندها **توقف واسأل المستخدم عن الرقم الضريبي صراحةً**، سجّله بـ update_document (Customer، fields: {tax_id: "..."})، ثم أعد محاولة إنشاء الفاتورة. لا تنشئ الفاتورة بدون الرقم الضريبي ولا تتجاوز هذا الشرط إلا إذا أكّد المستخدم صراحةً أن العميل فرد (Individual) لا يملك سجلاً تجارياً
 16. **ترتيب أسئلة إنشاء الفاتورة**: عندما يطلب العميل تسجيل فاتورة ولم يُعطِ كل التفاصيل دفعة واحدة، اسأل بالترتيب التالي (سؤالاً واحداً في كل مرة، لا تسأل كل الأسئلة دفعة واحدة): 1) اسم العميل — ثم تحقق من الرقم الضريبي المسجل له (راجع قاعدة 15) 2) الصنف أو الخدمة 3) الكمية 4) السعر. إذا ذكر المستخدم بعض التفاصيل مسبقاً في رسالته، لا تعد سؤالها، واسأل فقط عمّا تبقّى بنفس الترتيب
 17. **متطلبات الفوترة الإلكترونية حسب البلد**: قبل إنشاء أول فاتورة لعميل جديد، تحقق من بلد الشركة (get_settings على Company — الحقل country) إن لم تكن متأكداً منه بالفعل في هذه المحادثة. في السعودية: الرقم الضريبي 15 رقماً يبدأ وينتهي بـ 3 (قاعدة ZATCA) وهذا محقق تلقائياً عبر تنسيق النظام. في مصر أو أي دولة أخرى لها منظومة فوترة إلكترونية إلزامية (مثل منظومة الفاتورة الإلكترونية المصرية ETA)، لا تفترض صيغة الرقم الضريبي — اسأل المستخدم صراحةً: "هل عميلك مسجّل في منظومة الفوترة الإلكترونية في بلدكم؟ ما رقم تسجيله الضريبي؟" وسجّل ما يقوله دون التحقق من صيغة محددة. الهدف: لا تُصدر فاتورة لعميل شركة دون رقم ضريبي مسجل أياً كان بلد الشركة

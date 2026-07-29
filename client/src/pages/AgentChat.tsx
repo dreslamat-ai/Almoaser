@@ -898,6 +898,19 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       );
     } catch { return null; }
   }
+  if (display.startsWith("__TAX_SETUP_DONE__")) {
+    try {
+      const d = JSON.parse(display.replace("__TAX_SETUP_DONE__", "")) as { template: string; rate: number; account_head: string; done: string[] };
+      return (
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <p className="font-semibold text-emerald-800">⚙️ تم ضبط إعدادات الضريبة</p>
+          <ul className="text-emerald-700 text-xs mt-1 space-y-0.5">
+            {(d.done ?? []).map((line, i) => <li key={i}>• {line}</li>)}
+          </ul>
+        </div>
+      );
+    } catch { return null; }
+  }
   if (display.startsWith("__SETTINGS_UPDATED__")) {
     try {
       const d = JSON.parse(display.replace("__SETTINGS_UPDATED__", "")) as { settings_type: string; name: string; changed: string[] };
