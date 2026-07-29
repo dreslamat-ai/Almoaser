@@ -23,7 +23,17 @@ export default function Subscription() {
     onError: (e) => toast.error(e.message),
   });
   const upgradeMutation = trpc.subscription.upgrade.useMutation({
-    onSuccess: () => { toast.success("تم ترقية الاشتراك بنجاح!"); utils.subscription.get.invalidate(); utils.credits.balance.invalidate(); },
+    onSuccess: (res, vars) => {
+      const targetPlan = plans?.find(p => p.id === vars.planId);
+      const isDowngrade = currentPlan && targetPlan && Number(targetPlan.price) < Number(currentPlan.price);
+      if (res.stillInTrial) {
+        toast.success(`تم تغيير الباقة المطلوبة إلى ${targetPlan?.nameAr ?? ""} — ستُفعَّل تلقائياً بعد انتهاء فترة التجربة الحالية`);
+      } else {
+        toast.success(isDowngrade ? "تم تخفيض الباقة بنجاح" : "تم ترقية الاشتراك بنجاح!");
+      }
+      utils.subscription.get.invalidate();
+      utils.credits.balance.invalidate();
+    },
     onError: (e) => toast.error(e.message),
   });
   const topupMutation = trpc.payments.createTopupPayment.useMutation({
@@ -209,7 +219,12 @@ export default function Subscription() {
         )}
 
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <h2 className="text-lg font-bold text-navy">{subscription ? "ترقية الباقة" : "اختر باقتك"}</h2>
+          <div>
+            <h2 className="text-lg font-bold text-navy">{subscription ? "تغيير الباقة" : "اختر باقتك"}</h2>
+            {subscription?.status === "trial" && (
+              <p className="text-xs text-muted-foreground mt-1">أنت لسه في الفترة التجريبية — تغيير الباقة هنا بيغيّر الباقة المطلوبة فقط بدون أي دفع، وهتتفعّل تلقائياً بعد انتهاء التجربة.</p>
+            )}
+          </div>
           {/* مبدّل الفوترة */}
           <div className="inline-flex items-center gap-1 p-1 rounded-full bg-white border border-gray-200">
             <button onClick={() => setBilling("monthly")}
@@ -271,7 +286,13 @@ export default function Subscription() {
                   <Button onClick={() => upgradeMutation.mutate({ planId: plan.id, billing })} disabled={upgradeMutation.isPending}
                     className={`w-full ${isPopular ? "bg-navy-gradient text-white" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
                     variant={isPopular ? "default" : "outline"}>
-                    {upgradeMutation.isPending ? "جاري التحديث..." : isCurrent ? "تغيير دورة الفوترة" : "ترقية إلى هذه الباقة"}
+                    {upgradeMutation.isPending
+                      ? "جاري التحديث..."
+                      : isCurrent
+                        ? "تغيير دورة الفوترة"
+                        : currentPlan && monthly < Number(currentPlan.price)
+                          ? "تخفيض إلى هذه الباقة"
+                          : "ترقية إلى هذه الباقة"}
                   </Button>
                 ) : (
                   <Button onClick={() => createMutation.mutate({ planId: plan.id, billing })} disabled={createMutation.isPending}
