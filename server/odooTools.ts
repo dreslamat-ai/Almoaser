@@ -258,6 +258,21 @@ export async function executeOdooTool(
       if ("notFound" in custResolved) return { result: { error: `العميل "${args.customer}" غير موجود` }, display: "" };
       if ("candidates" in custResolved) return { result: { needs_clarification: true, reason: "found_multiple_customers", candidates: custResolved.candidates.map(c => c.name) }, display: "" };
 
+      // حماية: الفاتورة الضريبية تتطلب رقماً ضريبياً (vat) مسجلاً للعميل من نوع شركة —
+      // نتجاهل فشل الفحص نفسه (لا نمنع الفاتورة لو الحقل مش متاح على هذه النسخة من Odoo)
+      try {
+        const partnerRows = await execute<Array<{ company_type?: string; vat?: string; name?: string }>>(
+          config, "res.partner", "read", [[custResolved.id]], { fields: ["company_type", "vat", "name"] }
+        );
+        const partner = partnerRows[0];
+        if (partner && partner.company_type !== "person" && !partner.vat) {
+          return {
+            result: { needs_clarification: true, reason: "missing_tax_id", customer: String(custResolved.id), customer_name: partner.name ?? args.customer },
+            display: "",
+          };
+        }
+      } catch { /* تجاهل - فحص اختياري */ }
+
       const rawItems = args.items as Array<{ item_code: string; qty: number; rate: number }>;
       const lineVals: Array<[number, number, Record<string, unknown>]> = [];
       for (const it of rawItems) {
