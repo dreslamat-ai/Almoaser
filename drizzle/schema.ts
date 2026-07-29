@@ -117,8 +117,8 @@ export const creditTransactions = mysqlTable("credit_transactions", {
 export const payments = mysqlTable("payments", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull().references(() => users.id),
-  // الغرض: subscription (اشتراك/ترقية) | topup (شحن نقاط)
-  purpose: mysqlEnum("purpose", ["subscription", "topup"]).notNull(),
+  // الغرض: subscription (اشتراك/ترقية) | topup (شحن نقاط) | extension (تمديد أيام إداري)
+  purpose: mysqlEnum("purpose", ["subscription", "topup", "extension"]).notNull(),
   planId: int("planId").references(() => plans.id),
   // دورة الفوترة عند الاشتراك
   billing: mysqlEnum("billing", ["monthly", "yearly"]),
@@ -131,6 +131,10 @@ export const payments = mysqlTable("payments", {
   invoiceId: varchar("invoiceId", { length: 100 }),
   paymentUrl: varchar("paymentUrl", { length: 500 }),
   paidAt: timestamp("paidAt"),
+  // true = منحة إدارية (بدون تحصيل فعلي) — amount تبقى 0.00 وتُستخدم equivalentValue لحساب "القيمة الممنوحة"
+  grantedByAdmin: boolean("grantedByAdmin").default(false).notNull(),
+  // القيمة السوقية المكافئة للمنحة الإدارية (ريال) — لأغراض تقرير الإيرادات فقط، لا تُحصَّل فعلياً
+  equivalentValue: decimal("equivalentValue", { precision: 10, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -269,3 +273,41 @@ export const pushSubscriptions = mysqlTable("push_subscriptions", {
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+
+// ─── سجل تدقيق إجراءات الأدمن ─────────────────────────────────────────────────
+// كل إجراء إداري حساس (تفعيل بدون دفع، منح نقاط، تمديد، تغيير حالة/دور) يُسجَّل
+// هنا: مين نفّذه ومتى وعلى أي عميل، للتتبع والمراجعة لاحقاً
+export const adminActionLog = mysqlTable("admin_action_log", {
+  id: int("id").autoincrement().primaryKey(),
+  adminId: int("adminId").notNull().references(() => users.id),
+  adminName: varchar("adminName", { length: 255 }),
+  action: mysqlEnum("action", [
+    "activate_subscription", "set_subscription_status", "grant_credits",
+    "extend_days", "set_user_role", "set_user_active",
+  ]).notNull(),
+  targetUserId: int("targetUserId").notNull(),
+  targetUserEmail: varchar("targetUserEmail", { length: 320 }),
+  details: text("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AdminActionLogRow = typeof adminActionLog.$inferSelect;
+
+// ─── سجل استهلاك نماذج الذكاء الاصطناعي (تكلفة بالدولار) ─────────────────────
+// كل استدعاء LLM يُسجَّل هنا بعدد التوكنز والتكلفة المقدرة بالدولار، لمقارنته
+// لحظياً بالإيرادات الفعلية المحصّلة في لوحة تحكم الأدمن
+export const llmUsageLog = mysqlTable("llm_usage_log", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").references(() => users.id),
+  // المزود والموديل الفعلي المستخدم، مثل openrouter أو openai أو builtin
+  provider: varchar("provider", { length: 40 }).notNull(),
+  model: varchar("model", { length: 120 }).notNull(),
+  promptTokens: int("promptTokens").default(0).notNull(),
+  completionTokens: int("completionTokens").default(0).notNull(),
+  totalTokens: int("totalTokens").default(0).notNull(),
+  // التكلفة التقديرية بالدولار الأمريكي بناءً على تسعير الموديل وقت الاستدعاء
+  costUsd: decimal("costUsd", { precision: 12, scale: 6 }).default("0").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type LlmUsageLogRow = typeof llmUsageLog.$inferSelect;

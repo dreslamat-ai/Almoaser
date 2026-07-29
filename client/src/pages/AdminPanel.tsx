@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap,
   ChevronDown, ChevronUp, Coins, Hash, StickyNote, Gift, PlusCircle, CalendarPlus, Receipt, Ban,
+  Search, DollarSign, TrendingUp, Download, Cpu,
 } from "lucide-react";
 import { useState, Fragment } from "react";
 import { toast } from "sonner";
@@ -89,7 +90,11 @@ function SubscriptionActionsPanel({ userId, plans }: { userId: number; plans: Ar
           <div className="flex gap-1">
             <Input type="number" min={1} value={creditsAmount} onChange={e => setCreditsAmount(e.target.value)} placeholder="عدد النقاط" className="h-8 text-xs" />
             <Button size="sm" className="h-8 text-xs shrink-0" disabled={!creditsAmount || creditsMutation.isPending}
-              onClick={() => creditsMutation.mutate({ userId, credits: Number(creditsAmount) })}>
+              onClick={() => {
+                const n = Number(creditsAmount);
+                if (n > 2000 && !window.confirm(`تأكيد منح ${n} نقطة (قيمة مكافئة تقريبية ${(n)} ريال) — هل أنت متأكد؟`)) return;
+                creditsMutation.mutate({ userId, credits: n });
+              }}>
               منح
             </Button>
           </div>
@@ -101,7 +106,11 @@ function SubscriptionActionsPanel({ userId, plans }: { userId: number; plans: Ar
           <div className="flex gap-1">
             <Input type="number" min={1} value={extendDays} onChange={e => setExtendDays(e.target.value)} placeholder="عدد الأيام" className="h-8 text-xs" />
             <Button size="sm" className="h-8 text-xs shrink-0" disabled={!extendDays || extendMutation.isPending}
-              onClick={() => extendMutation.mutate({ userId, days: Number(extendDays) })}>
+              onClick={() => {
+                const n = Number(extendDays);
+                if (n > 60 && !window.confirm(`تأكيد تمديد الاشتراك ${n} يوماً — هل أنت متأكد؟`)) return;
+                extendMutation.mutate({ userId, days: n });
+              }}>
               تمديد
             </Button>
           </div>
@@ -180,18 +189,56 @@ const statusColors: Record<string, string> = {
 };
 const regStatusLabels: Record<string, string> = { new: "جديد", contacted: "تم التواصل", converted: "عميل", rejected: "مرفوض" };
 const regStatusColors: Record<string, string> = { new: "badge-pending", contacted: "badge-trial", converted: "badge-completed", rejected: "badge-cancelled" };
+const adminActionLabels: Record<string, string> = {
+  activate_subscription: "تفعيل باقة بدون دفع",
+  set_subscription_status: "تغيير حالة الاشتراك",
+  grant_credits: "منح نقاط",
+  extend_days: "تمديد أيام",
+  set_user_role: "تغيير دور مستخدم",
+  set_user_active: "تفعيل/تعطيل حساب",
+};
 
 export default function AdminPanel() {
   const { user, isAuthenticated, loading } = useAuth();
   const [tab, setTab] = useState("registrations");
   const [expandedSubId, setExpandedSubId] = useState<number | null>(null);
+  const [subSearch, setSubSearch] = useState("");
+  const [usageSearch, setUsageSearch] = useState("");
   const { data: registrations } = trpc.admin.registrations.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: subscriptions } = trpc.admin.subscriptions.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: tasks } = trpc.admin.tasks.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: plans } = trpc.plans.list.useQuery();
   const { data: allUsers } = trpc.admin.users.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: usageSummary } = trpc.admin.usageSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
+  const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
+  const { data: revenueSummary } = trpc.admin.revenueSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", refetchInterval: 30000 });
+  const { data: llmCostSummary } = trpc.admin.llmCostSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", refetchInterval: 30000 });
+  const exportQuery = trpc.admin.exportFinancialReport.useQuery(undefined, { enabled: false });
   const utils = trpc.useUtils();
+
+  const filteredSubscriptions = subscriptions?.filter(s => {
+    if (!subSearch.trim()) return true;
+    const q = subSearch.trim().toLowerCase();
+    return [s.companyName, s.ownerName, s.ownerEmail].some(v => v?.toLowerCase().includes(q));
+  });
+  const filteredUsage = usageSummary?.filter(o => {
+    if (!usageSearch.trim()) return true;
+    const q = usageSearch.trim().toLowerCase();
+    return [o.organizationName, o.ownerName, o.ownerEmail].some(v => v?.toLowerCase().includes(q));
+  });
+
+  const handleExportCsv = async () => {
+    const res = await exportQuery.refetch();
+    const csv = res.data?.csv;
+    if (!csv) { toast.error("لا توجد بيانات للتصدير"); return; }
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `financial-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const setRoleMutation = trpc.admin.setUserRole.useMutation({
     onSuccess: () => {
       toast.success("تم تحديث دور المستخدم");
@@ -244,7 +291,7 @@ export default function AdminPanel() {
         </div>
 
         <div className="flex gap-2 mb-6 flex-wrap">
-          {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["tasks", "المهام"], ["users", "المستخدمون"]].map(([v, l]) => (
+          {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
             <button key={v} onClick={() => setTab(v)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
               {l}
@@ -299,7 +346,14 @@ export default function AdminPanel() {
             </div>
           )}
           {tab === "subscriptions" && (
-            <div className="overflow-x-auto">
+            <div>
+              <div className="p-3 border-b border-gray-100">
+                <div className="relative max-w-xs">
+                  <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={subSearch} onChange={e => setSubSearch(e.target.value)} placeholder="بحث بالاسم أو البريد أو الشركة..." className="h-9 text-sm pr-9" />
+                </div>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full min-w-[650px]">
                 <thead className="bg-gray-50 border-b">
                   <tr>{["العميل", "الباقة", "الحالة", "تاريخ البدء", ""].map(h => (
@@ -307,7 +361,7 @@ export default function AdminPanel() {
                   ))}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {subscriptions?.map(s => {
+                  {filteredSubscriptions?.map(s => {
                     const isOpen = expandedSubId === s.id;
                     const plan = plans?.find(p => p.id === s.planId);
                     return (
@@ -374,15 +428,23 @@ export default function AdminPanel() {
                       </Fragment>
                     );
                   })}
-                  {(subscriptions?.length ?? 0) === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">لا توجد اشتراكات بعد</td></tr>
+                  {(filteredSubscriptions?.length ?? 0) === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">لا توجد اشتراكات مطابقة</td></tr>
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
           {tab === "usage" && (
-            <div className="overflow-x-auto">
+            <div>
+              <div className="p-3 border-b border-gray-100">
+                <div className="relative max-w-xs">
+                  <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={usageSearch} onChange={e => setUsageSearch(e.target.value)} placeholder="بحث بالاسم أو البريد..." className="h-9 text-sm pr-9" />
+                </div>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full min-w-[750px]">
                 <thead className="bg-gray-50 border-b">
                   <tr>{["العميل", "الباقة", "الحالة", "الرصيد المتبقي", "المستندات المستهلكة", "الرسائل المستهلكة", "إجمالي النقاط المستهلكة"].map(h => (
@@ -390,7 +452,7 @@ export default function AdminPanel() {
                   ))}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {usageSummary?.map(o => (
+                  {filteredUsage?.map(o => (
                     <tr key={o.subscriptionId} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-sm">
                         <div className="font-medium text-navy">{o.organizationName}</div>
@@ -408,11 +470,12 @@ export default function AdminPanel() {
                       <td className="px-4 py-3 text-sm font-medium text-navy">{o.totalCreditsConsumed} نقطة</td>
                     </tr>
                   ))}
-                  {(usageSummary?.length ?? 0) === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد استهلاك بعد</td></tr>
+                  {(filteredUsage?.length ?? 0) === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد استهلاك مطابق</td></tr>
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
           {tab === "tasks" && (
@@ -513,6 +576,130 @@ export default function AdminPanel() {
                   ))}
                   {(allUsers?.length ?? 0) === 0 && (
                     <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد مستخدمون بعد</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {tab === "revenue" && (
+            <div className="p-4 space-y-6">
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" className="text-xs h-8 gap-1" onClick={handleExportCsv} disabled={exportQuery.isFetching}>
+                  <Download className="w-3.5 h-3.5" /> تصدير تقرير مالي (CSV)
+                </Button>
+              </div>
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-3"><TrendingUp className="w-5 h-5" /></div>
+                  <div className="text-2xl font-bold text-navy">{(revenueSummary?.totalPaidRevenue ?? 0).toLocaleString("ar-SA")} ريال</div>
+                  <div className="text-sm text-muted-foreground">إجمالي الإيرادات الفعلية المحصّلة</div>
+                </div>
+                <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center mb-3"><Gift className="w-5 h-5" /></div>
+                  <div className="text-2xl font-bold text-navy">{(revenueSummary?.totalAdminGrantsValue ?? 0).toLocaleString("ar-SA")} ريال</div>
+                  <div className="text-sm text-muted-foreground">قيمة المنح الإدارية المجانية</div>
+                </div>
+                <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3"><Cpu className="w-5 h-5" /></div>
+                  <div className="text-2xl font-bold text-navy">${(llmCostSummary?.today ?? 0).toFixed(4)}</div>
+                  <div className="text-sm text-muted-foreground">تكلفة النماذج (آخر 24 ساعة)</div>
+                </div>
+                <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3"><DollarSign className="w-5 h-5" /></div>
+                  <div className="text-2xl font-bold text-navy">${(llmCostSummary?.last30Days ?? 0).toFixed(4)}</div>
+                  <div className="text-sm text-muted-foreground">تكلفة النماذج (آخر 30 يوماً)</div>
+                </div>
+                <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm sm:col-span-2 lg:col-span-4">
+                  <div className="text-sm text-muted-foreground">
+                    هامش تقديري للشهر الحالي: إيرادات الشهر {(revenueSummary?.byMonth[0]?.paidRevenue ?? 0).toLocaleString("ar-SA")} ريال
+                    − تكلفة نماذج آخر 30 يوماً {((llmCostSummary?.last30Days ?? 0) * 3.75).toFixed(2)} ريال (بسعر صرف تقريبي 3.75 ريال/دولار)
+                  </div>
+                  <div className="text-xl font-bold text-navy mt-1">
+                    {((revenueSummary?.byMonth[0]?.paidRevenue ?? 0) - (llmCostSummary?.last30Days ?? 0) * 3.75).toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ريال
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-navy flex items-center gap-2">
+                  <Cpu className="w-4 h-4" /> تكلفة النماذج الذكية حسب الموديل (تحديث كل 30 ثانية)
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px] text-sm">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>{["الموديل", "المزود", "عدد الاستدعاءات", "إجمالي التوكنز", "التكلفة (دولار)"].map(h => (
+                        <th key={h} className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {llmCostSummary?.byModel.map(m => (
+                        <tr key={`${m.provider}-${m.model}`}>
+                          <td className="px-4 py-2 font-medium text-navy" dir="ltr">{m.model}</td>
+                          <td className="px-4 py-2 text-muted-foreground">{m.provider}</td>
+                          <td className="px-4 py-2">{m.calls.toLocaleString("ar-SA")}</td>
+                          <td className="px-4 py-2">{m.totalTokens.toLocaleString("ar-SA")}</td>
+                          <td className="px-4 py-2 font-medium text-navy">${m.costUsd.toFixed(4)}</td>
+                        </tr>
+                      ))}
+                      {(llmCostSummary?.byModel.length ?? 0) === 0 && (
+                        <tr><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground text-sm">لا يوجد استهلاك مسجَّل بعد</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-navy flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" /> الإيرادات مقابل المنح الإدارية (آخر 12 شهراً)
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[500px] text-sm">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>{["الشهر", "إيرادات فعلية", "قيمة منح مجانية"].map(h => (
+                        <th key={h} className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {revenueSummary?.byMonth.map(m => (
+                        <tr key={m.month}>
+                          <td className="px-4 py-2 font-medium text-navy" dir="ltr">{m.month}</td>
+                          <td className="px-4 py-2">{m.paidRevenue.toLocaleString("ar-SA")} ريال</td>
+                          <td className="px-4 py-2 text-muted-foreground">{m.grantsValue.toLocaleString("ar-SA")} ريال</td>
+                        </tr>
+                      ))}
+                      {(revenueSummary?.byMonth.length ?? 0) === 0 && (
+                        <tr><td colSpan={3} className="px-4 py-6 text-center text-muted-foreground text-sm">لا توجد بيانات بعد</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+          {tab === "audit" && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[750px]">
+                <thead className="bg-gray-50 border-b">
+                  <tr>{["التاريخ", "المسؤول", "الإجراء", "العميل المستهدف", "التفاصيل"].map(h => (
+                    <th key={h} className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {auditLog?.map(a => (
+                    <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(a.createdAt).toLocaleString("ar-SA")}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-navy">{a.adminName ?? `#${a.adminId}`}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium badge-trial">{adminActionLabels[a.action] ?? a.action}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{a.targetUserEmail ?? `#${a.targetUserId}`}</td>
+                      <td className="px-4 py-3 text-sm text-navy">{a.details ?? "—"}</td>
+                    </tr>
+                  ))}
+                  {(auditLog?.length ?? 0) === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">لا توجد إجراءات مسجَّلة بعد</td></tr>
                   )}
                 </tbody>
               </table>

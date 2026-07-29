@@ -3,10 +3,11 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { protectedProcedure, router } from "../_core/trpc";
-import { getDb, getPlanById, getSubscriptionByUserId, updateSubscription } from "../db";
+import { getDb, getPlanById, getSubscriptionByUserId } from "../db";
 import { payments } from "../../drizzle/schema";
 import { createPaymentLink, getPaymentStatus, isMyFatoorahConfigured } from "../myfatoorah";
-import { yearlyPrice, topupPriceSAR, isValidTopupCredits, addTopupCredits } from "../credits";
+import { yearlyPrice, topupPriceSAR, isValidTopupCredits } from "../credits";
+import { finalizePaymentByReference } from "../paymentFinalize";
 
 function appBaseUrl(reqOrigin?: string): string {
   return reqOrigin || "https://erpsys.cloud";
@@ -96,6 +97,7 @@ export const paymentsRouter = router({
     }),
 
   // التحقق من الدفع بعد العودة من بوابة الدفع وتفعيل الاشتراك/النقاط
+  // (نفس منطق التفعيل يُنفَّذ أيضاً تلقائياً عبر webhook حتى لو لم يعد العميل لهذه الصفحة)
   verifyPayment: protectedProcedure
     .input(z.object({ mfPaymentId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
@@ -109,33 +111,11 @@ export const paymentsRouter = router({
       if (!payment || payment.userId !== ctx.user.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "عملية الدفع غير موجودة" });
       }
-      if (payment.status === "paid") {
-        return { status: "paid" as const, purpose: payment.purpose };
-      }
-      if (status.InvoiceStatus !== "Paid") {
-        await db.update(payments).set({ status: "failed" }).where(eq(payments.id, payment.id));
-        return { status: "failed" as const, purpose: payment.purpose };
-      }
-
-      // الدفع ناجح → التفعيل
-      await db.update(payments).set({ status: "paid", paidAt: new Date() }).where(eq(payments.id, payment.id));
-      if (payment.purpose === "subscription" && payment.planId) {
-        const plan = await getPlanById(payment.planId);
-        const sub = await getSubscriptionByUserId(ctx.user.id);
-        const periodMs = payment.billing === "yearly" ? 365 * 24 * 3600 * 1000 : 30 * 24 * 3600 * 1000;
-        if (sub) {
-          await updateSubscription(sub.id, {
-            planId: payment.planId,
-            status: "active",
-            billing: payment.billing ?? "monthly",
-            endDate: new Date(Date.now() + periodMs),
-            ...(plan ? { creditsBalance: plan.monthlyCredits, creditsCycleStart: new Date() } : {}),
-          });
-        }
-      } else if (payment.purpose === "topup" && payment.credits) {
-        await addTopupCredits(ctx.user.id, payment.credits, `شحن ${payment.credits} نقطة عبر MyFatoorah`);
-      }
-      return { status: "paid" as const, purpose: payment.purpose };
+      const result = await finalizePaymentByReference(status);
+      return {
+        status: (result.status === "already_paid" ? "paid" : result.status === "not_found" ? "failed" : result.status) as "paid" | "failed",
+        purpose: result.purpose ?? payment.purpose,
+      };
     }),
 
   // سجل مدفوعات المنظمة (مالك الحساب — نفس مصدر الفوترة لكل أعضاء المنظمة)
