@@ -171,6 +171,28 @@ interface CreatedInvoice {
   grand_total?: number;
 }
 
+type ErpDoctype = "Sales Invoice" | "Purchase Invoice" | "Payment Entry" | "Journal Entry";
+
+interface CreatedPurchaseInvoice {
+  name: string;
+  supplier: unknown;
+  items: unknown;
+  grand_total?: number;
+}
+
+interface CreatedPayment {
+  name: string;
+  payment_type?: string;
+  party?: string;
+  paid_amount?: number;
+}
+
+interface CreatedJournalEntry {
+  name: string;
+  total_debit?: number;
+  entries?: number;
+}
+
 // ─── Tool Result Renderers ────────────────────────────────────────────────────
 function InvoicesTable({ invoices, onDownload }: { invoices: Invoice[]; onDownload: (name: string) => void }) {
   const statusColor = (s: string) => {
@@ -395,8 +417,60 @@ function CreatedInvoiceCard({ inv, onDownload }: { inv: CreatedInvoice; onDownlo
   );
 }
 
+function CreatedPurchaseInvoiceCard({ inv, onDownload }: { inv: CreatedPurchaseInvoice; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+  return (
+    <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden text-sm">
+      <div className="px-3 py-2 flex items-center gap-2 border-b border-emerald-200">
+        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <span className="font-semibold text-emerald-700">تم إنشاء فاتورة المشتريات بنجاح</span>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-auto border-emerald-300 text-emerald-700 hover:bg-emerald-100" onClick={() => onDownload("Purchase Invoice", inv.name)}>
+          <Download className="w-3 h-3" /> تحميل PDF
+        </Button>
+      </div>
+      <div className="p-3">
+        <p className="text-emerald-800"><span className="font-medium">رقم الفاتورة:</span> <span className="font-mono font-bold">{inv.name}</span></p>
+        <p className="text-emerald-700 text-xs mt-1">الفاتورة محفوظة كمسودة. يمكنك اعتمادها من النظام أو أطلب مني اعتمادها.</p>
+      </div>
+    </div>
+  );
+}
+
+function CreatedPaymentCard({ inv, onDownload }: { inv: CreatedPayment; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+  return (
+    <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden text-sm">
+      <div className="px-3 py-2 flex items-center gap-2 border-b border-emerald-200">
+        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <span className="font-semibold text-emerald-700">تم تسجيل الدفعة بنجاح</span>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-auto border-emerald-300 text-emerald-700 hover:bg-emerald-100" onClick={() => onDownload("Payment Entry", inv.name)}>
+          <Download className="w-3 h-3" /> تحميل PDF
+        </Button>
+      </div>
+      <div className="p-3">
+        <p className="text-emerald-800"><span className="font-medium">رقم السند:</span> <span className="font-mono font-bold">{inv.name}</span></p>
+      </div>
+    </div>
+  );
+}
+
+function CreatedJournalEntryCard({ inv, onDownload }: { inv: CreatedJournalEntry; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+  return (
+    <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 overflow-hidden text-sm">
+      <div className="px-3 py-2 flex items-center gap-2 border-b border-emerald-200">
+        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <span className="font-semibold text-emerald-700">تم تسجيل القيد اليومي بنجاح</span>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-auto border-emerald-300 text-emerald-700 hover:bg-emerald-100" onClick={() => onDownload("Journal Entry", inv.name)}>
+          <Download className="w-3 h-3" /> تحميل PDF
+        </Button>
+      </div>
+      <div className="p-3">
+        <p className="text-emerald-800"><span className="font-medium">رقم القيد:</span> <span className="font-mono font-bold">{inv.name}</span></p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tool Result Renderer ─────────────────────────────────────────────────────
-function ToolResultRenderer({ display, onDownload }: { display: string; onDownload: (name: string) => void }) {
+function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: string; onDownload: (name: string) => void; onDownloadDoc: (doctype: ErpDoctype, name: string) => void }) {
   if (display.startsWith("__INVOICES__")) {
     try {
       const invoices = JSON.parse(display.replace("__INVOICES__", "")) as Invoice[];
@@ -431,6 +505,24 @@ function ToolResultRenderer({ display, onDownload }: { display: string; onDownlo
     try {
       const inv = JSON.parse(display.replace("__INVOICE_CREATED__", "")) as CreatedInvoice;
       return <CreatedInvoiceCard inv={inv} onDownload={onDownload} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__PURCHASE_INVOICE_CREATED__")) {
+    try {
+      const inv = JSON.parse(display.replace("__PURCHASE_INVOICE_CREATED__", "")) as CreatedPurchaseInvoice;
+      return <CreatedPurchaseInvoiceCard inv={inv} onDownload={onDownloadDoc} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__PAYMENT_CREATED__")) {
+    try {
+      const inv = JSON.parse(display.replace("__PAYMENT_CREATED__", "")) as CreatedPayment;
+      return <CreatedPaymentCard inv={inv} onDownload={onDownloadDoc} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__JOURNAL_CREATED__")) {
+    try {
+      const inv = JSON.parse(display.replace("__JOURNAL_CREATED__", "")) as CreatedJournalEntry;
+      return <CreatedJournalEntryCard inv={inv} onDownload={onDownloadDoc} />;
     } catch { return null; }
   }
   if (display.startsWith("__DOC_UPDATED__")) {
@@ -519,7 +611,7 @@ export default function AgentChat() {
 
   const chatMutation = trpc.agent.chat.useMutation();
   const { data: creditsInfo } = trpc.credits.balance.useQuery();
-  const pdfMutation = trpc.agent.getInvoicePdf.useMutation();
+  const pdfMutation = trpc.agent.getDocumentPdf.useMutation();
   const transcribeMutation = trpc.agent.transcribeVoice.useMutation();
   const extractMutation = trpc.agent.extractDocument.useMutation();
   const utils = trpc.useUtils();
@@ -582,9 +674,9 @@ export default function AgentChat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, chatMutation.isPending]);
 
-  const downloadPdf = async (invoiceName: string) => {
+  const downloadDocumentPdf = async (doctype: ErpDoctype, name: string) => {
     try {
-      const result = await pdfMutation.mutateAsync({ invoiceName });
+      const result = await pdfMutation.mutateAsync({ doctype, name });
       const byteChars = atob(result.pdfBase64);
       const byteArr = new Uint8Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
@@ -593,10 +685,11 @@ export default function AgentChat() {
       const a = document.createElement("a");
       a.href = url; a.download = result.filename; a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      alert("تعذّر تحميل PDF — تحقق من صلاحيات الطباعة في Almoaser AI ERP");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "تعذّر تحميل PDF — تحقق من صلاحيات الطباعة في Almoaser AI ERP");
     }
   };
+  const downloadPdf = (invoiceName: string) => downloadDocumentPdf("Sales Invoice", invoiceName);
 
   const toggleSound = () => {
     setSoundEnabled(prev => {
@@ -898,7 +991,7 @@ export default function AgentChat() {
                     <div className="mt-1 space-y-1">
                       {msg.toolResults.map((tr, j) => (
                         tr.display ? (
-                          <ToolResultRenderer key={j} display={tr.display} onDownload={(name) => void downloadPdf(name)} />
+                          <ToolResultRenderer key={j} display={tr.display} onDownload={(name) => void downloadPdf(name)} onDownloadDoc={(doctype, name) => void downloadDocumentPdf(doctype, name)} />
                         ) : null
                       ))}
                     </div>
