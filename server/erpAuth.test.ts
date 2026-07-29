@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { buildErpOpenId, verifyErpCredentials, loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired } from "./erpAuth";
+import { buildErpOpenId, verifyErpCredentials, loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired, loginWithStoredConnection } from "./erpAuth";
 import { getDb } from "./db";
 import { users, subscriptions, erpnextConnections } from "../drizzle/schema";
 import { eq, like } from "drizzle-orm";
 
 const ERP_URL = "https://test.erpnext.example";
+const ODOO_URL = "https://test.odoo.example";
 const TEST_EMAIL = `vitest-erpauth-${Date.now()}@test.local`;
 
 function mockFetchLogin(ok: boolean, fullName = "مستخدم الاختبار") {
@@ -16,6 +17,12 @@ function mockFetchLogin(ok: boolean, fullName = "مستخدم الاختبار")
       });
     }
     return new Response(JSON.stringify({ message: "Invalid" }), { status: 401 });
+  });
+}
+
+function mockOdooLogin(ok: boolean) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    return new Response(JSON.stringify({ result: ok ? 42 : false }), { status: 200 });
   });
 }
 
@@ -173,5 +180,57 @@ describe("loginWithErpAccount + signupWithErpAccount", () => {
     // دورة شهرية تبدأ من نهاية التجربة
     const expectedCycleEnd = pastEnd.getTime() + 30 * 24 * 60 * 60 * 1000;
     expect(Math.abs(subRows[0].endDate!.getTime() - expectedCycleEnd)).toBeLessThan(5000);
+  });
+
+  it("التسجيل بحساب Odoo يخزّن provider=odoo واسم قاعدة البيانات", async () => {
+    mockOdooLogin(true);
+    const res = await signupWithErpAccount({
+      erpUrl: ODOO_URL,
+      email: TEST_EMAIL,
+      password: "secret123",
+      planId: 1,
+      provider: "odoo",
+      database: "my_company_db",
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    const db = await getDb();
+    if (!db) return;
+    const userRows = await db.select().from(users).where(eq(users.email, TEST_EMAIL));
+    expect(userRows[0].loginMethod).toBe("odoo");
+    const connRows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, userRows[0].id));
+    expect(connRows[0].provider).toBe("odoo");
+    expect(connRows[0].database).toBe("my_company_db");
+  });
+
+  it("التسجيل بحساب Odoo بدون اسم قاعدة بيانات يُرفض", async () => {
+    const res = await signupWithErpAccount({
+      erpUrl: ODOO_URL, email: TEST_EMAIL, password: "secret123", planId: 1, provider: "odoo",
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  it("تسجيل الدخول العائد (بدون رابط) يجد الاتصال المحفوظ ويتحقق مقابله", async () => {
+    mockFetchLogin(true, "مستخدم عائد");
+    const signup = await signupWithErpAccount({ erpUrl: ERP_URL, email: TEST_EMAIL, password: "secret123", planId: 1 });
+    expect(signup.ok).toBe(true);
+    if (!signup.ok) return;
+
+    // نفس بيانات الاعتماد، لكن بدون تمرير erpUrl — يجب أن يجد الرابط المحفوظ تلقائياً
+    const login = await loginWithStoredConnection(TEST_EMAIL, "secret123");
+    expect(login.ok).toBe(true);
+    if (!login.ok) return;
+    expect(login.result.openId).toBe(signup.result.openId);
+  });
+
+  it("تسجيل الدخول العائد بكلمة مرور خاطئة يفشل", async () => {
+    mockFetchLogin(true, "مستخدم عائد");
+    const signup = await signupWithErpAccount({ erpUrl: ERP_URL, email: TEST_EMAIL, password: "secret123", planId: 1 });
+    expect(signup.ok).toBe(true);
+
+    mockFetchLogin(false);
+    const login = await loginWithStoredConnection(TEST_EMAIL, "wrong");
+    expect(login.ok).toBe(false);
   });
 });

@@ -131,8 +131,8 @@ export default function AccountSettings() {
               <Server className="w-5 h-5 text-navy" />
             </div>
             <div className="flex-1">
-              <h2 className="font-semibold text-navy">اتصال نظام ERPNext الخاص بك</h2>
-              <p className="text-xs text-muted-foreground">انتقلت إدارة اتصال ERPNext إلى صفحة القنوات والربط لتكون مع إعدادات واتساب وتيليجرام</p>
+              <h2 className="font-semibold text-navy">اتصال نظام ERP الخاص بك (ERPNext أو Odoo)</h2>
+              <p className="text-xs text-muted-foreground">انتقلت إدارة اتصال نظام ERP إلى صفحة القنوات والربط لتكون مع إعدادات واتساب وتيليجرام</p>
             </div>
             {erpConn && (
               <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-3 py-1">

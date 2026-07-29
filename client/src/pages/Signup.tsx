@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   Loader2, UserPlus, Eye, EyeOff, Globe, ArrowLeft, ArrowRight,
@@ -14,7 +15,9 @@ import {
 export default function Signup() {
   const [, navigate] = useLocation();
   const [step, setStep] = useState<1 | 2>(1);
+  const [provider, setProvider] = useState<"erpnext" | "odoo">("erpnext");
   const [erpUrl, setErpUrl] = useState("");
+  const [database, setDatabase] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -46,6 +49,10 @@ export default function Signup() {
       toast.error("أدخل رابط نظامك بشكل صحيح — يجب أن يبدأ بـ https://");
       return;
     }
+    if (provider === "odoo" && !database.trim()) {
+      toast.error("أدخل اسم قاعدة بيانات Odoo");
+      return;
+    }
     if (!email.trim() || !email.includes("@")) {
       toast.error("أدخل بريدك الإلكتروني في النظام");
       return;
@@ -54,7 +61,10 @@ export default function Signup() {
       toast.error("أدخل كلمة المرور");
       return;
     }
-    const result = await testCredsMutation.mutateAsync({ erpUrl: erpUrl.trim(), email: email.trim(), password });
+    const result = await testCredsMutation.mutateAsync({
+      erpUrl: erpUrl.trim(), email: email.trim(), password,
+      provider, database: provider === "odoo" ? database.trim() : undefined,
+    });
     if (!result.ok) {
       toast.error(result.error);
       return;
@@ -75,6 +85,8 @@ export default function Signup() {
       planId,
       companyName: companyName.trim() || undefined,
       phone: phone.trim() || undefined,
+      provider,
+      database: provider === "odoo" ? database.trim() : undefined,
     });
   };
 
@@ -103,17 +115,38 @@ export default function Signup() {
         {step === 1 && (
           <form onSubmit={goToStep2} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="erpUrl">رابط نظامك (ERPNext)</Label>
+              <Label htmlFor="erp-provider">نوع نظام ERP</Label>
+              <Select value={provider} onValueChange={v => setProvider(v as "erpnext" | "odoo")}>
+                <SelectTrigger id="erp-provider"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="erpnext">ERPNext</SelectItem>
+                  <SelectItem value="odoo">Odoo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="erpUrl">رابط نظامك ({provider === "odoo" ? "Odoo" : "ERPNext"})</Label>
               <div className="relative">
                 <Input
                   id="erpUrl" type="url" dir="ltr"
-                  placeholder="https://your-company.erpnext.com"
+                  placeholder={provider === "odoo" ? "https://your-company.odoo.com" : "https://your-company.erpnext.com"}
                   value={erpUrl} onChange={e => setErpUrl(e.target.value)}
                   className="text-left pr-9"
                 />
                 <Globe className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
+            {provider === "odoo" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="s-database">اسم قاعدة بيانات Odoo</Label>
+                <Input
+                  id="s-database" dir="ltr"
+                  placeholder="my_company_db"
+                  value={database} onChange={e => setDatabase(e.target.value)}
+                  className="text-left font-mono text-xs"
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="s-email">البريد الإلكتروني (حسابك في النظام)</Label>
               <Input
