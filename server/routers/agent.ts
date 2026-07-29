@@ -779,6 +779,17 @@ function translateErpError(raw: string): string {
   return raw.slice(0, 300);
 }
 
+// مستندات الإعدادات الفردية (Single DocTypes) في Frappe/ERPNext: ليس لها جدول سجلات،
+// وتُقرأ وتُعدَّل باسم النوع نفسه. استعلامها كقائمة يفشل بـ ProgrammingError،
+// لذا أي Single DocType جديد يستخدمه الوكيل يجب إضافته هنا.
+const SINGLE_DOCTYPES = new Set([
+  "Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings",
+  "System Settings", "Global Defaults", "Print Settings", "Naming Series",
+  "HR Settings", "Payroll Settings", "Manufacturing Settings", "Support Settings",
+  "Website Settings", "Portal Settings", "E Commerce Settings", "CRM Settings",
+  "Projects Settings", "Domain Settings",
+]);
+
 async function executeTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown; display: string }> {
   switch (name) {
     case "get_invoices": {
@@ -1359,8 +1370,6 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
     case "get_settings": {
       const settingsType = args.settings_type as string;
       const recName = args.name as string | undefined;
-      // مستندات الإعدادات الفردية (Single DocTypes) تُقرأ باسم النوع نفسه
-      const SINGLE_DOCTYPES = new Set(["Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults"]);
       if (SINGLE_DOCTYPES.has(settingsType)) {
         const data = await erpGET(`/api/resource/${encodeURIComponent(settingsType)}/${encodeURIComponent(settingsType)}`) as { data: Record<string, unknown> };
         return { result: data?.data, display: "" };
@@ -1380,7 +1389,6 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       if (!fields || Object.keys(fields).length === 0) {
         return { result: { error: "لم تُحدد أي حقول للتعديل" }, display: "" };
       }
-      const SINGLE_DOCTYPES = new Set(["Selling Settings", "Buying Settings", "Stock Settings", "Accounts Settings", "System Settings", "Global Defaults"]);
       let path: string;
       if (SINGLE_DOCTYPES.has(settingsType)) {
         path = `/api/resource/${encodeURIComponent(settingsType)}/${encodeURIComponent(settingsType)}`;
