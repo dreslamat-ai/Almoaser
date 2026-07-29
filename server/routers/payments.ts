@@ -9,17 +9,20 @@ import { createPaymentLink, getPaymentStatus, isMyFatoorahConfigured } from "../
 import { yearlyPrice, topupPriceSAR, isValidTopupCredits, addTopupCredits } from "../credits";
 
 function appBaseUrl(reqOrigin?: string): string {
-  return reqOrigin || "https://almoaser.manus.space";
+  return reqOrigin || "https://erpsys.cloud";
 }
 
 export const paymentsRouter = router({
   // هل بوابة الدفع مفعّلة؟ (لعرض/إخفاء أزرار الدفع في الواجهة)
   isConfigured: protectedProcedure.query(() => ({ configured: isMyFatoorahConfigured() })),
 
-  // إنشاء دفعة اشتراك (شهري أو سنوي بخصم 15%)
+  // إنشاء دفعة اشتراك (شهري أو سنوي بخصم 15%) — لمالك الحساب فقط
   createSubscriptionPayment: protectedProcedure
     .input(z.object({ planId: z.number(), billing: z.enum(["monthly", "yearly"]) }))
     .mutation(async ({ ctx, input }) => {
+      if (ctx.user.orgRole !== "owner") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الفوترة متاحة لمالك الحساب فقط" });
+      }
       const plan = await getPlanById(input.planId);
       if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "الباقة غير موجودة" });
       const monthly = Number(plan.price);
@@ -52,10 +55,13 @@ export const paymentsRouter = router({
       return { paymentUrl: link.InvoiceURL, paymentId };
     }),
 
-  // إنشاء دفعة شحن نقاط (مضاعفات 100 نقطة، كل 100 نقطة = 100 ريال)
+  // إنشاء دفعة شحن نقاط (مضاعفات 100 نقطة، كل 100 نقطة = 100 ريال) — لمالك الحساب فقط
   createTopupPayment: protectedProcedure
     .input(z.object({ credits: z.number().int().min(100).max(10000) }))
     .mutation(async ({ ctx, input }) => {
+      if (ctx.user.orgRole !== "owner") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الفوترة متاحة لمالك الحساب فقط" });
+      }
       if (!isValidTopupCredits(input.credits)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "الشحن يكون بمضاعفات 100 نقطة" });
       }
@@ -132,11 +138,11 @@ export const paymentsRouter = router({
       return { status: "paid" as const, purpose: payment.purpose };
     }),
 
-  // سجل مدفوعات المستخدم
+  // سجل مدفوعات المنظمة (مالك الحساب — نفس مصدر الفوترة لكل أعضاء المنظمة)
   list: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) return [];
+    if (!db || !ctx.effectiveUserId) return [];
     const { desc } = await import("drizzle-orm");
-    return db.select().from(payments).where(eq(payments.userId, ctx.user.id)).orderBy(desc(payments.createdAt)).limit(30);
+    return db.select().from(payments).where(eq(payments.userId, ctx.effectiveUserId)).orderBy(desc(payments.createdAt)).limit(30);
   }),
 });

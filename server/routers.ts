@@ -582,6 +582,59 @@ export const appRouter = router({
       const { getAllOrgsUsageSummary } = await import("./credits");
       return getAllOrgsUsageSummary();
     }),
+    // تفعيل باقة لعميل بدون دفع فعلي (منحة إدارية)
+    activateSubscription: protectedProcedure
+      .input(z.object({ userId: z.number(), planId: z.number(), billing: z.enum(["monthly", "yearly"]).default("monthly") }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { activateSubscriptionWithoutPayment } = await import("./adminSubscriptions");
+        await activateSubscriptionWithoutPayment({ ...input, adminName: ctx.user.name ?? undefined });
+        return { success: true };
+      }),
+    // تفعيل/تعطيل حالة اشتراك عميل (بدون حذف حسابه أو منعه من تسجيل الدخول)
+    setSubscriptionStatus: protectedProcedure
+      .input(z.object({ userId: z.number(), status: z.enum(["active", "inactive", "cancelled", "trial"]) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const sub = await getSubscriptionByUserId(input.userId);
+        if (!sub) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك لهذا العميل" });
+        await updateSubscription(sub.id, { status: input.status });
+        return { success: true };
+      }),
+    // منح نقاط رصيد إضافية لعميل بدون دفع
+    grantCredits: protectedProcedure
+      .input(z.object({ userId: z.number(), credits: z.number().int().positive(), note: z.string().trim().max(300).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { grantCreditsManual } = await import("./adminSubscriptions");
+        await grantCreditsManual({ ...input, adminName: ctx.user.name ?? undefined });
+        return { success: true };
+      }),
+    // تمديد اشتراك عميل بعدد أيام محدد خارج دورة الباقة
+    extendSubscriptionDays: protectedProcedure
+      .input(z.object({ userId: z.number(), days: z.number().int().positive().max(365), note: z.string().trim().max(300).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { extendSubscriptionDays: extend } = await import("./adminSubscriptions");
+        await extend(input);
+        return { success: true };
+      }),
+    // سجل مدفوعات عميل محدد
+    paymentsForUser: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { getPaymentsForUser } = await import("./adminSubscriptions");
+        return getPaymentsForUser(input.userId);
+      }),
+    // فواتير خدمة عميل محدد
+    invoicesForUser: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { getServiceInvoicesForUser } = await import("./adminSubscriptions");
+        return getServiceInvoicesForUser(input.userId);
+      }),
   }),
 
   erpnext: router({
