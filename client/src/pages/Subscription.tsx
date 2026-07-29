@@ -22,18 +22,10 @@ export default function Subscription() {
     onSuccess: () => { toast.success("تم تفعيل الاشتراك بنجاح!"); utils.subscription.get.invalidate(); utils.credits.balance.invalidate(); },
     onError: (e) => toast.error(e.message),
   });
-  const upgradeMutation = trpc.subscription.upgrade.useMutation({
-    onSuccess: (res, vars) => {
-      const targetPlan = plans?.find(p => p.id === vars.planId);
-      const isDowngrade = currentPlan && targetPlan && Number(targetPlan.price) < Number(currentPlan.price);
-      if (res.stillInTrial) {
-        toast.success(`تم تغيير الباقة المطلوبة إلى ${targetPlan?.nameAr ?? ""} — ستُفعَّل تلقائياً بعد انتهاء فترة التجربة الحالية`);
-      } else {
-        toast.success(isDowngrade ? "تم تخفيض الباقة بنجاح" : "تم ترقية الاشتراك بنجاح!");
-      }
-      utils.subscription.get.invalidate();
-      utils.credits.balance.invalidate();
-    },
+  // تغيير الباقة يتطلب دفعاً فورياً عبر MyFatoorah دائماً — حتى لو كان الحساب لسه
+  // في فترة التجربة، اختيار باقة جديدة يُنهي التجربة فوراً ويحوّل العميل للدفع
+  const switchPlanMutation = trpc.payments.createSubscriptionPayment.useMutation({
+    onSuccess: (res) => { window.location.href = res.paymentUrl; },
     onError: (e) => toast.error(e.message),
   });
   const topupMutation = trpc.payments.createTopupPayment.useMutation({
@@ -65,6 +57,14 @@ export default function Subscription() {
       return;
     }
     topupMutation.mutate({ credits });
+  };
+
+  const handleSwitchPlan = (planId: number) => {
+    if (!paymentsReady) {
+      toast.info("بوابة الدفع قيد التفعيل — سيتوفر تغيير الباقة قريباً");
+      return;
+    }
+    switchPlanMutation.mutate({ planId, billing });
   };
 
   return (
@@ -222,7 +222,7 @@ export default function Subscription() {
           <div>
             <h2 className="text-lg font-bold text-navy">{subscription ? "تغيير الباقة" : "اختر باقتك"}</h2>
             {subscription?.status === "trial" && (
-              <p className="text-xs text-muted-foreground mt-1">أنت لسه في الفترة التجريبية — تغيير الباقة هنا بيغيّر الباقة المطلوبة فقط بدون أي دفع، وهتتفعّل تلقائياً بعد انتهاء التجربة.</p>
+              <p className="text-xs text-muted-foreground mt-1">تغيير الباقة الآن ينهي الفترة التجريبية فوراً ويحوّلك لإتمام الدفع.</p>
             )}
           </div>
           {/* مبدّل الفوترة */}
@@ -282,17 +282,22 @@ export default function Subscription() {
                 </ul>
                 {isCurrent && subscription?.billing === billing ? (
                   <Button disabled className="w-full" variant="outline">باقتك الحالية</Button>
-                ) : subscription ? (
-                  <Button onClick={() => upgradeMutation.mutate({ planId: plan.id, billing })} disabled={upgradeMutation.isPending}
+                ) : subscription && isCurrent ? (
+                  // نفس الباقة، تغيير دورة الفوترة فقط — يستخدم التحويل المجاني (نفس زر البطاقة العلوية)
+                  <Button onClick={() => switchBillingMutation.mutate({ billing })} disabled={switchBillingMutation.isPending}
                     className={`w-full ${isPopular ? "bg-navy-gradient text-white" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
                     variant={isPopular ? "default" : "outline"}>
-                    {upgradeMutation.isPending
-                      ? "جاري التحديث..."
-                      : isCurrent
-                        ? "تغيير دورة الفوترة"
-                        : currentPlan && monthly < Number(currentPlan.price)
-                          ? "تخفيض إلى هذه الباقة"
-                          : "ترقية إلى هذه الباقة"}
+                    {switchBillingMutation.isPending ? "جاري التحديث..." : "تغيير دورة الفوترة"}
+                  </Button>
+                ) : subscription ? (
+                  <Button onClick={() => handleSwitchPlan(plan.id)} disabled={switchPlanMutation.isPending}
+                    className={`w-full ${isPopular ? "bg-navy-gradient text-white" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
+                    variant={isPopular ? "default" : "outline"}>
+                    {switchPlanMutation.isPending
+                      ? "جاري التحويل للدفع..."
+                      : currentPlan && monthly < Number(currentPlan.price)
+                        ? "تخفيض إلى هذه الباقة"
+                        : "ترقية إلى هذه الباقة"}
                   </Button>
                 ) : (
                   <Button onClick={() => createMutation.mutate({ planId: plan.id, billing })} disabled={createMutation.isPending}
