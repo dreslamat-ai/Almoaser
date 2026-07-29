@@ -1764,12 +1764,22 @@ ${buildExpertSkillsSection(hasCfoSkill)}
       }
       const erpUrl = erpBaseUrl();
       const sid = await getSession();
-      // لا نحدّد format هنا عمداً — نترك ERPNext يختار نموذج الطباعة الافتراضي
-      // الفعلي المُعدّ في نظام العميل (بدل فرض نموذج "Standard" العام على الجميع)
-      const pdfUrl = `${erpUrl}/api/method/frappe.utils.print_format.download_pdf?doctype=${encodeURIComponent(input.doctype)}&name=${encodeURIComponent(input.name)}&no_letterhead=0`;
-      const res = await fetch(pdfUrl, { headers: { Cookie: `sid=${sid}` } });
+      const buildUrl = (format?: string) =>
+        `${erpUrl}/api/method/frappe.utils.print_format.download_pdf?doctype=${encodeURIComponent(input.doctype)}&name=${encodeURIComponent(input.name)}&no_letterhead=0`
+        + (format ? `&format=${encodeURIComponent(format)}` : "");
+
+      // المحاولة الأولى بدون format: تترك ERPNext يختار نموذج الطباعة الافتراضي الفعلي
+      // المُعدّ في نظام العميل. لو فشلت (مثلاً لا يوجد نموذج افتراضي مضبوط لهذا الـ doctype
+      // فترجع ERPNext خطأ 500 بدل الرجوع تلقائياً)، نعيد المحاولة صراحةً بنموذج "Standard"
+      // المتوفر افتراضياً في كل تنصيب ERPNext، بدل ترك العميل بدون أي PDF
+      let res = await fetch(buildUrl(), { headers: { Cookie: `sid=${sid}` } });
       if (!res.ok) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `PDF generation failed: ${res.status}` });
+        res = await fetch(buildUrl("Standard"), { headers: { Cookie: `sid=${sid}` } });
+      }
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => "");
+        console.error(`[getDocumentPdf] ERPNext download_pdf failed (${res.status}) for ${input.doctype} ${input.name}: ${bodyText.slice(0, 500)}`);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّر توليد PDF المستند — تحقق من نموذج الطباعة المضبوط لهذا النوع في ERPNext" });
       }
       const buffer = await res.arrayBuffer();
       const base64 = Buffer.from(buffer).toString("base64");

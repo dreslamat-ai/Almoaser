@@ -481,31 +481,37 @@ export async function executeOdooTool(
  * في "إعدادات المحاسبة > تخطيط المستندات")، وليس نموذجاً مُعاد بناؤه في تطبيقنا.
  */
 export async function getOdooDocumentPdf(config: OdooConfig, doctype: string, nameOrId: string): Promise<{ pdfBase64: string; filename: string } | { error: string }> {
-  let model: string;
-  let reportName: string;
-  let id: number;
-
-  if (doctype === "Sales Invoice" || doctype === "Purchase Invoice") {
-    // نفس التقرير القياسي في Odoo لكل من الفاتورة وفاتورة المورد (يميّز التسمية داخلياً حسب move_type)
-    model = "account.move";
-    reportName = "account.report_invoice_with_payments";
-    const idResult = await resolvePartnerLikeMoveId(config, nameOrId, DOCTYPE_TO_MOVE_TYPE[doctype]);
-    if ("error" in idResult) return idResult;
-    id = idResult.id;
-  } else if (doctype === "Payment Entry") {
-    model = "account.payment";
-    reportName = "account.report_payment_receipt_document";
-    const resolvedId = await resolveMoveOrPaymentId(config, model, nameOrId);
-    if (resolvedId == null) return { error: `الدفعة "${nameOrId}" غير موجودة` };
-    id = resolvedId;
-  } else {
-    // القيود اليومية (Journal Entry) ليس لها نموذج طباعة قياسي في Odoo
-    return { error: `طباعة مستند "${doctype}" غير مدعومة حالياً على Odoo` };
-  }
-
   try {
-    const result = await execute<[string, string]>(config, "ir.actions.report", "render_qweb_pdf", [reportName, [id]]);
-    return { pdfBase64: result[0], filename: `${nameOrId}.pdf` };
+    let reportNames: string[];
+    let id: number;
+
+    if (doctype === "Sales Invoice" || doctype === "Purchase Invoice") {
+      // نفس التقرير القياسي في Odoo لكل من الفاتورة وفاتورة المورد (يميّز التسمية داخلياً حسب move_type)
+      // نجرّب اسمين لأن التسمية اختلفت بين إصدارات/تخصيصات Odoo
+      reportNames = ["account.report_invoice_with_payments", "account.report_invoice"];
+      const idResult = await resolvePartnerLikeMoveId(config, nameOrId, DOCTYPE_TO_MOVE_TYPE[doctype]);
+      if ("error" in idResult) return idResult;
+      id = idResult.id;
+    } else if (doctype === "Payment Entry") {
+      reportNames = ["account.report_payment_receipt_document"];
+      const resolvedId = await resolveMoveOrPaymentId(config, "account.payment", nameOrId);
+      if (resolvedId == null) return { error: `الدفعة "${nameOrId}" غير موجودة` };
+      id = resolvedId;
+    } else {
+      // القيود اليومية (Journal Entry) ليس لها نموذج طباعة قياسي في Odoo
+      return { error: `طباعة مستند "${doctype}" غير مدعومة حالياً على Odoo` };
+    }
+
+    let lastError: unknown;
+    for (const reportName of reportNames) {
+      try {
+        const result = await execute<[string, string]>(config, "ir.actions.report", "render_qweb_pdf", [reportName, [id]]);
+        return { pdfBase64: result[0], filename: `${nameOrId}.pdf` };
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError;
   } catch (e) {
     return { error: e instanceof Error ? e.message : "تعذّر توليد PDF المستند من Odoo" };
   }
