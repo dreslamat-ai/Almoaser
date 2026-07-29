@@ -211,10 +211,35 @@ export async function getAllRegistrationRequests() {
   return db.select().from(registrationRequests).orderBy(desc(registrationRequests.createdAt));
 }
 
+// كل الاشتراكات مع بيانات صاحب الحساب (اسم/بريد) — بدونها الصف بلا هوية واضحة
+// عند عدم تعبئة اسم الشركة (اختياري وقت التسجيل)
 export async function getAllSubscriptions() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(subscriptions).orderBy(desc(subscriptions.createdAt));
+  return db
+    .select({
+      id: subscriptions.id,
+      userId: subscriptions.userId,
+      planId: subscriptions.planId,
+      status: subscriptions.status,
+      startDate: subscriptions.startDate,
+      endDate: subscriptions.endDate,
+      billing: subscriptions.billing,
+      creditsBalance: subscriptions.creditsBalance,
+      creditsCycleStart: subscriptions.creditsCycleStart,
+      companyName: subscriptions.companyName,
+      companyType: subscriptions.companyType,
+      phone: subscriptions.phone,
+      vatNumber: subscriptions.vatNumber,
+      notes: subscriptions.notes,
+      createdAt: subscriptions.createdAt,
+      updatedAt: subscriptions.updatedAt,
+      ownerName: users.name,
+      ownerEmail: users.email,
+    })
+    .from(subscriptions)
+    .leftJoin(users, eq(subscriptions.userId, users.id))
+    .orderBy(desc(subscriptions.createdAt));
 }
 
 export async function getAllTasks() {

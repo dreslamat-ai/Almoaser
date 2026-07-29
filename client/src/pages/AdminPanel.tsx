@@ -2,8 +2,8 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
-import { Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap } from "lucide-react";
-import { useState } from "react";
+import { Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap, ChevronDown, ChevronUp, Coins, Hash, StickyNote } from "lucide-react";
+import { useState, Fragment } from "react";
 import { toast } from "sonner";
 
 const taskTypeLabels: Record<string, string> = {
@@ -21,6 +21,7 @@ const regStatusColors: Record<string, string> = { new: "badge-pending", contacte
 export default function AdminPanel() {
   const { user, isAuthenticated, loading } = useAuth();
   const [tab, setTab] = useState("registrations");
+  const [expandedSubId, setExpandedSubId] = useState<number | null>(null);
   const { data: registrations } = trpc.admin.registrations.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: subscriptions } = trpc.admin.subscriptions.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: tasks } = trpc.admin.tasks.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
@@ -136,30 +137,77 @@ export default function AdminPanel() {
           )}
           {tab === "subscriptions" && (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px]">
+              <table className="w-full min-w-[650px]">
                 <thead className="bg-gray-50 border-b">
-                  <tr>{["الشركة", "نوع النشاط", "الباقة", "الحالة", "تاريخ البدء"].map(h => (
+                  <tr>{["العميل", "الباقة", "الحالة", "تاريخ البدء", ""].map(h => (
                     <th key={h} className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">{h}</th>
                   ))}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {subscriptions?.map(s => (
-                    <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-navy text-sm">
-                        <span className="flex items-center gap-1"><Building2 className="w-3 h-3 text-muted-foreground flex-shrink-0" />{s.companyName ?? "—"}</span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{s.companyType ?? "—"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-navy">
-                        {plans?.find(p => p.id === s.planId)?.nameAr ?? `باقة #${s.planId}`}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.status === "active" ? "badge-completed" : s.status === "trial" ? "badge-trial" : "badge-cancelled"}`}>
-                          {s.status === "active" ? "نشط" : s.status === "trial" ? "تجريبي" : "ملغي"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(s.createdAt).toLocaleDateString("ar-SA")}</td>
-                    </tr>
-                  ))}
+                  {subscriptions?.map(s => {
+                    const isOpen = expandedSubId === s.id;
+                    const plan = plans?.find(p => p.id === s.planId);
+                    return (
+                      <Fragment key={s.id}>
+                        <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setExpandedSubId(isOpen ? null : s.id)}>
+                          <td className="px-4 py-3 text-sm">
+                            <div className="font-medium text-navy">{s.companyName || s.ownerName || "—"}</div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Mail className="w-3 h-3 flex-shrink-0" />{s.ownerEmail ?? "—"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-navy">{plan?.nameAr ?? `باقة #${s.planId}`}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.status === "active" ? "badge-completed" : s.status === "trial" ? "badge-trial" : "badge-cancelled"}`}>
+                              {s.status === "active" ? "نشط" : s.status === "trial" ? "تجريبي" : "ملغي"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(s.createdAt).toLocaleDateString("ar-SA")}</td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={5} className="px-4 pb-4 bg-gray-50/60">
+                              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+                                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Building2 className="w-3.5 h-3.5" /> نوع النشاط</div>
+                                  <div className="text-sm font-medium text-navy">{s.companyType ?? "غير محدد"}</div>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Phone className="w-3.5 h-3.5" /> الجوال</div>
+                                  <div className="text-sm font-medium text-navy" dir="ltr">{s.phone ?? "غير محدد"}</div>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Hash className="w-3.5 h-3.5" /> الرقم الضريبي</div>
+                                  <div className="text-sm font-medium text-navy" dir="ltr">{s.vatNumber ?? "غير محدد"}</div>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Coins className="w-3.5 h-3.5" /> رصيد النقاط</div>
+                                  <div className="text-sm font-medium text-navy">{s.creditsBalance} نقطة</div>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Calendar className="w-3.5 h-3.5" /> دورة الفوترة</div>
+                                  <div className="text-sm font-medium text-navy">{s.billing === "yearly" ? "سنوية" : "شهرية"}</div>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 border border-gray-100">
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Calendar className="w-3.5 h-3.5" /> نهاية الفترة/الدورة</div>
+                                  <div className="text-sm font-medium text-navy">{s.endDate ? new Date(s.endDate).toLocaleDateString("ar-SA") : "غير محدد"}</div>
+                                </div>
+                                {s.notes && (
+                                  <div className="bg-white rounded-xl p-3 border border-gray-100 sm:col-span-2 lg:col-span-3">
+                                    <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><StickyNote className="w-3.5 h-3.5" /> ملاحظات</div>
+                                    <div className="text-sm text-navy whitespace-pre-wrap">{s.notes}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                   {(subscriptions?.length ?? 0) === 0 && (
                     <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">لا توجد اشتراكات بعد</td></tr>
                   )}
