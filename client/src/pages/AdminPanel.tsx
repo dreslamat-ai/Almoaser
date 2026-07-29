@@ -293,7 +293,7 @@ export default function AdminPanel() {
         <div className="flex gap-2 mb-6 flex-wrap">
           {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
             <button key={v} onClick={() => setTab(v)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
               {l}
             </button>
           ))}

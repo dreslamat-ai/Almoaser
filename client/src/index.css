@@ -5,12 +5,14 @@
 
 @theme inline {
   /* ─── المعاصر Brand Colors ─── */
-  --color-brand-navy: oklch(0.22 0.08 245);
-  --color-brand-navy-dark: oklch(0.15 0.07 245);
-  --color-brand-navy-light: oklch(0.30 0.09 245);
-  --color-brand-gold: oklch(0.72 0.14 75);
-  --color-brand-gold-light: oklch(0.82 0.12 75);
-  --color-brand-gold-dark: oklch(0.58 0.16 75);
+  /* بدون بادئة brand- عمداً: يستخدمها الكود كـ bg-navy/text-navy/bg-gold... مباشرة،
+     وTailwind v4 يولّد هذه الأسماء تلقائياً (بما فيها متغيرات الشفافية bg-navy/10) */
+  --color-navy: oklch(0.22 0.08 245);
+  --color-navy-dark: oklch(0.15 0.07 245);
+  --color-navy-light: oklch(0.30 0.09 245);
+  --color-gold: oklch(0.72 0.14 75);
+  --color-gold-light: oklch(0.82 0.12 75);
+  --color-gold-dark: oklch(0.58 0.16 75);
   --color-brand-red: oklch(0.55 0.20 25);
 
   /* ─── Semantic Tokens ─── */
@@ -87,18 +89,9 @@
   .bg-navy-hero {
     background: linear-gradient(160deg, oklch(0.18 0.08 245) 0%, oklch(0.12 0.06 245) 60%, oklch(0.20 0.10 250) 100%);
   }
-  .text-gold {
-    color: oklch(0.72 0.14 75);
-  }
-  .text-navy {
-    color: oklch(0.22 0.08 245);
-  }
-  .border-gold {
-    border-color: oklch(0.72 0.14 75);
-  }
-  .bg-gold {
-    background-color: oklch(0.72 0.14 75);
-  }
+  /* bg-navy / text-navy / border-navy / bg-gold / text-gold / border-gold وما شابه
+     تُولَّد تلقائياً من رموز --color-navy و--color-gold في @theme أعلاه (بما فيها
+     صيغ الشفافية bg-navy/10) — لا حاجة لتعريفها يدوياً هنا */
 
   /* Card styles */
   .card-navy {
