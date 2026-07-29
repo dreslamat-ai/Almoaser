@@ -444,6 +444,42 @@ export async function executeOdooTool(
   }
 }
 
+/**
+ * يولّد PDF أي مستند عبر محرك تقارير Odoo نفسه (QWeb) — نفس التقرير الذي يستخدمه
+ * العميل من واجهة Odoo عند الضغط على "طباعة" على المستند (شعاره وتخطيطه المُعدّين
+ * في "إعدادات المحاسبة > تخطيط المستندات")، وليس نموذجاً مُعاد بناؤه في تطبيقنا.
+ */
+export async function getOdooDocumentPdf(config: OdooConfig, doctype: string, nameOrId: string): Promise<{ pdfBase64: string; filename: string } | { error: string }> {
+  let model: string;
+  let reportName: string;
+  let id: number;
+
+  if (doctype === "Sales Invoice" || doctype === "Purchase Invoice") {
+    // نفس التقرير القياسي في Odoo لكل من الفاتورة وفاتورة المورد (يميّز التسمية داخلياً حسب move_type)
+    model = "account.move";
+    reportName = "account.report_invoice_with_payments";
+    const idResult = await resolvePartnerLikeMoveId(config, nameOrId, DOCTYPE_TO_MOVE_TYPE[doctype]);
+    if ("error" in idResult) return idResult;
+    id = idResult.id;
+  } else if (doctype === "Payment Entry") {
+    model = "account.payment";
+    reportName = "account.report_payment_receipt_document";
+    const resolvedId = await resolveMoveOrPaymentId(config, model, nameOrId);
+    if (resolvedId == null) return { error: `الدفعة "${nameOrId}" غير موجودة` };
+    id = resolvedId;
+  } else {
+    // القيود اليومية (Journal Entry) ليس لها نموذج طباعة قياسي في Odoo
+    return { error: `طباعة مستند "${doctype}" غير مدعومة حالياً على Odoo` };
+  }
+
+  try {
+    const result = await execute<[string, string]>(config, "ir.actions.report", "render_qweb_pdf", [reportName, [id]]);
+    return { pdfBase64: result[0], filename: `${nameOrId}.pdf` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "تعذّر توليد PDF المستند من Odoo" };
+  }
+}
+
 async function resolvePartnerLikeMoveId(config: OdooConfig, invoiceNameOrId: string, moveType: string): Promise<{ id: number } | { error: string }> {
   if (/^\d+$/.test(invoiceNameOrId)) return { id: Number(invoiceNameOrId) };
   const rows = await execute<Array<{ id: number }>>(config, "account.move", "search_read", [

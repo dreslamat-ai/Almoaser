@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-// نفس منطق TLV المستخدم في getInvoicePrintData — نتحقق من صحة الترميز وفق ZATCA
+// توثيق ومرجع لصحة ترميز ZATCA TLV — الفواتير نفسها تُطبع الآن عبر نموذج الطباعة الفعلي في نظام العميل (ERPNext/Odoo)
 const tlv = (tag: number, value: string): Buffer => {
   const v = Buffer.from(value, "utf8");
   return Buffer.concat([Buffer.from([tag]), Buffer.from([v.length]), v]);

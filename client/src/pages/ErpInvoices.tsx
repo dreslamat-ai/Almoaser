@@ -1,11 +1,11 @@
 import DashboardLayout from "@/components/DashboardLayout";
-import InvoicePrintView from "@/components/InvoicePrintView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, FileText, Printer, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+import { AlertCircle, FileText, Loader2, Printer, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
@@ -27,16 +27,36 @@ const FILTERS = [
 
 export default function ErpInvoices() {
   const [statusFilter, setStatusFilter] = useState("");
-  const [printInvoice, setPrintInvoice] = useState<string | null>(null);
+  const [loadingInvoice, setLoadingInvoice] = useState<string | null>(null);
   const { data, isLoading, error, refetch } = trpc.erpnext.getSalesInvoices.useQuery(
     { limit: 50 },
     { staleTime: 60 * 1000 },
   );
+  const pdfMutation = trpc.agent.getDocumentPdf.useMutation();
 
   const invoices = ((data?.data ?? []) as Array<{
     name: string; customer: string; posting_date: string; due_date?: string;
     grand_total: number; outstanding_amount: number; status: string; currency: string;
   }>).filter(inv => !statusFilter || inv.status === statusFilter);
+
+  // يعرض نموذج الطباعة الافتراضي الفعلي المُعدّ في نظام العميل (ERPNext/Odoo)
+  // بدل إعادة بنائه في الواجهة — نفس ما يراه العميل لو طبع الفاتورة من نظامه مباشرة
+  const viewInvoice = async (invoiceName: string) => {
+    setLoadingInvoice(invoiceName);
+    try {
+      const result = await pdfMutation.mutateAsync({ doctype: "Sales Invoice", name: invoiceName });
+      const byteChars = atob(result.pdfBase64);
+      const byteArr = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteArr], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "تعذّر تحميل الفاتورة");
+    } finally {
+      setLoadingInvoice(null);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -121,9 +141,12 @@ export default function ErpInvoices() {
                               variant="outline"
                               size="sm"
                               className="h-7 text-xs gap-1"
-                              onClick={() => setPrintInvoice(inv.name)}
+                              onClick={() => viewInvoice(inv.name)}
+                              disabled={loadingInvoice === inv.name}
                             >
-                              <Printer className="w-3 h-3" />
+                              {loadingInvoice === inv.name
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <Printer className="w-3 h-3" />}
                               الفاتورة
                             </Button>
                           </td>
@@ -137,9 +160,6 @@ export default function ErpInvoices() {
           </CardContent>
         </Card>
       </div>
-      {printInvoice && (
-        <InvoicePrintView invoiceName={printInvoice} onClose={() => setPrintInvoice(null)} />
-      )}
     </DashboardLayout>
   );
 }

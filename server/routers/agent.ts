@@ -1720,19 +1720,34 @@ ${buildExpertSkillsSection(hasCfoSkill)}
       return { success: true };
     }),
 
-  getInvoicePdf: protectedProcedure
-    .input(z.object({ invoiceName: z.string() }))
+  // يولّد PDF أي مستند (فاتورة مبيعات/مشتريات، دفعة، قيد يومية) من نموذج الطباعة
+  // الافتراضي الفعلي المُعدّ في نظام العميل (ERPNext أو Odoo) — وليس نموذجاً ثابتاً
+  // في تطبيقنا، حتى يطابق دائماً ما يراه العميل لو طبع من نظامه مباشرة
+  getDocumentPdf: protectedProcedure
+    .input(z.object({
+      doctype: z.enum(["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"]).default("Sales Invoice"),
+      name: z.string(),
+    }))
     .mutation(async ({ input, ctx }) => runWithErpConfig(ctx.user.id, async () => {
+      const config = currentErpConfig();
+      if (config.provider === "odoo" && config.database) {
+        const { getOdooDocumentPdf } = await import("../odooTools");
+        const result = await getOdooDocumentPdf(config as ErpConfig & { database: string }, input.doctype, input.name);
+        if ("error" in result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
+        return result;
+      }
       const erpUrl = erpBaseUrl();
       const sid = await getSession();
-      const pdfUrl = `${erpUrl}/api/method/frappe.utils.print_format.download_pdf?doctype=Sales%20Invoice&name=${encodeURIComponent(input.invoiceName)}&format=Standard&no_letterhead=0`;
+      // لا نحدّد format هنا عمداً — نترك ERPNext يختار نموذج الطباعة الافتراضي
+      // الفعلي المُعدّ في نظام العميل (بدل فرض نموذج "Standard" العام على الجميع)
+      const pdfUrl = `${erpUrl}/api/method/frappe.utils.print_format.download_pdf?doctype=${encodeURIComponent(input.doctype)}&name=${encodeURIComponent(input.name)}&no_letterhead=0`;
       const res = await fetch(pdfUrl, { headers: { Cookie: `sid=${sid}` } });
       if (!res.ok) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `PDF generation failed: ${res.status}` });
       }
       const buffer = await res.arrayBuffer();
       const base64 = Buffer.from(buffer).toString("base64");
-      return { pdfBase64: base64, filename: `${input.invoiceName}.pdf` };
+      return { pdfBase64: base64, filename: `${input.name}.pdf` };
     })),
 
   // ─── تحويل الصوت إلى نص (إدخال صوتي للوكيل) ─────────────────────────────
