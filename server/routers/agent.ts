@@ -1394,10 +1394,12 @@ export const agentRouter = router({
       })),
     }))
     .mutation(async ({ input, ctx }) => {
-      // ─── خصم نقطة رصيد لكل رسالة (رسالة = 1 نقطة) ───
+      // ─── خصم نقطة رصيد لكل رسالة (رسالة = 1 نقطة) — من رصيد المنظمة المشترك ───
       const credits = await import("../credits");
       try {
-        await credits.deductCredits(ctx.user.id, credits.MESSAGE_COST, "message", "رسالة للوكيل الذكي");
+        if (ctx.effectiveUserId) {
+          await credits.deductCredits(ctx.effectiveUserId, credits.MESSAGE_COST, "message", "رسالة للوكيل الذكي");
+        }
       } catch (e) {
         if (e instanceof credits.InsufficientCreditsError) {
           const { TRPCError } = await import("@trpc/server");
@@ -1426,7 +1428,25 @@ export const agentRouter = router({
         console.warn("[agent.chat] failed to persist conversation:", e instanceof Error ? e.message : e);
       }
 
-      const SYSTEM = `أنت "المعاصر AI" — خبير مالي متعدد الأدوار ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). تجمع في شخص واحد أربعة خبراء: **محاسب مالي خبير** و**مدير مالي (CFO)** و**رئيس حسابات** و**خبير معتمد في ERPNext**.
+      // ─── رؤى "المدير المالي" (تحليل استراتيجي وتوصيات تطوعية) حصرية للباقة المؤسسية (hasDirectSupport) ───
+      let hasCfoSkill = false;
+      try {
+        if (ctx.effectiveUserId) {
+          const sub = await dbHelpers.getSubscriptionByUserId(ctx.effectiveUserId);
+          if (sub) {
+            const plan = await dbHelpers.getPlanById(sub.planId);
+            hasCfoSkill = plan?.hasDirectSupport ?? false;
+          }
+        }
+      } catch (e) {
+        console.warn("[agent.chat] failed to resolve plan tier for persona:", e instanceof Error ? e.message : e);
+      }
+
+      const identityLine = hasCfoSkill
+        ? "تجمع في شخص واحد أربعة خبراء: **محاسب مالي خبير** و**مدير مالي (CFO)** و**رئيس حسابات** و**خبير معتمد في ERPNext**."
+        : "تجمع في شخص واحد ثلاثة خبراء: **محاسب مالي خبير** و**رئيس حسابات** و**خبير معتمد في ERPNext** — تنفّذ الطلبات بدقة ومباشرة دون تحليلات إدارية إضافية.";
+
+      const SYSTEM = `أنت "المعاصر AI" — خبير مالي متعدد الأدوار ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). ${identityLine}
 
 ## هويتك المهنية
 لديك خبرة 15+ عاماً في المحاسبة المالية والإدارية والإدارة المالية، وأنت خبير معتمد في Almoaser AI ERP. تتقن:
@@ -1439,7 +1459,7 @@ export const agentRouter = router({
 - إدارة المخزون بطرق FIFO وWeighted Average
 - مراكز التكلفة (Cost Centers) وإدارة المشاريع
 
-${buildExpertSkillsSection()}
+${buildExpertSkillsSection(hasCfoSkill)}
 
 ## قواعد العمل الأساسية
 1. **نفّذ أولاً، اشرح ثانياً**: عند أي طلب يتعلق بفواتير/عملاء/أصناف/تقارير → استدعِ الأداة المناسبة فوراً ثم علّق على النتائج

@@ -8,8 +8,8 @@ import {
   ERPNEXT_EXPERT_SKILL,
 } from "./routers/agentPersona";
 
-describe("buildExpertSkillsSection — تجميع المهارات الأربع", () => {
-  const section = buildExpertSkillsSection();
+describe("buildExpertSkillsSection — الباقة المؤسسية (مع مهارة المدير المالي)", () => {
+  const section = buildExpertSkillsSection(true);
 
   it("يتضمن المهارات الأربع كاملة", () => {
     expect(section).toContain(EXPERT_ACCOUNTANT_SKILL);
@@ -27,6 +27,25 @@ describe("buildExpertSkillsSection — تجميع المهارات الأربع"
 
   it("يتضمن قسم توظيف المهارات معاً", () => {
     expect(section).toContain("كيف توظّف المهارات الأربع معاً");
+  });
+});
+
+describe("buildExpertSkillsSection — باقي الباقات (بدون مهارة المدير المالي)", () => {
+  const section = buildExpertSkillsSection(false);
+
+  it("لا يتضمن مهارة المدير المالي (CFO)", () => {
+    expect(section).not.toContain(CFO_SKILL);
+    expect(section).not.toContain("مهارتك #2: المدير المالي");
+  });
+
+  it("يتضمن باقي المهارات الثلاث", () => {
+    expect(section).toContain(EXPERT_ACCOUNTANT_SKILL);
+    expect(section).toContain(CHIEF_ACCOUNTANT_SKILL);
+    expect(section).toContain(ERPNEXT_EXPERT_SKILL);
+  });
+
+  it("يوجّه صراحة لعدم التطوّع بتحليلات إدارية إضافية", () => {
+    expect(section).toContain("لا تتطوّع بتحليلات مالية استراتيجية");
   });
 });
 

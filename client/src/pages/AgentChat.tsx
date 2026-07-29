@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { TRPCClientError } from "@trpc/client";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +15,7 @@ import {
   FileText, BarChart3, Users, Package, MessageSquare,
   Download, CheckCircle2, AlertCircle, TrendingUp,
   Mic, Square, ImagePlus, Camera,
-  History, Plus, X, Volume2, VolumeX,
+  History, Plus, X, Volume2, VolumeX, Coins,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -499,6 +501,7 @@ const DOC_TYPE_LABEL: Record<string, string> = {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AgentChat() {
+  const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<number | undefined>(undefined);
@@ -515,6 +518,7 @@ export default function AgentChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const chatMutation = trpc.agent.chat.useMutation();
+  const { data: creditsInfo } = trpc.credits.balance.useQuery();
   const pdfMutation = trpc.agent.getInvoicePdf.useMutation();
   const transcribeMutation = trpc.agent.transcribeVoice.useMutation();
   const extractMutation = trpc.agent.extractDocument.useMutation();
@@ -628,12 +632,28 @@ export default function AgentChat() {
       }]);
       if (isSoundEnabled()) playReplyChime();
       void utils.agent.listConversations.invalidate();
+      void utils.credits.balance.invalidate();
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: `⚠️ حدث خطأ: ${err instanceof Error ? err.message : "تعذّر الاتصال بالوكيل"}`,
-        ts: Date.now(),
-      }]);
+      const isOutOfCredits = err instanceof TRPCClientError && err.data?.code === "FORBIDDEN" && err.message.includes("رصيد النقاط");
+      if (isOutOfCredits) {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `💳 **انتهى رصيد نقاطك الشهري**\n\n${err.message}\n\n[اشحن رصيدك الآن من صفحة الاشتراك ←](/subscription)`,
+          ts: Date.now(),
+        }]);
+        toast.error("انتهى رصيد النقاط", {
+          description: "اشحن رصيداً إضافياً لاستكمال المحادثة مع الوكيل الذكي",
+          duration: 10000,
+          action: { label: "اشحن الآن", onClick: () => navigate("/subscription") },
+        });
+      } else {
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `⚠️ حدث خطأ: ${err instanceof Error ? err.message : "تعذّر الاتصال بالوكيل"}`,
+          ts: Date.now(),
+        }]);
+      }
+      void utils.credits.balance.invalidate();
     } finally {
       setPendingQuickReply(null);
     }
@@ -738,6 +758,21 @@ export default function AgentChat() {
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell />
+            {creditsInfo && (() => {
+              const low = creditsInfo.monthlyCredits > 0 && creditsInfo.balance / creditsInfo.monthlyCredits <= 0.15;
+              return (
+                <button
+                  onClick={() => navigate("/subscription")}
+                  title="رصيد النقاط — اضغط لإدارة الاشتراك"
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                    low ? "text-red-600 border-red-200 bg-red-50 hover:bg-red-100" : "text-gold-dark border-gold/30 bg-gold/10 hover:bg-gold/15"
+                  }`}
+                >
+                  <Coins className="w-3.5 h-3.5" />
+                  {creditsInfo.balance} <span className="opacity-60">/ {creditsInfo.monthlyCredits}</span>
+                </button>
+              );
+            })()}
             <Badge variant="outline" className="text-xs gap-1 text-emerald-600 border-emerald-200 bg-emerald-50">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               متصل
