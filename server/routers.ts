@@ -312,14 +312,21 @@ export const appRouter = router({
         const existing = await getSubscriptionByUserId(ctx.user.id);
         if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك" });
         const plan = await getPlanById(input.planId);
+        if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "الباقة غير موجودة" });
+
+        // لسه في فترة التجربة؟ نغيّر الباقة المستهدفة فقط دون إنهاء التجربة قبل
+        // ميعادها — التفعيل الفعلي (والدفع) يحصل تلقائياً بعد انتهاء التجربة
+        // بنفس آلية activateTrialIfExpired، بالباقة الجديدة المختارة هنا
+        const stillInTrial = existing.status === "trial" && existing.endDate && new Date(existing.endDate).getTime() > Date.now();
+
         await updateSubscription(existing.id, {
           planId: input.planId,
-          status: "active",
+          ...(stillInTrial ? {} : { status: "active" }),
           ...(input.billing ? { billing: input.billing } : {}),
-          // عند الترقية يُعاد ضبط الرصيد لرصيد الباقة الجديدة وتبدأ دورة جديدة
-          ...(plan ? { creditsBalance: plan.monthlyCredits, creditsCycleStart: new Date() } : {}),
+          creditsBalance: plan.monthlyCredits,
+          creditsCycleStart: new Date(),
         });
-        return { success: true };
+        return { success: true, stillInTrial };
       }),
 
     // تحويل الاشتراك الحالي بين الفوترة الشهرية والسنوية (دون تغيير الباقة أو الرصيد)
