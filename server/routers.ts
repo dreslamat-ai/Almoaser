@@ -303,32 +303,6 @@ export const appRouter = router({
         }
         return { success: true };
       }),
-    upgrade: protectedProcedure
-      .input(z.object({ planId: z.number(), billing: z.enum(["monthly", "yearly"]).optional() }))
-      .mutation(async ({ ctx, input }) => {
-        if (ctx.user.orgRole !== "owner") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الاشتراك متاحة لمالك الحساب فقط" });
-        }
-        const existing = await getSubscriptionByUserId(ctx.user.id);
-        if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك" });
-        const plan = await getPlanById(input.planId);
-        if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "الباقة غير موجودة" });
-
-        // لسه في فترة التجربة؟ نغيّر الباقة المستهدفة فقط دون إنهاء التجربة قبل
-        // ميعادها — التفعيل الفعلي (والدفع) يحصل تلقائياً بعد انتهاء التجربة
-        // بنفس آلية activateTrialIfExpired، بالباقة الجديدة المختارة هنا
-        const stillInTrial = existing.status === "trial" && existing.endDate && new Date(existing.endDate).getTime() > Date.now();
-
-        await updateSubscription(existing.id, {
-          planId: input.planId,
-          ...(stillInTrial ? {} : { status: "active" }),
-          ...(input.billing ? { billing: input.billing } : {}),
-          creditsBalance: plan.monthlyCredits,
-          creditsCycleStart: new Date(),
-        });
-        return { success: true, stillInTrial };
-      }),
-
     // تحويل الاشتراك الحالي بين الفوترة الشهرية والسنوية (دون تغيير الباقة أو الرصيد)
     switchBilling: protectedProcedure
       .input(z.object({ billing: z.enum(["monthly", "yearly"]) }))
