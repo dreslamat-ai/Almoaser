@@ -144,7 +144,7 @@ export default function Tasks() {
         <div className="flex gap-2 mb-6 flex-wrap">
           {[["all", "الكل"], ["pending", "معلق"], ["in_progress", "جاري"], ["completed", "مكتمل"]].map(([v, l]) => (
             <button key={v} onClick={() => setFilter(v)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === v ? "bg-navy text-white" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
               {l}
             </button>
           ))}
