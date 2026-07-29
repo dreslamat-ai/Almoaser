@@ -126,12 +126,57 @@ interface Invoice {
   currency?: string;
 }
 
+interface PurchaseInvoice {
+  name: string;
+  supplier: string;
+  posting_date: string;
+  due_date?: string;
+  grand_total: number;
+  outstanding_amount?: number;
+  status: string;
+  currency?: string;
+}
+
+interface Payment {
+  name: string;
+  payment_type?: string;
+  party?: string;
+  paid_amount: number;
+  posting_date: string;
+  status?: string;
+  mode_of_payment?: string;
+}
+
+interface JournalEntryRow {
+  name: string;
+  posting_date: string;
+  total_debit: number;
+  total_credit?: number;
+  user_remark?: string;
+  docstatus?: number;
+}
+
 interface Customer {
   name: string;
   customer_name: string;
   customer_type?: string;
   mobile_no?: string;
   email_id?: string;
+}
+
+interface Supplier {
+  name: string;
+  supplier_name: string;
+  supplier_type?: string;
+  mobile_no?: string;
+  email_id?: string;
+}
+
+interface Account {
+  name: string;
+  account_name: string;
+  account_type?: string;
+  root_type?: string;
 }
 
 interface Item {
@@ -248,6 +293,152 @@ function InvoicesTable({ invoices, onDownload }: { invoices: Invoice[]; onDownlo
   );
 }
 
+function PurchaseInvoicesTable({ invoices, onDownload }: { invoices: PurchaseInvoice[]; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+  const statusColor = (s: string) => {
+    if (s === "Paid") return "bg-emerald-100 text-emerald-700";
+    if (s === "Unpaid") return "bg-amber-100 text-amber-700";
+    if (s === "Overdue") return "bg-red-100 text-red-700";
+    return "bg-gray-100 text-gray-600";
+  };
+  const statusLabel = (s: string) => ({ Paid: "مدفوعة", Unpaid: "غير مدفوعة", Overdue: "متأخرة", Draft: "مسودة", Cancelled: "ملغاة" }[s] ?? s);
+  return (
+    <div className="mt-2 rounded-xl border border-border overflow-hidden text-sm">
+      <div className="bg-muted/50 px-3 py-2 flex items-center gap-2 border-b border-border">
+        <FileText className="w-4 h-4 text-primary" />
+        <span className="font-semibold text-foreground">فواتير المشتريات ({invoices.length})</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-muted/30 text-xs text-muted-foreground">
+              <th className="px-3 py-2 text-right font-medium">رقم الفاتورة</th>
+              <th className="px-3 py-2 text-right font-medium">المورد</th>
+              <th className="px-3 py-2 text-right font-medium">التاريخ</th>
+              <th className="px-3 py-2 text-right font-medium">المبلغ</th>
+              <th className="px-3 py-2 text-right font-medium">الحالة</th>
+              <th className="px-3 py-2 text-center font-medium">PDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.map((inv, i) => (
+              <tr key={i} className="border-t border-border/50 hover:bg-muted/20 transition-colors">
+                <td className="px-3 py-2 font-mono text-xs text-primary">{inv.name}</td>
+                <td className="px-3 py-2 text-foreground">{inv.supplier}</td>
+                <td className="px-3 py-2 text-muted-foreground">{inv.posting_date}</td>
+                <td className="px-3 py-2 font-semibold text-foreground">{inv.grand_total?.toLocaleString()} {inv.currency ?? ""}</td>
+                <td className="px-3 py-2">
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(inv.status)}`}>
+                    {statusLabel(inv.status)}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <button onClick={() => onDownload("Purchase Invoice", inv.name)}
+                    className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                    title="تحميل PDF">
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsTable({ payments, onDownload }: { payments: Payment[]; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+  return (
+    <div className="mt-2 rounded-xl border border-border overflow-hidden text-sm">
+      <div className="bg-muted/50 px-3 py-2 flex items-center gap-2 border-b border-border">
+        <FileText className="w-4 h-4 text-primary" />
+        <span className="font-semibold text-foreground">الدفعات ({payments.length})</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-muted/30 text-xs text-muted-foreground">
+              <th className="px-3 py-2 text-right font-medium">رقم السند</th>
+              <th className="px-3 py-2 text-right font-medium">النوع</th>
+              <th className="px-3 py-2 text-right font-medium">الطرف</th>
+              <th className="px-3 py-2 text-right font-medium">التاريخ</th>
+              <th className="px-3 py-2 text-right font-medium">المبلغ</th>
+              <th className="px-3 py-2 text-right font-medium">طريقة الدفع</th>
+              <th className="px-3 py-2 text-center font-medium">PDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payments.map((p, i) => (
+              <tr key={i} className="border-t border-border/50 hover:bg-muted/20 transition-colors">
+                <td className="px-3 py-2 font-mono text-xs text-primary">{p.name}</td>
+                <td className="px-3 py-2 text-foreground">{p.payment_type === "Receive" ? "قبض" : p.payment_type === "Pay" ? "صرف" : "—"}</td>
+                <td className="px-3 py-2 text-foreground">{p.party ?? "—"}</td>
+                <td className="px-3 py-2 text-muted-foreground">{p.posting_date}</td>
+                <td className="px-3 py-2 font-semibold text-foreground">{p.paid_amount?.toLocaleString()}</td>
+                <td className="px-3 py-2 text-muted-foreground text-xs">{p.mode_of_payment ?? "—"}</td>
+                <td className="px-3 py-2 text-center">
+                  <button onClick={() => onDownload("Payment Entry", p.name)}
+                    className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                    title="تحميل PDF">
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function JournalEntriesTable({ entries, onDownload }: { entries: JournalEntryRow[]; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+  return (
+    <div className="mt-2 rounded-xl border border-border overflow-hidden text-sm">
+      <div className="bg-muted/50 px-3 py-2 flex items-center gap-2 border-b border-border">
+        <FileText className="w-4 h-4 text-primary" />
+        <span className="font-semibold text-foreground">قيود اليومية ({entries.length})</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-muted/30 text-xs text-muted-foreground">
+              <th className="px-3 py-2 text-right font-medium">رقم القيد</th>
+              <th className="px-3 py-2 text-right font-medium">التاريخ</th>
+              <th className="px-3 py-2 text-right font-medium">إجمالي المدين</th>
+              <th className="px-3 py-2 text-right font-medium">البيان</th>
+              <th className="px-3 py-2 text-right font-medium">الحالة</th>
+              <th className="px-3 py-2 text-center font-medium">PDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((e, i) => (
+              <tr key={i} className="border-t border-border/50 hover:bg-muted/20 transition-colors">
+                <td className="px-3 py-2 font-mono text-xs text-primary">{e.name}</td>
+                <td className="px-3 py-2 text-muted-foreground">{e.posting_date}</td>
+                <td className="px-3 py-2 font-semibold text-foreground">{e.total_debit?.toLocaleString()}</td>
+                <td className="px-3 py-2 text-muted-foreground text-xs">{e.user_remark ?? "—"}</td>
+                <td className="px-3 py-2">
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${e.docstatus === 1 ? "bg-emerald-100 text-emerald-700" : e.docstatus === 2 ? "bg-gray-100 text-gray-600" : "bg-amber-100 text-amber-700"}`}>
+                    {e.docstatus === 1 ? "معتمد" : e.docstatus === 2 ? "ملغى" : "مسودة"}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <button onClick={() => onDownload("Journal Entry", e.name)}
+                    className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                    title="تحميل PDF">
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function InvoiceDetailCard({ inv, onDownload }: { inv: InvoiceDetail; onDownload: (name: string) => void }) {
   const statusColor = (s: string) => {
     if (s === "Paid") return "text-emerald-600 bg-emerald-50 border-emerald-200";
@@ -328,6 +519,70 @@ function CustomersTable({ customers }: { customers: Customer[] }) {
                 <td className="px-3 py-2 text-muted-foreground">{c.customer_type === "Company" ? "شركة" : "فرد"}</td>
                 <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{c.mobile_no ?? "—"}</td>
                 <td className="px-3 py-2 text-muted-foreground text-xs">{c.email_id ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SuppliersTable({ suppliers }: { suppliers: Supplier[] }) {
+  return (
+    <div className="mt-2 rounded-xl border border-border overflow-hidden text-sm">
+      <div className="bg-muted/50 px-3 py-2 flex items-center gap-2 border-b border-border">
+        <Users className="w-4 h-4 text-blue-500" />
+        <span className="font-semibold text-foreground">الموردون ({suppliers.length})</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead><tr className="bg-muted/30 text-xs text-muted-foreground">
+            <th className="px-3 py-2 text-right font-medium">الاسم</th>
+            <th className="px-3 py-2 text-right font-medium">النوع</th>
+            <th className="px-3 py-2 text-right font-medium">الهاتف</th>
+            <th className="px-3 py-2 text-right font-medium">البريد</th>
+          </tr></thead>
+          <tbody>
+            {suppliers.map((s, i) => (
+              <tr key={i} className="border-t border-border/50 hover:bg-muted/20">
+                <td className="px-3 py-2 font-medium text-foreground">{s.supplier_name || s.name}</td>
+                <td className="px-3 py-2 text-muted-foreground">{s.supplier_type === "Individual" ? "فرد" : "شركة"}</td>
+                <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{s.mobile_no ?? "—"}</td>
+                <td className="px-3 py-2 text-muted-foreground text-xs">{s.email_id ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const ROOT_TYPE_LABEL: Record<string, string> = {
+  Asset: "أصول", Liability: "خصوم", Equity: "حقوق ملكية", Income: "إيرادات", Expense: "مصروفات",
+};
+
+function AccountsTable({ accounts }: { accounts: Account[] }) {
+  return (
+    <div className="mt-2 rounded-xl border border-border overflow-hidden text-sm">
+      <div className="bg-muted/50 px-3 py-2 flex items-center gap-2 border-b border-border">
+        <FileText className="w-4 h-4 text-primary" />
+        <span className="font-semibold text-foreground">الحسابات ({accounts.length})</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead><tr className="bg-muted/30 text-xs text-muted-foreground">
+            <th className="px-3 py-2 text-right font-medium">اسم الحساب</th>
+            <th className="px-3 py-2 text-right font-medium">التصنيف</th>
+            <th className="px-3 py-2 text-right font-medium">النوع</th>
+          </tr></thead>
+          <tbody>
+            {accounts.map((a, i) => (
+              <tr key={i} className="border-t border-border/50 hover:bg-muted/20">
+                <td className="px-3 py-2 font-medium text-foreground">{a.account_name || a.name}</td>
+                <td className="px-3 py-2 text-muted-foreground">{a.root_type ? (ROOT_TYPE_LABEL[a.root_type] ?? a.root_type) : "—"}</td>
+                <td className="px-3 py-2 text-muted-foreground text-xs">{a.account_type ?? "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -507,10 +762,40 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       return <InvoiceDetailCard inv={inv} onDownload={onDownload} />;
     } catch { return null; }
   }
+  if (display.startsWith("__PURCHASE_INVOICES__")) {
+    try {
+      const invoices = JSON.parse(display.replace("__PURCHASE_INVOICES__", "")) as PurchaseInvoice[];
+      return <PurchaseInvoicesTable invoices={invoices} onDownload={onDownloadDoc} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__PAYMENTS__")) {
+    try {
+      const payments = JSON.parse(display.replace("__PAYMENTS__", "")) as Payment[];
+      return <PaymentsTable payments={payments} onDownload={onDownloadDoc} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__JOURNAL_ENTRIES__")) {
+    try {
+      const entries = JSON.parse(display.replace("__JOURNAL_ENTRIES__", "")) as JournalEntryRow[];
+      return <JournalEntriesTable entries={entries} onDownload={onDownloadDoc} />;
+    } catch { return null; }
+  }
   if (display.startsWith("__CUSTOMERS__")) {
     try {
       const customers = JSON.parse(display.replace("__CUSTOMERS__", "")) as Customer[];
       return <CustomersTable customers={customers} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__SUPPLIERS__")) {
+    try {
+      const suppliers = JSON.parse(display.replace("__SUPPLIERS__", "")) as Supplier[];
+      return <SuppliersTable suppliers={suppliers} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__ACCOUNTS__")) {
+    try {
+      const accounts = JSON.parse(display.replace("__ACCOUNTS__", "")) as Account[];
+      return <AccountsTable accounts={accounts} />;
     } catch { return null; }
   }
   if (display.startsWith("__ITEMS__")) {
@@ -553,6 +838,75 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
     try {
       const doc = JSON.parse(display.replace("__DOCUMENT_PRINT__", "")) as { doctype: ErpDoctype; name: string };
       return <DocumentPrintCard doc={doc} onDownload={onDownloadDoc} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__CUSTOMER_CREATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__CUSTOMER_CREATED__", "")) as { customer_name?: string; name: string; tax_id?: string };
+      return (
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <p className="font-semibold text-emerald-800">✅ تم إنشاء العميل</p>
+          <p className="text-emerald-700 text-xs mt-1">{d.customer_name ?? d.name}{d.tax_id ? ` · الرقم الضريبي: ${d.tax_id}` : ""}</p>
+        </div>
+      );
+    } catch { return null; }
+  }
+  if (display.startsWith("__SUPPLIER_CREATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__SUPPLIER_CREATED__", "")) as { supplier_name?: string; name: string };
+      return (
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <p className="font-semibold text-emerald-800">✅ تم إنشاء المورد</p>
+          <p className="text-emerald-700 text-xs mt-1">{d.supplier_name ?? d.name}</p>
+        </div>
+      );
+    } catch { return null; }
+  }
+  if (display.startsWith("__ITEM_CREATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__ITEM_CREATED__", "")) as { item_name?: string; name: string; standard_rate?: number };
+      return (
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <p className="font-semibold text-emerald-800">✅ تم إنشاء الصنف</p>
+          <p className="text-emerald-700 text-xs mt-1">{d.item_name ?? d.name}{d.standard_rate ? ` · السعر: ${d.standard_rate.toLocaleString()}` : ""}</p>
+        </div>
+      );
+    } catch { return null; }
+  }
+  if (display.startsWith("__INVOICE_SUBMITTED__")) {
+    try {
+      const d = JSON.parse(display.replace("__INVOICE_SUBMITTED__", "")) as { name: string; status?: string; grand_total?: number };
+      return (
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <p className="font-semibold text-emerald-800">✅ تم اعتماد الفاتورة</p>
+          <p className="text-emerald-700 text-xs mt-1">
+            <span className="font-mono font-bold">{d.name}</span>
+            {d.grand_total != null ? ` · الإجمالي: ${d.grand_total.toLocaleString()}` : ""} — سُجّلت رسمياً في الحسابات
+          </p>
+        </div>
+      );
+    } catch { return null; }
+  }
+  if (display.startsWith("__DOC_SUBMITTED__")) {
+    try {
+      const d = JSON.parse(display.replace("__DOC_SUBMITTED__", "")) as { doctype: string; name: string };
+      return (
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <p className="font-semibold text-emerald-800">✅ تم اعتماد المستند</p>
+          <p className="text-emerald-700 text-xs mt-1">{d.doctype} — <span className="font-mono font-bold">{d.name}</span> — سُجّل رسمياً في الحسابات</p>
+        </div>
+      );
+    } catch { return null; }
+  }
+  if (display.startsWith("__SETTINGS_UPDATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__SETTINGS_UPDATED__", "")) as { settings_type: string; name: string; changed: string[] };
+      return (
+        <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
+          <p className="font-semibold text-blue-800">⚙️ تم تحديث الإعدادات</p>
+          <p className="text-blue-700 text-xs mt-1">{d.name}{d.changed?.length ? ` (الحقول: ${d.changed.join("، ")})` : ""}</p>
+        </div>
+      );
     } catch { return null; }
   }
   if (display.startsWith("__DOC_UPDATED__")) {
