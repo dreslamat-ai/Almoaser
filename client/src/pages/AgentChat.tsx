@@ -469,6 +469,30 @@ function CreatedJournalEntryCard({ inv, onDownload }: { inv: CreatedJournalEntry
   );
 }
 
+const DOCTYPE_LABEL: Record<ErpDoctype, string> = {
+  "Sales Invoice": "فاتورة المبيعات",
+  "Purchase Invoice": "فاتورة المشتريات",
+  "Payment Entry": "الدفعة",
+  "Journal Entry": "القيد اليومي",
+};
+
+function DocumentPrintCard({ doc, onDownload }: { doc: { doctype: ErpDoctype; name: string }; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+  return (
+    <div className="mt-2 rounded-xl border border-primary/20 bg-primary/5 overflow-hidden text-sm">
+      <div className="px-3 py-2 flex items-center gap-2 border-b border-primary/10">
+        <FileText className="w-4 h-4 text-primary" />
+        <span className="font-semibold text-foreground">{DOCTYPE_LABEL[doc.doctype] ?? doc.doctype} جاهزة للتحميل</span>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-auto" onClick={() => onDownload(doc.doctype, doc.name)}>
+          <Download className="w-3 h-3" /> تحميل PDF
+        </Button>
+      </div>
+      <div className="p-3">
+        <p className="text-foreground"><span className="font-medium">الرقم:</span> <span className="font-mono font-bold">{doc.name}</span></p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tool Result Renderer ─────────────────────────────────────────────────────
 function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: string; onDownload: (name: string) => void; onDownloadDoc: (doctype: ErpDoctype, name: string) => void }) {
   if (display.startsWith("__INVOICES__")) {
@@ -523,6 +547,12 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
     try {
       const inv = JSON.parse(display.replace("__JOURNAL_CREATED__", "")) as CreatedJournalEntry;
       return <CreatedJournalEntryCard inv={inv} onDownload={onDownloadDoc} />;
+    } catch { return null; }
+  }
+  if (display.startsWith("__DOCUMENT_PRINT__")) {
+    try {
+      const doc = JSON.parse(display.replace("__DOCUMENT_PRINT__", "")) as { doctype: ErpDoctype; name: string };
+      return <DocumentPrintCard doc={doc} onDownload={onDownloadDoc} />;
     } catch { return null; }
   }
   if (display.startsWith("__DOC_UPDATED__")) {
@@ -1035,7 +1065,7 @@ export default function AgentChat() {
                 <div className="bg-muted/60 border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">
-                    {pendingQuickReply ? `جاري التنفيذ: «${pendingQuickReply}»...` : "الوكيل يتصل بـ Almoaser AI ERP..."}
+                    {pendingQuickReply ? `جاري التنفيذ: «${pendingQuickReply}»...` : "جارٍ التحويل، لحظات من فضلك..."}
                   </span>
                 </div>
               </div>

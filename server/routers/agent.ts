@@ -29,6 +29,7 @@ const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = {
   get_payments: "viewInvoices", create_payment_entry: "managePayments",
   get_accounts: null, get_journal_entries: "viewInvoices", create_journal_entry: "manageJournalEntries",
   submit_document: "createInvoices",
+  print_document: "viewInvoices",
   update_document: "createInvoices",
   cancel_document: "manageJournalEntries",
   delete_document: "manageErpSettings",
@@ -509,6 +510,22 @@ const TOOLS = [
     function: {
       name: "submit_document",
       description: "اعتماد (Submit) أي مستند لتسجيله رسمياً في الحسابات: فاتورة مبيعات، فاتورة مشتريات، دفعة، أو قيد يومية",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"], description: "نوع المستند" },
+          document_name: { type: "string", description: "رقم المستند مثل ACC-SINV-2026-00001 أو ACC-PAY-2026-00001" },
+        },
+        required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "print_document",
+      description: "استخدمها دائماً عندما يطلب العميل طباعة أو تنزيل PDF أو إرسال نسخة من أي مستند موجود بالفعل (فاتورة مبيعات، فاتورة مشتريات، دفعة، أو قيد يومية). تعرض للعميل زر تحميل PDF فوري بنموذج الطباعة الفعلي المُعدّ في نظامه. لا ترفض طلب الطباعة أبداً — استخدم هذه الأداة دوماً بدل الاعتذار",
       parameters: {
         type: "object",
         properties: {
@@ -1502,6 +1519,8 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 ## قاعدة عدم الرفض الاستباقي (مهم جداً)
 صلاحياتك في النظام هي **نفس صلاحيات مستخدم ERPNext المتصل بالكامل** — لا توجد لديك قيود إضافية. **يُمنع منعاً باتاً** أن ترفض طلب إعدادات أو تعديل بحجة أنك "تحتاج صلاحيات مسؤول النظام" أو "هذا يتجاوز صلاحياتك" قبل المحاولة الفعلية. القاعدة: **نفّذ دائماً عبر الأداة المناسبة**، وإن أعاد ERPNext خطأ صلاحيات (PermissionError) فعندها فقط انقل رسالة الخطأ للمستخدم واقترح الحل. أي طلب لتهيئة أو تعديل إعدادات أي موديول أو مستند (طرق الدفع، الحسابات الافتراضية، الضرائب، الشركة، الطباعة...) هو ضمن نطاق عملك المباشر.
 
+**طلب طباعة/تنزيل مستند:** إذا طلب العميل طباعة فاتورة أو تنزيل PDF أو إرسال نسخة من أي مستند — استخدم أداة `print_document` فوراً، ولا تعتذر أبداً بعدم امتلاك صلاحية أو قدرة على الطباعة أو إرسال الملفات (أنت تملك هذه القدرة عبر الأداة نفسها).
+
 ## خبرتك في Almoaser AI ERP
 - **Sales Invoice**: فاتورة المبيعات — تُنشأ Draft ثم Submit لتسجّل في الحسابات. الحالات: Draft/Unpaid/Paid/Overdue/Cancelled
 - **Purchase Invoice**: فاتورة المشتريات من الموردين
@@ -1624,9 +1643,16 @@ ${buildExpertSkillsSection(hasCfoSkill)}
             requireToolPermission(ctx.user, tc.function.name);
             const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
             const activeConfig = currentErpConfig();
-            const { result, display } = activeConfig.provider === "odoo" && activeConfig.database
-              ? await executeOdooTool(tc.function.name, args, activeConfig as ErpConfig & { database: string })
-              : await executeTool(tc.function.name, args);
+            // print_document لا يلمس ERPNext/Odoo مباشرة — فقط يعرض للعميل زر تحميل PDF
+            // (نفس نموذج الطباعة الفعلي في نظامه)، بغض النظر عن المزوّد
+            const { result, display } = tc.function.name === "print_document"
+              ? (() => {
+                  const doc = { doctype: args.doctype as string, name: args.document_name as string };
+                  return { result: doc, display: `__DOCUMENT_PRINT__${JSON.stringify(doc)}` };
+                })()
+              : activeConfig.provider === "odoo" && activeConfig.database
+                ? await executeOdooTool(tc.function.name, args, activeConfig as ErpConfig & { database: string })
+                : await executeTool(tc.function.name, args);
             toolResult = JSON.stringify(result);
             displayData = display;
             // ─── خصم 5 نقاط لكل مستند ERP يُنشأ بنجاح (فاتورة/دفعة/قيد) — من رصيد المنظمة المشترك ───
