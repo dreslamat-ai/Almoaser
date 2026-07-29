@@ -54,27 +54,29 @@ function InviteMemberDialog() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [perms, setPerms] = useState<Record<PermissionKey, boolean>>(DEFAULT_PERMS);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const inviteMutation = trpc.organization.inviteMember.useMutation({
     onSuccess: () => {
       toast.success("تم إضافة المستخدم بنجاح");
       utils.organization.members.invalidate();
       setOpen(false);
-      setName(""); setEmail(""); setPassword(""); setPerms(DEFAULT_PERMS);
+      setName(""); setEmail(""); setPassword(""); setPerms(DEFAULT_PERMS); setFormError(null);
     },
-    onError: e => toast.error(e.message),
+    onError: e => setFormError(e.message),
   });
 
   const submit = () => {
+    setFormError(null);
     if (!name.trim() || !email.trim() || password.length < 6) {
-      toast.error("أكمل الاسم والبريد وكلمة مرور 6 أحرف على الأقل");
+      setFormError("أكمل الاسم والبريد وكلمة مرور 6 أحرف على الأقل");
       return;
     }
     inviteMutation.mutate({ name: name.trim(), email: email.trim(), password, permissions: perms });
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) setFormError(null); }}>
       <DialogTrigger asChild>
         <Button className="bg-navy-gradient text-white gap-2">
           <UserPlus className="w-4 h-4" /> إضافة مستخدم
@@ -85,6 +87,11 @@ function InviteMemberDialog() {
           <DialogTitle>إضافة مستخدم فرعي</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {formError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2">
+              {formError}
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="member-name">الاسم</Label>
             <Input id="member-name" value={name} onChange={e => setName(e.target.value)} />
