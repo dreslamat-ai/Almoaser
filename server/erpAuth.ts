@@ -8,6 +8,9 @@ import crypto from "crypto";
 import { getDb, upsertUser, getUserByOpenId } from "./db";
 import { users } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { testConnectionByProvider } from "./erpConnection";
+
+export type ErpProvider = "erpnext" | "odoo";
 
 export type ErpLoginResult = {
   fullName: string;
@@ -24,14 +27,23 @@ export function buildErpOpenId(erpUrl: string, email: string): string {
   return `erp:${emailPart}:${h}`.slice(0, 64);
 }
 
-/** يتحقق من بيانات الاعتماد على خادم ERPNext ويرجع اسم المستخدم الكامل */
+/** يتحقق من بيانات الاعتماد على خادم ERPNext أو Odoo ويرجع اسم المستخدم الكامل */
 export async function verifyErpCredentials(
   erpUrl: string,
   email: string,
-  password: string
+  password: string,
+  provider: ErpProvider = "erpnext",
+  database?: string
 ): Promise<{ ok: true; fullName: string } | { ok: false; error: string }> {
   const cleanUrl = erpUrl.replace(/\/+$/, "");
-  if (!cleanUrl) return { ok: false, error: "رابط نظام ERPNext غير مضبوط" };
+  if (!cleanUrl) return { ok: false, error: "رابط النظام غير مضبوط" };
+  if (provider === "odoo") {
+    if (!database) return { ok: false, error: "اسم قاعدة البيانات مطلوب لـ Odoo" };
+    const res = await testConnectionByProvider("odoo", cleanUrl, email, password, database);
+    return res.ok
+      ? { ok: true, fullName: res.loggedInAs ?? email }
+      : { ok: false, error: res.error ?? "تعذّر التحقق من حساب Odoo" };
+  }
   try {
     const res = await fetch(`${cleanUrl}/api/method/login`, {
       method: "POST",
@@ -64,9 +76,11 @@ export async function verifyErpCredentials(
 export async function loginWithErpAccount(
   erpUrl: string,
   email: string,
-  password: string
+  password: string,
+  provider: ErpProvider = "erpnext",
+  database?: string
 ): Promise<{ ok: true; result: ErpLoginResult } | { ok: false; error: string }> {
-  const verified = await verifyErpCredentials(erpUrl, email, password);
+  const verified = await verifyErpCredentials(erpUrl, email, password, provider, database);
   if (!verified.ok) return verified;
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -92,18 +106,18 @@ export async function loginWithErpAccount(
       openId: user.openId,
       name: verified.fullName,
       email: normalizedEmail,
-      loginMethod: "erpnext",
+      loginMethod: provider,
       lastSignedIn: now,
     });
     return { ok: true, result: { fullName: verified.fullName, email: normalizedEmail, openId: user.openId } };
   }
 
-  // 3) إنشاء حساب جديد مربوط بحساب ERPNext
+  // 3) إنشاء حساب جديد مربوط بحساب ERP
   await upsertUser({
     openId: erpOpenId,
     name: verified.fullName,
     email: normalizedEmail,
-    loginMethod: "erpnext",
+    loginMethod: provider,
     lastSignedIn: now,
   });
   return { ok: true, result: { fullName: verified.fullName, email: normalizedEmail, openId: erpOpenId } };
@@ -123,13 +137,19 @@ export async function signupWithErpAccount(params: {
   planId: number;
   companyName?: string;
   phone?: string;
+  provider?: ErpProvider;
+  database?: string;
 }): Promise<{ ok: true; result: ErpLoginResult & { userId: number; trialEndsAt: Date } } | { ok: false; error: string }> {
   const cleanUrl = params.erpUrl.replace(/\/+$/, "");
   if (!/^https?:\/\/.+/.test(cleanUrl)) {
     return { ok: false, error: "رابط النظام غير صالح — يجب أن يبدأ بـ https://" };
   }
+  const provider: ErpProvider = params.provider ?? "erpnext";
+  if (provider === "odoo" && !params.database?.trim()) {
+    return { ok: false, error: "اسم قاعدة البيانات مطلوب لـ Odoo" };
+  }
 
-  const login = await loginWithErpAccount(cleanUrl, params.email, params.password);
+  const login = await loginWithErpAccount(cleanUrl, params.email, params.password, provider, params.database);
   if (!login.ok) return login;
 
   const db = await getDb();
@@ -139,14 +159,16 @@ export async function signupWithErpAccount(params: {
   const user = userRows[0];
   if (!user) return { ok: false, error: "تعذّر إنشاء الحساب" };
 
-  // حفظ اتصال ERPNext الخاص بالمستخدم (upsert)
+  // حفظ اتصال ERP الخاص بالمستخدم (upsert)
   const { encryptPassword } = await import("./erpConnection");
   const { erpnextConnections, subscriptions } = await import("../drizzle/schema");
   const existingConn = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, user.id)).limit(1);
   const connValues = {
+    provider,
     url: cleanUrl,
     username: login.result.email,
     passwordEnc: encryptPassword(params.password),
+    database: provider === "odoo" ? (params.database?.trim() || null) : null,
     lastVerifiedAt: new Date(),
   };
   if (existingConn[0]) {
@@ -173,6 +195,44 @@ export async function signupWithErpAccount(params: {
   }
 
   return { ok: true, result: { ...login.result, userId: user.id, trialEndsAt } };
+}
+
+/**
+ * تسجيل دخول عائد بالبريد وكلمة المرور فقط (بدون طلب رابط النظام مجدداً):
+ * يبحث عن حساب/حسابات محلية بنفس البريد، ولكل حساب يقرأ اتصال ERP المحفوظ
+ * (ERPNext أو Odoo، بأي رابط) ويتحقق من كلمة المرور مقابله مباشرة.
+ * هذا يُصلح تسجيل الدخول لأي عميل عنده رابط ERPNext خاص به أو حساب Odoo —
+ * قبل هذا التعديل كان تسجيل الدخول يتحقق فقط مقابل رابط النظام الافتراضي (env)،
+ * فيفشل لأي عميل غير مرتبط بذلك الرابط تحديداً.
+ */
+export async function loginWithStoredConnection(
+  email: string,
+  password: string
+): Promise<{ ok: true; result: ErpLoginResult } | { ok: false; error: string }> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const db = await getDb();
+  if (!db) return { ok: false, error: "تعذّر الاتصال بقاعدة البيانات" };
+  const { erpnextConnections } = await import("../drizzle/schema");
+
+  const candidates = await db.select().from(users).where(eq(users.email, normalizedEmail));
+  for (const user of candidates) {
+    const connRows = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, user.id)).limit(1);
+    const conn = connRows[0];
+    if (!conn) continue;
+    const test = await testConnectionByProvider(conn.provider, conn.url, conn.username, password, conn.database ?? undefined);
+    if (test.ok) {
+      const fullName = test.loggedInAs ?? user.name ?? normalizedEmail;
+      await upsertUser({ openId: user.openId, name: fullName, email: normalizedEmail, loginMethod: conn.provider, lastSignedIn: new Date() });
+      return { ok: true, result: { fullName, email: normalizedEmail, openId: user.openId } };
+    }
+  }
+
+  // حسابات قديمة قبل جدول اتصالات ERP لكل مستخدم — نجرّب رابط النظام الافتراضي كخيار أخير
+  const fallbackUrl = (process.env.ERPNEXT_URL ?? "").replace(/\/+$/, "");
+  if (fallbackUrl) {
+    return loginWithErpAccount(fallbackUrl, normalizedEmail, password);
+  }
+  return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
 }
 
 /**

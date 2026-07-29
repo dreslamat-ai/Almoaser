@@ -116,7 +116,7 @@ export default function Login() {
         </p>
 
         <p className="text-xs text-muted-foreground text-center mt-6 leading-relaxed">
-          يتم التحقق من بياناتك مباشرة على نظام ERPNext — نفس حسابك هناك يعمل هنا،
+          يتم التحقق من بياناتك مباشرة على نظام ERPNext أو Odoo الخاص بك — نفس حسابك هناك يعمل هنا،
           ولا تُخزَّن كلمة مرورك في هذا التطبيق.
         </p>
       </Card>

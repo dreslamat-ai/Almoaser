@@ -9,7 +9,7 @@ import { agentRouter } from "./routers/agent";
 import { paymentsRouter } from "./routers/payments";
 import { pingOpenAI, pingErpNext, pingOpenRouter } from "./llmProvider";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, testConnectionByProvider, encryptPassword } from "./erpConnection";
-import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired, verifyErpCredentials } from "./erpAuth";
+import { loginWithErpAccount, signupWithErpAccount, activateTrialIfExpired, loginWithStoredConnection } from "./erpAuth";
 import {
   getOrganizationForUser, listOrgMembers, inviteSubUser,
   updateMemberPermissions, removeMember, loginSubUserWithPassword,
@@ -156,7 +156,8 @@ export const appRouter = router({
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
         return { success: true, name: result.user.name, email: result.user.email } as const;
       }),
-    // تسجيل الدخول بحساب ERPNext (نفس بريد وكلمة مرور النظام)
+    // تسجيل الدخول بحساب ERP (ERPNext أو Odoo) — نفس بريد وكلمة مرور النظام.
+    // لا نطلب رابط النظام مجدداً: نبحث عن اتصال ERP المحفوظ للمستخدم من التسجيل ونتحقق مقابله مباشرة.
     loginWithErp: publicProcedure
       .input(z.object({
         email: z.string().trim().min(3).max(320),
@@ -164,8 +165,9 @@ export const appRouter = router({
         erpUrl: z.string().trim().max(500).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const erpUrl = (input.erpUrl || process.env.ERPNEXT_URL || "").replace(/\/+$/, "");
-        const result = await loginWithErpAccount(erpUrl, input.email, input.password);
+        const result = input.erpUrl
+          ? await loginWithErpAccount(input.erpUrl.replace(/\/+$/, ""), input.email, input.password)
+          : await loginWithStoredConnection(input.email, input.password);
         if (!result.ok) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: result.error });
         }
@@ -176,16 +178,18 @@ export const appRouter = router({
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
         return { success: true, name: result.result.fullName, email: result.result.email } as const;
       }),
-    // فحص بيانات ERPNext مبكراً أثناء التسجيل (قبل اختيار الباقة) — رد فعل أسرع للمستخدم
+    // فحص بيانات ERPNext أو Odoo مبكراً أثناء التسجيل (قبل اختيار الباقة) — رد فعل أسرع للمستخدم
     testErpCredentials: publicProcedure
       .input(z.object({
         erpUrl: z.string().trim().min(8).max(500),
         email: z.string().trim().min(3).max(320),
         password: z.string().min(1).max(256),
+        provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
+        database: z.string().trim().optional(),
       }))
       .mutation(async ({ input }) => {
-        const result = await verifyErpCredentials(input.erpUrl, input.email, input.password);
-        return result.ok ? { ok: true as const, fullName: result.fullName } : { ok: false as const, error: result.error };
+        const result = await testConnectionByProvider(input.provider, input.erpUrl, input.email, input.password, input.database);
+        return result.ok ? { ok: true as const, fullName: result.loggedInAs ?? input.email } : { ok: false as const, error: result.error ?? "تعذّر التحقق من الحساب" };
       }),
     // تسجيل مستخدم جديد: رابط نظامه + بريده + كلمة مروره + الباقة، مع تجربة 3 أيام
     signupWithErp: publicProcedure
@@ -196,6 +200,8 @@ export const appRouter = router({
         planId: z.number().int().positive(),
         companyName: z.string().trim().max(255).optional(),
         phone: z.string().trim().max(20).optional(),
+        provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
+        database: z.string().trim().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const result = await signupWithErpAccount(input);

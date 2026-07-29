@@ -486,10 +486,9 @@ function TelegramDemoSection() {
   );
 }
 
-function PricingSection() {
+function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => void }) {
   const { ref, inView } = useInView();
   const { data: plans, isLoading } = trpc.plans.list.useQuery();
-  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
 
   const planIcons = [<BookOpen className="w-6 h-6" />, <Zap className="w-6 h-6" />, <Bot className="w-6 h-6" />];
@@ -579,11 +578,11 @@ function PricingSection() {
                     className={`w-full ${isPopular ? "bg-navy-gradient text-white hover:opacity-90" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
                     variant={isPopular ? "default" : "outline"}
                     onClick={() => {
-                      setSelectedPlanId(plan.id);
+                      onSelectPlan(plan.id);
                       document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
                     }}
                   >
-                    ابدأ الآن
+                    اطلب استشارة مجانية
                   </Button>
                 </div>
               );
@@ -595,13 +594,18 @@ function PricingSection() {
   );
 }
 
-function ContactSection() {
+function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
   const { ref, inView } = useInView();
   const { data: plans } = trpc.plans.list.useQuery();
   const [submitted, setSubmitted] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", companyType: "", businessSector: "", planId: "", message: "" });
+
+  // الباقة المختارة من بطاقات الأسعار تُملأ تلقائياً في الفورم
+  useEffect(() => {
+    if (initialPlanId != null) setForm(f => ({ ...f, planId: String(initialPlanId) }));
+  }, [initialPlanId]);
 
   // ─── عداد تنازلي للتوجيه إلى الباقات ─────────────────────────────────
   const [countdown, setCountdown] = useState(5);
@@ -921,6 +925,8 @@ function Footer() {
 }
 
 export default function Home() {
+  // الباقة المختارة من بطاقات الأسعار — تُمرَّر لفورم التواصل ليُحدَّد بها تلقائياً
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   return (
     <div className="min-h-screen">
       <Navbar />
@@ -928,8 +934,8 @@ export default function Home() {
       <ServicesSection />
       <HowItWorksSection />
       <TelegramDemoSection />
-      <PricingSection />
-      <ContactSection />
+      <PricingSection onSelectPlan={setSelectedPlanId} />
+      <ContactSection initialPlanId={selectedPlanId} />
       <Footer />
     </div>
   );
