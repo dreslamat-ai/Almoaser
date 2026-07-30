@@ -1871,7 +1871,12 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 صلاحياتك في النظام هي **نفس صلاحيات مستخدم ERPNext المتصل بالكامل** — لا توجد لديك قيود إضافية. **يُمنع منعاً باتاً** أن ترفض طلب إعدادات أو تعديل بحجة أنك "تحتاج صلاحيات مسؤول النظام" أو "هذا يتجاوز صلاحياتك" قبل المحاولة الفعلية. القاعدة: **نفّذ دائماً عبر الأداة المناسبة**، وإن أعاد ERPNext خطأ صلاحيات (PermissionError) فعندها فقط انقل رسالة الخطأ للمستخدم واقترح الحل. أي طلب لتهيئة أو تعديل إعدادات أي موديول أو مستند (طرق الدفع، الحسابات الافتراضية، الضرائب، الشركة، الطباعة...) هو ضمن نطاق عملك المباشر.
 
 **طلب طباعة/تنزيل/إرسال مستند:** إذا طلب العميل طباعة فاتورة أو تنزيل PDF أو "ابعتهالي" أو إرسال نسخة من أي مستند — استخدم أداة print_document فوراً، ولا تعتذر أبداً بعدم امتلاك صلاحية أو قدرة على الطباعة أو إرسال الملفات. الأداة تُصدر الملف فعلياً من نظام العميل **بنموذج الطباعة الافتراضي المضبوط عنده** وتسلّمه داخل المحادثة جاهزاً للفتح والتحميل — فلا تكتفِ بإعطاء رقم المستند أو بوصف كيفية طباعته يدوياً من النظام.
-**بعد إنشاء أي فاتورة بنجاح:** استدعِ print_document مباشرةً لنفس الفاتورة في نفس الرد حتى تصل نسخة PDF للعميل فوراً دون أن يطلبها.
+**بعد إنشاء أي فاتورة بنجاح — سير الاعتماد ثم الطباعة (مهم):** الفاتورة تُنشأ **مسودة**، والنموذج الرسمي في نظام العميل يحتوي غالباً رمز QR الضريبي الذي **لا يُولَّد إلا بعد الاعتماد** — فطباعة المسودة تخرج بشكل عام غير رسمي. لذلك بعد الإنشاء:
+1. أبلغ العميل أن الفاتورة أُنشئت كمسودة مع رقمها وإجماليها.
+2. **اطلب تأكيده الصريح على الاعتماد**، واشرح الأثر بوضوح: "الاعتماد يسجّل الفاتورة رسمياً في الحسابات ويصدرها بالشكل الضريبي المعتمد — هل أعتمدها؟" وأضف أزرار إجابة سريعة (نعم اعتمدها / لا اتركها مسودة).
+3. **بعد موافقته فقط**: استدعِ submit_document ثم print_document فوراً لتصل النسخة الرسمية.
+4. إن رفض أو أراد إبقاءها مسودة، لا تعتمدها. ولو طلب طباعتها كمسودة، اطبعها ونبّهه أنها ستخرج بالشكل العام لأنها غير معتمدة.
+**لا تعتمد أي فاتورة تلقائياً دون تأكيد صريح من العميل** — الاعتماد يرحّل قيوداً محاسبية ولا يمكن التراجع عنه إلا بالإلغاء.
 
 ## خبرتك في Almoaser AI ERP
 - **Sales Invoice**: فاتورة المبيعات — تُنشأ Draft ثم Submit لتسجّل في الحسابات. الحالات: Draft/Unpaid/Paid/Overdue/Cancelled
@@ -2112,7 +2117,7 @@ ${buildExpertSkillsSection(hasCfoSkill)}
         const { getOdooDocumentPdf } = await import("../odooTools");
         const result = await getOdooDocumentPdf(config as ErpConfig & { database: string }, input.doctype, input.name);
         if ("error" in result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
-        return result;
+        return { ...result, fallbackReason: undefined as string | undefined };
       }
       const erpUrl = erpBaseUrl();
       const sid = await getSession();
@@ -2139,12 +2144,27 @@ ${buildExpertSkillsSection(hasCfoSkill)}
           message: "تعذّر توليد PDF المستند — فشل نموذج الطباعة المضبوط وكل البدائل. راجع نماذج الطباعة في نظامك، وتحقق أن wkhtmltopdf المثبّت على خادم ERPNext هو إصدار patched-qt المطلوب",
         });
       }
+      // إن اضطررنا لنموذج بديل، نوضّح السبب للمستخدم بدل تسليم شكل عام دون تفسير.
+      // السبب الأشيع: النموذج الرسمي يحتوي رمز QR الضريبي الذي لا يُولَّد إلا بعد
+      // اعتماد المستند، فتفشل الطباعة على المسودة بخطأ "روابط صورة مكسورة".
+      let fallbackReason: string | undefined;
+      const requestedFormat = candidates[0];
       if (failures.length > 0) {
         console.warn(`[getDocumentPdf] ${input.doctype} ${input.name}: printed with "${usedFormat}" after ${failures.length} failed candidate(s):\n${failures.join("\n")}`);
+        const firstFailure = failures[0] ?? "";
+        const brokenImage = /broken image|صورة مكسورة/i.test(firstFailure);
+        let isDraft = false;
+        try {
+          const doc = await erpGET(`/api/resource/${encodeURIComponent(input.doctype)}/${encodeURIComponent(input.name)}`) as { data?: { docstatus?: number } };
+          isDraft = doc?.data?.docstatus === 0;
+        } catch { /* غير حرج */ }
+        fallbackReason = brokenImage && isDraft
+          ? `النموذج الرسمي "${requestedFormat}" يتطلب اعتماد المستند أولاً (رمز QR الضريبي لا يُولَّد قبل الاعتماد)، فطُبع مؤقتاً بـ"${usedFormat}"`
+          : `تعذّر استخدام النموذج الافتراضي "${requestedFormat}"، فطُبع بـ"${usedFormat}"`;
       }
       const buffer = await res.arrayBuffer();
       const base64 = Buffer.from(buffer).toString("base64");
-      return { pdfBase64: base64, filename: `${input.name}.pdf`, printFormat: usedFormat };
+      return { pdfBase64: base64, filename: `${input.name}.pdf`, printFormat: usedFormat, fallbackReason };
     })),
 
   // ─── تحويل الصوت إلى نص (إدخال صوتي للوكيل) ─────────────────────────────

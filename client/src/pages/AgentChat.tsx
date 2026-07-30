@@ -738,7 +738,7 @@ const DOCTYPE_LABEL: Record<ErpDoctype, string> = {
  */
 function DocumentPrintCard({ doc }: { doc: { doctype: ErpDoctype; name: string } }) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [file, setFile] = useState<{ url: string; sizeKb: number; filename: string; printFormat?: string } | null>(null);
+  const [file, setFile] = useState<{ url: string; sizeKb: number; filename: string; printFormat?: string; fallbackReason?: string } | null>(null);
   const [error, setError] = useState("");
   const pdfMutation = trpc.agent.getDocumentPdf.useMutation();
   const startedRef = useRef(false);
@@ -752,7 +752,7 @@ function DocumentPrintCard({ doc }: { doc: { doctype: ErpDoctype; name: string }
         const bytes = Uint8Array.from(atob(res.pdfBase64), ch => ch.charCodeAt(0));
         const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
         urlRef.current = url;
-        setFile({ url, sizeKb: Math.max(1, Math.round(bytes.length / 1024)), filename: res.filename, printFormat: res.printFormat });
+        setFile({ url, sizeKb: Math.max(1, Math.round(bytes.length / 1024)), filename: res.filename, printFormat: res.printFormat, fallbackReason: res.fallbackReason });
         setState("ready");
       })
       .catch(e => { setError(e instanceof Error ? e.message : "تعذّر توليد الملف"); setState("error"); });
@@ -809,6 +809,11 @@ function DocumentPrintCard({ doc }: { doc: { doctype: ErpDoctype; name: string }
                 </a>
               </div>
             </div>
+            {file.fallbackReason && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11.5px] leading-relaxed text-amber-800">
+                ⚠️ {file.fallbackReason}
+              </div>
+            )}
             <object data={file.url} type="application/pdf" className="w-full h-72 mt-2 rounded-lg border border-border bg-white">
               <p className="p-3 text-xs text-muted-foreground">
                 متصفحك لا يعرض PDF مباشرة — استخدم زر «فتح» أو «تحميل».
