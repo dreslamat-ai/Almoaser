@@ -704,6 +704,12 @@ export const appRouter = router({
       const { getAllOrgsUsageSummary } = await import("./credits");
       return getAllOrgsUsageSummary();
     }),
+    // تحليلات المنصة للمالك: عملاء + استهلاك + ربحية + نصائح تشغيلية
+    platformInsights: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getPlatformInsights } = await import("./insights");
+      return getPlatformInsights();
+    }),
     // تفعيل باقة لعميل بدون دفع فعلي (منحة إدارية)
     activateSubscription: protectedProcedure
       .input(z.object({ userId: z.number(), planId: z.number(), billing: z.enum(["monthly", "yearly"]).default("monthly") }))

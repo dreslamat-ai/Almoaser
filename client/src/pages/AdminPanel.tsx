@@ -210,6 +210,7 @@ export default function AdminPanel() {
   const { data: plans } = trpc.plans.list.useQuery();
   const { data: allUsers } = trpc.admin.users.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: usageSummary } = trpc.admin.usageSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
+  const { data: insights } = trpc.admin.platformInsights.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
   const { data: revenueSummary } = trpc.admin.revenueSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", refetchInterval: 30000 });
   const { data: llmCostSummary } = trpc.admin.llmCostSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", refetchInterval: 30000 });
@@ -289,6 +290,8 @@ export default function AdminPanel() {
             </div>
           ))}
         </div>
+
+        {insights && <PlatformInsights data={insights} />}
 
         <div className="flex gap-2 mb-6 flex-wrap">
           {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
@@ -759,6 +762,117 @@ export default function AdminPanel() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+// ─── تحليلات المنصة (لوحة المالك) ──────────────────────────────────────────────
+type InsightsData = NonNullable<ReturnType<typeof trpc.admin.platformInsights.useQuery>["data"]>;
+
+const ADVICE_STYLE: Record<string, { box: string; dot: string; label: string }> = {
+  critical: { box: "border-red-200 bg-red-50", dot: "bg-red-500", label: "text-red-900" },
+  warning: { box: "border-amber-200 bg-amber-50", dot: "bg-amber-500", label: "text-amber-900" },
+  info: { box: "border-blue-200 bg-blue-50", dot: "bg-blue-500", label: "text-blue-900" },
+  good: { box: "border-emerald-200 bg-emerald-50", dot: "bg-emerald-500", label: "text-emerald-900" },
+};
+
+function PlatformInsights({ data }: { data: InsightsData }) {
+  const n = (v: number) => v.toLocaleString("en-US");
+  const sar = (v: number) => `${v.toLocaleString("en-US", { maximumFractionDigits: 2 })} ر.س`;
+  const { customers, usage, finance, advice } = data;
+  const profitPositive = finance.netProfitSar >= 0;
+
+  return (
+    <div className="mb-8 space-y-4">
+      {/* العملاء والاستهلاك */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <div className="text-xs text-muted-foreground mb-1">إجمالي العملاء</div>
+          <div className="text-2xl font-bold text-navy">{n(customers.total)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            {customers.active} نشط · {customers.trial} تجريبي · {customers.inactive} متوقف
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <div className="text-xs text-muted-foreground mb-1">المستخدمون</div>
+          <div className="text-2xl font-bold text-navy">{n(data.totalUsers)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">شامل المستخدمين الفرعيين</div>
+        </div>
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <div className="text-xs text-muted-foreground mb-1">النقاط المستهلكة</div>
+          <div className="text-2xl font-bold text-navy">{n(usage.totalCredits)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            {n(usage.totalDocuments)} مستند · {n(usage.totalMessages)} رسالة
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <div className="text-xs text-muted-foreground mb-1">التوكنز المستهلكة</div>
+          <div className="text-2xl font-bold text-navy">{n(usage.totalTokens)}</div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            {n(usage.avgTokensPerCredit)} توكن/نقطة · {n(usage.totalCalls)} استدعاء
+          </div>
+        </div>
+      </div>
+
+      {/* الربحية */}
+      <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+        <h3 className="font-semibold text-navy mb-4">الربحية</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground">الإيراد المحصّل</div>
+            <div className="text-xl font-bold text-navy mt-0.5">{sar(finance.paidRevenueSar)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">تكلفة النماذج</div>
+            <div className="text-xl font-bold text-navy mt-0.5">{sar(finance.modelCostSar)}</div>
+            <div className="text-[11px] text-muted-foreground" dir="ltr">${finance.modelCostUsd}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">صافي الربح</div>
+            <div className={`text-xl font-bold mt-0.5 ${profitPositive ? "text-emerald-600" : "text-red-600"}`}>
+              {sar(finance.netProfitSar)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">هامش الربح</div>
+            <div className={`text-xl font-bold mt-0.5 ${finance.marginPct >= 50 ? "text-emerald-600" : finance.marginPct > 0 ? "text-amber-600" : "text-red-600"}`}>
+              {finance.marginPct}%
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              تكلفة النقطة ≈ {finance.costPerCreditSar} ر.س
+            </div>
+          </div>
+        </div>
+        {finance.adminGrantsValueSar > 0 && (
+          <p className="text-[11.5px] text-muted-foreground mt-3 pt-3 border-t border-gray-100">
+            قيمة الاشتراكات الممنوحة إدارياً (غير محصّلة): <strong className="text-navy">{sar(finance.adminGrantsValueSar)}</strong>
+          </p>
+        )}
+      </div>
+
+      {/* نصائح */}
+      {advice.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <h3 className="font-semibold text-navy mb-1">قراءة الأرقام ونصائح</h3>
+          <p className="text-[11.5px] text-muted-foreground mb-4">مبنية على أرقام حسابك الفعلية — كل نصيحة تذكر الرقم الذي بُنيت عليه.</p>
+          <div className="space-y-2.5">
+            {advice.map((a, i) => {
+              const st = ADVICE_STYLE[a.severity] ?? ADVICE_STYLE.info;
+              return (
+                <div key={i} className={`rounded-xl border p-3 ${st.box}`}>
+                  <div className="flex items-start gap-2">
+                    <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${st.dot}`} />
+                    <div>
+                      <div className={`text-sm font-semibold ${st.label}`}>{a.title}</div>
+                      <p className="text-[12.5px] leading-relaxed text-muted-foreground mt-0.5">{a.detail}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

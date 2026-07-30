@@ -2139,7 +2139,7 @@ ${buildExpertSkillsSection(hasCfoSkill)}
         const result = await submitDoc(input.doctype, input.name);
         return { success: true as const, name: result?.name ?? input.name, status: result?.status ?? null };
       } catch (e) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: translateErpError(e) });
+        throw new TRPCError({ code: "BAD_REQUEST", message: translateErpError(e instanceof Error ? e.message : String(e)) });
       }
     })),
 
