@@ -288,9 +288,15 @@ export async function getAllOrgsUsageSummary() {
     db.select({ id: organizations.id, ownerId: organizations.ownerId }).from(organizations),
   ]);
 
-  const orgOwner = new Map(allOrgs.map(o => [o.id, o.ownerId]));
-  const userToOwner = new Map(allUsers.map(u => [u.id, (u.organizationId ? orgOwner.get(u.organizationId) : null) ?? u.id]));
-  const subByOwner = new Map(rows.map(r => [r.ownerUserId, r.subscriptionId]));
+  // منظمات بلا مالك مسجّل تُتجاهل، ويُنسب استهلاك مستخدميها لأنفسهم
+  const orgOwner = new Map<number, number>();
+  for (const o of allOrgs) {
+    if (o.ownerId != null) orgOwner.set(o.id, o.ownerId);
+  }
+  const userToOwner = new Map<number, number>(
+    allUsers.map(u => [u.id, (u.organizationId != null ? orgOwner.get(u.organizationId) : undefined) ?? u.id]),
+  );
+  const subByOwner = new Map<number, number>(rows.map(r => [r.ownerUserId, r.subscriptionId]));
 
   type TokenAgg = { promptTokens: number; completionTokens: number; totalTokens: number; costUsd: number; calls: number };
   const tokensBySub = new Map<number, TokenAgg>();
