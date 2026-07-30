@@ -30,13 +30,23 @@ export function normalizeTaxId(raw: string): string {
     .replace(/[\s\-_.,]/g, "");
 }
 
-/** أنماط مفبركة واضحة: كل الأرقام متشابهة، أو متسلسلة تصاعدياً/تنازلياً */
-function looksFabricated(digits: string): string | null {
+const ASC_RUN = "01234567890123456789";
+const DESC_RUN = "98765432109876543210";
+
+function isSequential(s: string): boolean {
+  return s.length >= 6 && (ASC_RUN.includes(s) || DESC_RUN.includes(s));
+}
+
+/**
+ * أنماط مفبركة واضحة: كل الأرقام متطابقة، أو الرقم كله متسلسل.
+ * للسعودية فقط نفحص أيضاً "القلب" (بين البادئة 3 والنهاية 3) لأن الرقم المفبرك
+ * الشائع هناك يكون 3 + تسلسل + 3. لا نطبّق فحص القلب على بقية البلدان لتجنّب
+ * رفض أرقام حقيقية يصادف أن جزءاً منها متتالٍ.
+ */
+function looksFabricated(digits: string, country: TaxIdCountry): string | null {
   if (/^(\d)\1+$/.test(digits)) return "كل الأرقام متطابقة — هذا ليس رقماً ضريبياً حقيقياً";
-  const asc = "0123456789012345";
-  const desc = "9876543210987654";
-  const core = digits.length > 4 ? digits.slice(1, -1) : digits;
-  if (core.length >= 6 && (asc.includes(core) || desc.includes(core))) {
+  if (isSequential(digits)) return "الأرقام متسلسلة بشكل غير واقعي — يبدو أنه رقم تجريبي أو مفبرك";
+  if (country === "SA" && digits.length === 15 && isSequential(digits.slice(1, -1))) {
     return "الأرقام متسلسلة بشكل غير واقعي — يبدو أنه رقم تجريبي أو مفبرك";
   }
   return null;
@@ -57,7 +67,7 @@ export function validateTaxId(raw: string, country: TaxIdCountry = "SA"): TaxIdC
     return { valid: false, normalized, country, reason: "الرقم الضريبي يجب أن يحتوي أرقاماً فقط" };
   }
 
-  const fabricated = looksFabricated(normalized);
+  const fabricated = looksFabricated(normalized, country);
   if (fabricated) return { valid: false, normalized, country, reason: fabricated };
 
   switch (country) {

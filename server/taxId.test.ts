@@ -64,7 +64,13 @@ describe("validateTaxId — السعودية", () => {
 
 describe("validateTaxId — مصر والإمارات", () => {
   it("يقبل رقماً مصرياً من 9 أرقام", () => {
+    expect(validateTaxId("204851739", "EG").valid).toBe(true);
+  });
+
+  it("لا يرفض رقماً حقيقياً يصادف أن جزءاً منه متتالٍ (تجنّب الإنذار الكاذب)", () => {
+    // فحص التسلسل على "القلب" مقصور على السعودية بطول 15، فلا يطبَّق هنا
     expect(validateTaxId("123456780", "EG").valid).toBe(true);
+    expect(validateTaxId("100234567891012", "AE").valid).toBe(true);
   });
   it("يرفض رقماً مصرياً بطول خاطئ", () => {
     expect(validateTaxId("12345", "EG").valid).toBe(false);
