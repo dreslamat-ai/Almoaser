@@ -125,7 +125,7 @@ export async function emailSubscriptionReminder(userId: number, input: {
 
 /** إيصال/فاتورة بعد نجاح الدفع (اشتراك جديد، تجديد، أو شراء نقاط) */
 export async function emailPaymentReceipt(userId: number, input: {
-  purpose: "subscription" | "topup";
+  purpose: "subscription" | "topup" | "extension";
   invoiceId?: string | null;
   planName?: string | null;
   billing?: "monthly" | "yearly" | null;
@@ -147,8 +147,11 @@ export async function emailPaymentReceipt(userId: number, input: {
   const isTopup = input.purpose === "topup";
   const paidAt = (input.paidAt ?? new Date()).toISOString().slice(0, 10);
 
+  const purposeLabel = isTopup ? "شراء نقاط إضافية"
+    : input.purpose === "extension" ? "تمديد الاشتراك"
+    : "اشتراك / تجديد";
   const detailRows: Array<{ label: string; value: string; bold?: boolean }> = [
-    { label: "نوع العملية", value: isTopup ? "شراء نقاط إضافية" : "اشتراك / تجديد" },
+    { label: "نوع العملية", value: purposeLabel },
   ];
   if (!isTopup && input.planName) detailRows.push({ label: "الباقة", value: input.planName });
   if (!isTopup && input.billing) detailRows.push({ label: "دورة الفوترة", value: input.billing === "yearly" ? "سنوي" : "شهري" });
