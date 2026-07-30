@@ -271,8 +271,46 @@ export async function getAllOrgsUsageSummary() {
     usageBySub.set(u.subscriptionId, entry);
   }
 
+  // ─── التوكنز الفعلية مقابل النقاط ──────────────────────────────────────────
+  // llm_usage_log مسجَّل لكل مستخدم على حدة، بينما هذا الملخص لكل اشتراك.
+  // لذلك نرفع استهلاك المستخدمين الفرعيين إلى مالك منظمتهم (صاحب الاشتراك).
+  const { llmUsageLog } = await import("../drizzle/schema");
+  const [tokenRows, allUsers, allOrgs] = await Promise.all([
+    db.select({
+      userId: llmUsageLog.userId,
+      promptTokens: sql<number>`coalesce(sum(${llmUsageLog.promptTokens}), 0)`,
+      completionTokens: sql<number>`coalesce(sum(${llmUsageLog.completionTokens}), 0)`,
+      totalTokens: sql<number>`coalesce(sum(${llmUsageLog.totalTokens}), 0)`,
+      costUsd: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)`,
+      calls: sql<number>`count(*)`,
+    }).from(llmUsageLog).groupBy(llmUsageLog.userId),
+    db.select({ id: users.id, organizationId: users.organizationId }).from(users),
+    db.select({ id: organizations.id, ownerId: organizations.ownerId }).from(organizations),
+  ]);
+
+  const orgOwner = new Map(allOrgs.map(o => [o.id, o.ownerId]));
+  const userToOwner = new Map(allUsers.map(u => [u.id, (u.organizationId ? orgOwner.get(u.organizationId) : null) ?? u.id]));
+  const subByOwner = new Map(rows.map(r => [r.ownerUserId, r.subscriptionId]));
+
+  type TokenAgg = { promptTokens: number; completionTokens: number; totalTokens: number; costUsd: number; calls: number };
+  const tokensBySub = new Map<number, TokenAgg>();
+  for (const t of tokenRows) {
+    const ownerId = userToOwner.get(t.userId) ?? t.userId;
+    const subId = subByOwner.get(ownerId);
+    if (!subId) continue; // مستخدم بلا اشتراك (مثلاً أدمن المنصة) — لا يُنسب لأي عميل
+    const e = tokensBySub.get(subId) ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0, calls: 0 };
+    e.promptTokens += Number(t.promptTokens);
+    e.completionTokens += Number(t.completionTokens);
+    e.totalTokens += Number(t.totalTokens);
+    e.costUsd += Number(t.costUsd);
+    e.calls += Number(t.calls);
+    tokensBySub.set(subId, e);
+  }
+
   return rows.map(r => {
     const usage = usageBySub.get(r.subscriptionId) ?? { documents: 0, messages: 0 };
+    const tk = tokensBySub.get(r.subscriptionId) ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0, calls: 0 };
+    const totalCreditsConsumed = usage.documents * DOCUMENT_COST + usage.messages * MESSAGE_COST;
     return {
       subscriptionId: r.subscriptionId,
       organizationName: r.orgName ?? r.companyName ?? r.ownerName ?? r.ownerEmail,
@@ -283,7 +321,15 @@ export async function getAllOrgsUsageSummary() {
       creditsBalance: r.creditsBalance,
       totalDocuments: usage.documents,
       totalMessages: usage.messages,
-      totalCreditsConsumed: usage.documents * DOCUMENT_COST + usage.messages * MESSAGE_COST,
+      totalCreditsConsumed,
+      // التوكنز الفعلية التي استهلكها هذا العميل مقابل النقاط أعلاه
+      promptTokens: tk.promptTokens,
+      completionTokens: tk.completionTokens,
+      totalTokens: tk.totalTokens,
+      llmCalls: tk.calls,
+      llmCostUsd: Number(tk.costUsd.toFixed(6)),
+      // متوسط التوكنز لكل نقطة — يوضح هل تسعير النقطة يغطي التكلفة الفعلية
+      tokensPerCredit: totalCreditsConsumed > 0 ? Math.round(tk.totalTokens / totalCreditsConsumed) : 0,
     };
   });
 }

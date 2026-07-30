@@ -445,9 +445,9 @@ export default function AdminPanel() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-              <table className="w-full min-w-[750px]">
+              <table className="w-full min-w-[1000px]">
                 <thead className="bg-gray-50 border-b">
-                  <tr>{["العميل", "الباقة", "الحالة", "الرصيد المتبقي", "المستندات المستهلكة", "الرسائل المستهلكة", "إجمالي النقاط المستهلكة"].map(h => (
+                  <tr>{["العميل", "الباقة", "الحالة", "الرصيد المتبقي", "المستندات المستهلكة", "الرسائل المستهلكة", "إجمالي النقاط المستهلكة", "التوكنز الفعلية", "توكنز/نقطة", "تكلفة النماذج"].map(h => (
                     <th key={h} className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">{h}</th>
                   ))}</tr>
                 </thead>
@@ -468,10 +468,26 @@ export default function AdminPanel() {
                       <td className="px-4 py-3 text-sm">{o.totalDocuments}</td>
                       <td className="px-4 py-3 text-sm">{o.totalMessages}</td>
                       <td className="px-4 py-3 text-sm font-medium text-navy">{o.totalCreditsConsumed} نقطة</td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="font-medium text-navy">{o.totalTokens.toLocaleString("en-US")}</div>
+                        <div className="text-[11px] text-muted-foreground" dir="ltr">
+                          {o.promptTokens.toLocaleString("en-US")} in / {o.completionTokens.toLocaleString("en-US")} out · {o.llmCalls} calls
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {o.tokensPerCredit > 0
+                          ? <span className="font-medium text-navy">{o.tokensPerCredit.toLocaleString("en-US")}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm" dir="ltr">
+                        {o.llmCostUsd > 0
+                          ? <span className="font-medium text-navy">${o.llmCostUsd.toFixed(4)}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </td>
                     </tr>
                   ))}
                   {(filteredUsage?.length ?? 0) === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد استهلاك مطابق</td></tr>
+                    <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد استهلاك مطابق</td></tr>
                   )}
                 </tbody>
               </table>
