@@ -120,6 +120,8 @@ export async function notifyUser(input: {
   link?: string;
   /** إرسال push للجهاز أيضاً (افتراضي: نعم) */
   push?: boolean;
+  /** إرسال نسخة على البريد أيضاً (افتراضي: نعم) */
+  email?: boolean;
 }): Promise<number> {
   const db = await requireDb();
   const row: InsertNotification = {
@@ -138,6 +140,12 @@ export async function notifyUser(input: {
       body: input.body,
       link: input.link,
     }).catch(() => {});
+  }
+  // نسخة على البريد (تُتجاهل تلقائياً إن لم يكن البريد مؤكداً أو الإشعارات مغلقة)
+  if (input.email !== false) {
+    void import("./emailFlows")
+      .then(m => m.emailNotification(input.userId, { title: input.title, body: input.body, link: input.link }))
+      .catch(() => {});
   }
   return Number(insertId);
 }
@@ -192,7 +200,7 @@ export async function maybeNotifyTrialEnding(
 }
 
 /** إشعار العميل باقتراب انتهاء اشتراكه (خارج التجربة) — يُستدعى من الفحص الدوري */
-async function notifySubscriptionEnding(userId: number, daysLeft: number): Promise<void> {
+async function notifySubscriptionEnding(userId: number, daysLeft: number, meta?: { planName?: string | null; endDate?: Date | null }): Promise<void> {
   const db = await requireDb();
   const recent = await db
     .select({ id: notifications.id })
@@ -206,13 +214,23 @@ async function notifySubscriptionEnding(userId: number, daysLeft: number): Promi
     )
     .limit(1);
   if (recent.length > 0) return;
+  // نُلغي بريد notifyUser العام ونرسل بدلاً منه رسالة تجديد مفصّلة (باقة/تاريخ/زر تجديد)
   await notifyUser({
     userId,
     type: "subscription_ending",
     title: "اشتراكك على وشك الانتهاء",
     body: `تبقّى ${daysLeft} ${daysLeft === 1 ? "يوم" : "أيام"} على انتهاء اشتراكك الحالي. جدّده الآن لتجنّب انقطاع الخدمة.`,
     link: "/subscription",
+    email: false,
   });
+  void import("./emailFlows")
+    .then(m => m.emailSubscriptionReminder(userId, {
+      planName: meta?.planName ?? "باقتك الحالية",
+      daysLeft,
+      endDate: meta?.endDate ? new Date(meta.endDate).toISOString().slice(0, 10) : "—",
+      isTrial: false,
+    }))
+    .catch(() => {});
 }
 
 /** إشعار كل الأدمن باقتراب انتهاء اشتراك ممنوح إدارياً (منحة مجانية) لمتابعته */
@@ -246,7 +264,7 @@ async function notifyAdminsGrantEnding(userId: number, ownerLabel: string, daysL
  */
 export async function checkExpiringSubscriptions(): Promise<void> {
   const db = await requireDb();
-  const { subscriptions, payments } = await import("../drizzle/schema");
+  const { subscriptions, payments, plans } = await import("../drizzle/schema");
   const { eq: eqOp, and: andOp, sql: sqlOp } = await import("drizzle-orm");
 
   const rows = await db
@@ -257,9 +275,11 @@ export async function checkExpiringSubscriptions(): Promise<void> {
       companyName: subscriptions.companyName,
       ownerName: users.name,
       ownerEmail: users.email,
+      planName: plans.nameAr,
     })
     .from(subscriptions)
     .innerJoin(users, eqOp(subscriptions.userId, users.id))
+    .leftJoin(plans, eqOp(subscriptions.planId, plans.id))
     .where(
       andOp(
         eqOp(subscriptions.status, "active"),
@@ -270,7 +290,7 @@ export async function checkExpiringSubscriptions(): Promise<void> {
   for (const r of rows) {
     if (!r.endDate) continue;
     const daysLeft = Math.max(1, Math.ceil((new Date(r.endDate).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
-    await notifySubscriptionEnding(r.userId, daysLeft).catch(() => {});
+    await notifySubscriptionEnding(r.userId, daysLeft, { planName: r.planName, endDate: r.endDate }).catch(() => {});
 
     const grantRows = await db
       .select({ id: payments.id })

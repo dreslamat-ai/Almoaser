@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { User, Building2, Save, Server, CheckCircle2, ArrowLeft } from "lucide-react";
+import { User, Building2, Save, Server, CheckCircle2, ArrowLeft, Mail } from "lucide-react";
 
 export default function AccountSettings() {
   const { user, isAuthenticated, loading } = useAuth();
@@ -124,6 +124,9 @@ export default function AccountSettings() {
           )}
         </div>
 
+        {/* تأكيد البريد الإلكتروني وإشعاراته */}
+        <EmailSettingsCard isAuthenticated={isAuthenticated} />
+
         {/* ERPNext connection — moved to /channels */}
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mt-6">
           <div className="flex items-center gap-3">
@@ -149,6 +152,76 @@ export default function AccountSettings() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function EmailSettingsCard({ isAuthenticated }: { isAuthenticated: boolean }) {
+  const utils = trpc.useUtils();
+  const { data } = trpc.email.status.useQuery(undefined, { enabled: isAuthenticated });
+  const sendMutation = trpc.email.sendVerification.useMutation({
+    onSuccess: () => toast.success("أرسلنا رابط التأكيد إلى بريدك — راجع صندوق الوارد (وربما مجلد الرسائل غير المرغوبة)"),
+    onError: e => toast.error(e.message),
+  });
+  const prefMutation = trpc.email.setNotifications.useMutation({
+    onSuccess: () => { toast.success("تم تحديث تفضيل إشعارات البريد"); utils.email.status.invalidate(); },
+    onError: e => toast.error(e.message),
+  });
+
+  if (!data) return null;
+
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mt-6">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-navy/5 flex items-center justify-center shrink-0">
+          <Mail className="w-5 h-5 text-navy" />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="font-semibold text-navy">البريد الإلكتروني</h2>
+            {data.verified ? (
+              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-2.5 py-0.5">
+                <CheckCircle2 className="w-3.5 h-3.5" /> مؤكَّد
+              </span>
+            ) : (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+                غير مؤكَّد
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1" dir="ltr">{data.email ?? "—"}</p>
+
+          {!data.emailServiceConfigured && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-3">
+              خدمة البريد غير مضبوطة على السيرفر بعد — لن تُرسل أي رسائل حتى يُضاف مفتاح المزوّد.
+            </p>
+          )}
+
+          {!data.verified && data.emailServiceConfigured && (
+            <Button
+              size="sm" className="mt-3 gap-1.5"
+              disabled={sendMutation.isPending}
+              onClick={() => sendMutation.mutate()}
+            >
+              {sendMutation.isPending ? "جارٍ الإرسال..." : "أرسل رابط التأكيد"}
+            </Button>
+          )}
+
+          <label className="flex items-center gap-2 mt-4 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={data.notificationsEnabled}
+              disabled={prefMutation.isPending}
+              onChange={e => prefMutation.mutate({ enabled: e.target.checked })}
+              className="w-4 h-4 accent-navy"
+            />
+            <span className="text-foreground">استلام الإشعارات والتذكيرات على البريد الإلكتروني</span>
+          </label>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            إيصالات الدفع والتجديد تُرسل دائماً لأنها مستندات مالية.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

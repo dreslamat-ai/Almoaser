@@ -46,6 +46,10 @@ export const users = mysqlTable("users", {
   permissions: text("permissions"),
   // كلمة مرور محلية (scrypt) — للمستخدمين الفرعيين فقط، الذين ليس لهم حساب ERPNext خاص بهم
   passwordHash: text("passwordHash"),
+  // تاريخ تأكيد البريد الإلكتروني (null = غير مؤكد بعد)
+  emailVerifiedAt: timestamp("emailVerifiedAt"),
+  // تفضيل استلام الإشعارات والتذكيرات على البريد
+  emailNotifications: boolean("emailNotifications").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -311,3 +315,17 @@ export const llmUsageLog = mysqlTable("llm_usage_log", {
 });
 
 export type LlmUsageLogRow = typeof llmUsageLog.$inferSelect;
+
+// ─── تأكيد البريد الإلكتروني ──────────────────────────────────────────────────
+// توكن لمرة واحدة يُرسل برابط للمستخدم؛ نخزّن hash التوكن لا التوكن نفسه
+export const emailVerificationTokens = mysqlTable("email_verification_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  email: varchar("email", { length: 320 }).notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;

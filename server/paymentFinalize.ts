@@ -36,22 +36,42 @@ export async function finalizePaymentByReference(status: PaymentStatusResult): P
 
   await db.update(payments).set({ status: "paid", paidAt: new Date() }).where(eq(payments.id, payment.id));
 
+  let periodEnd: string | null = null;
+  let planName: string | null = null;
+
   if (payment.purpose === "subscription" && payment.planId) {
     const plan = await getPlanById(payment.planId);
+    planName = plan?.nameAr ?? null;
     const sub = await getSubscriptionByUserId(payment.userId);
     const periodMs = payment.billing === "yearly" ? 365 * 24 * 3600 * 1000 : 30 * 24 * 3600 * 1000;
     if (sub) {
+      const newEnd = new Date(Date.now() + periodMs);
+      periodEnd = newEnd.toISOString().slice(0, 10);
       await updateSubscription(sub.id, {
         planId: payment.planId,
         status: "active",
         billing: payment.billing ?? "monthly",
-        endDate: new Date(Date.now() + periodMs),
+        endDate: newEnd,
         ...(plan ? { creditsBalance: plan.monthlyCredits, creditsCycleStart: new Date() } : {}),
       });
     }
   } else if (payment.purpose === "topup" && payment.credits) {
     await addTopupCredits(payment.userId, payment.credits, `شحن ${payment.credits} نقطة عبر MyFatoorah`);
   }
+
+  // إيصال الدفع/التجديد بالبريد — لا يوقف إتمام الدفع إن فشل الإرسال
+  void import("./emailFlows")
+    .then(m => m.emailPaymentReceipt(payment.userId, {
+      purpose: payment.purpose,
+      invoiceId: payment.invoiceId,
+      planName,
+      billing: payment.billing,
+      credits: payment.credits,
+      amount: Number(payment.amount),
+      paidAt: new Date(),
+      periodEnd,
+    }))
+    .catch(() => {});
 
   return { status: "paid", purpose: payment.purpose, paymentId: payment.id };
 }

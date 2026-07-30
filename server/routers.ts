@@ -136,6 +136,46 @@ export const appRouter = router({
       return { success: true };
     }),
   }),
+  // ─── تأكيد البريد الإلكتروني ────────────────────────────────────────────────
+  email: router({
+    /** حالة البريد الحالية للمستخدم (مؤكَّد؟ الإشعارات مفعّلة؟) */
+    status: protectedProcedure.query(async ({ ctx }) => {
+      const { isEmailConfigured } = await import("./email");
+      return {
+        email: ctx.user.email ?? null,
+        verified: !!ctx.user.emailVerifiedAt,
+        notificationsEnabled: ctx.user.emailNotifications !== false,
+        emailServiceConfigured: isEmailConfigured(),
+      };
+    }),
+    /** إرسال (أو إعادة إرسال) رابط التأكيد */
+    sendVerification: protectedProcedure.mutation(async ({ ctx }) => {
+      const { sendVerificationEmail } = await import("./emailFlows");
+      const res = await sendVerificationEmail(ctx.user.id);
+      if (!res.ok) throw new TRPCError({ code: "BAD_REQUEST", message: res.reason ?? "تعذّر إرسال رسالة التأكيد" });
+      return { success: true };
+    }),
+    /** تأكيد البريد بالتوكن القادم من الرابط (عام — المستخدم قد لا يكون مسجّل الدخول) */
+    verify: publicProcedure
+      .input(z.object({ token: z.string().min(10).max(200) }))
+      .mutation(async ({ input }) => {
+        const { verifyEmailToken } = await import("./emailFlows");
+        const res = await verifyEmailToken(input.token);
+        if (!res.ok) throw new TRPCError({ code: "BAD_REQUEST", message: res.reason });
+        return { success: true, email: res.email };
+      }),
+    /** تفعيل/إيقاف إشعارات البريد */
+    setNotifications: protectedProcedure
+      .input(z.object({ enabled: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+        const { users: usersTable } = await import("../drizzle/schema");
+        await db.update(usersTable).set({ emailNotifications: input.enabled }).where(eq(usersTable.id, ctx.user.id));
+        return { success: true };
+      }),
+  }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ?? null),
     // تسجيل دخول مستخدم فرعي (بكلمة مرور محلية — لا يملك حساب ERPNext خاص به)
@@ -220,6 +260,10 @@ export const appRouter = router({
           body: `${result.result.fullName} (${result.result.email}) سجّل حساباً جديداً وبدأ التجربة المجانية.`,
           link: "/admin",
         }).catch(() => {});
+        // رسالة تأكيد البريد للعميل الجديد (تُتجاهل بهدوء إن لم يُضبط مزوّد البريد)
+        void import("./emailFlows")
+          .then(m => m.sendVerificationEmail(result.result.userId))
+          .catch(() => {});
         return {
           success: true,
           name: result.result.fullName,
