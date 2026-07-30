@@ -1,4 +1,6 @@
 import { trpc } from "@/lib/trpc";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "../../../server/routers";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
@@ -767,7 +769,7 @@ export default function AdminPanel() {
 }
 
 // ─── تحليلات المنصة (لوحة المالك) ──────────────────────────────────────────────
-type InsightsData = NonNullable<ReturnType<typeof trpc.admin.platformInsights.useQuery>["data"]>;
+type InsightsData = inferRouterOutputs<AppRouter>["admin"]["platformInsights"];
 
 const ADVICE_STYLE: Record<string, { box: string; dot: string; label: string }> = {
   critical: { box: "border-red-200 bg-red-50", dot: "bg-red-500", label: "text-red-900" },
