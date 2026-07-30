@@ -490,6 +490,42 @@ export default function AdminPanel() {
                     <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground text-sm">لا يوجد استهلاك مطابق</td></tr>
                   )}
                 </tbody>
+                {(filteredUsage?.length ?? 0) > 0 && (() => {
+                  const t = (filteredUsage ?? []).reduce((a, o) => ({
+                    balance: a.balance + (o.creditsBalance ?? 0),
+                    docs: a.docs + o.totalDocuments,
+                    msgs: a.msgs + o.totalMessages,
+                    credits: a.credits + o.totalCreditsConsumed,
+                    tokens: a.tokens + o.totalTokens,
+                    prompt: a.prompt + o.promptTokens,
+                    completion: a.completion + o.completionTokens,
+                    calls: a.calls + o.llmCalls,
+                    cost: a.cost + o.llmCostUsd,
+                  }), { balance: 0, docs: 0, msgs: 0, credits: 0, tokens: 0, prompt: 0, completion: 0, calls: 0, cost: 0 });
+                  const perCredit = t.credits > 0 ? Math.round(t.tokens / t.credits) : 0;
+                  const n = (v: number) => v.toLocaleString("en-US");
+                  return (
+                    <tfoot className="bg-navy/5 border-t-2 border-navy/15">
+                      <tr className="font-semibold text-navy">
+                        <td className="px-4 py-3 text-sm">الإجمالي ({filteredUsage?.length} عميل)</td>
+                        <td className="px-4 py-3" />
+                        <td className="px-4 py-3" />
+                        <td className="px-4 py-3 text-sm">{n(t.balance)} نقطة</td>
+                        <td className="px-4 py-3 text-sm">{n(t.docs)}</td>
+                        <td className="px-4 py-3 text-sm">{n(t.msgs)}</td>
+                        <td className="px-4 py-3 text-sm">{n(t.credits)} نقطة</td>
+                        <td className="px-4 py-3 text-sm">
+                          <div>{n(t.tokens)}</div>
+                          <div className="text-[11px] font-normal text-muted-foreground" dir="ltr">
+                            {n(t.prompt)} in / {n(t.completion)} out · {n(t.calls)} calls
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">{perCredit > 0 ? n(perCredit) : "—"}</td>
+                        <td className="px-4 py-3 text-sm" dir="ltr">${t.cost.toFixed(4)}</td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
               </div>
             </div>

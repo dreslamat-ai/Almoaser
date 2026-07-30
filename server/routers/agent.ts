@@ -2106,6 +2106,43 @@ ${buildExpertSkillsSection(hasCfoSkill)}
   // يولّد PDF أي مستند (فاتورة مبيعات/مشتريات، دفعة، قيد يومية) من نموذج الطباعة
   // الافتراضي الفعلي المُعدّ في نظام العميل (ERPNext أو Odoo) — وليس نموذجاً ثابتاً
   // في تطبيقنا، حتى يطابق دائماً ما يراه العميل لو طبع من نظامه مباشرة
+  // حالة المستند — لتعرف الواجهة إن كان مسودة (فتعرض زر الاعتماد بدل الطباعة)
+  getDocumentStatus: protectedProcedure
+    .input(z.object({
+      doctype: z.enum(["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"]).default("Sales Invoice"),
+      name: z.string(),
+    }))
+    .query(async ({ input, ctx }) => runWithErpConfig(ctx.user.id, async () => {
+      const config = currentErpConfig();
+      if (config.provider === "odoo" && config.database) {
+        // Odoo: نستنتج الحالة من state عبر أدوات Odoo
+        return { docstatus: null as number | null, provider: "odoo" as const };
+      }
+      const doc = await erpGET(`/api/resource/${encodeURIComponent(input.doctype)}/${encodeURIComponent(input.name)}`) as { data?: { docstatus?: number; grand_total?: number; status?: string } };
+      return {
+        docstatus: doc?.data?.docstatus ?? null,
+        grandTotal: doc?.data?.grand_total ?? null,
+        status: doc?.data?.status ?? null,
+        provider: "erpnext" as const,
+      };
+    })),
+
+  // اعتماد مستند من الواجهة — بعد تأكيد المستخدم صراحةً بالضغط على الزر
+  submitDocument: protectedProcedure
+    .input(z.object({
+      doctype: z.enum(["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"]).default("Sales Invoice"),
+      name: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => runWithErpConfig(ctx.user.id, async () => {
+      requireToolPermission(ctx.user, "submit_document");
+      try {
+        const result = await submitDoc(input.doctype, input.name);
+        return { success: true as const, name: result?.name ?? input.name, status: result?.status ?? null };
+      } catch (e) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: translateErpError(e) });
+      }
+    })),
+
   getDocumentPdf: protectedProcedure
     .input(z.object({
       doctype: z.enum(["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"]).default("Sales Invoice"),

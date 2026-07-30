@@ -737,16 +737,19 @@ const DOCTYPE_LABEL: Record<ErpDoctype, string> = {
  * للفتح أو التحميل — بدل زر يطلب من المستخدم يجيبه بنفسه.
  */
 function DocumentPrintCard({ doc }: { doc: { doctype: ErpDoctype; name: string } }) {
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [state, setState] = useState<"checking" | "draft" | "loading" | "ready" | "error">("checking");
   const [file, setFile] = useState<{ url: string; sizeKb: number; filename: string; printFormat?: string; fallbackReason?: string } | null>(null);
   const [error, setError] = useState("");
   const pdfMutation = trpc.agent.getDocumentPdf.useMutation();
-  const startedRef = useRef(false);
+  const submitMutation = trpc.agent.submitDocument.useMutation();
+  const statusQuery = trpc.agent.getDocumentStatus.useQuery({ doctype: doc.doctype, name: doc.name });
   const urlRef = useRef<string | null>(null);
+  const fetchedRef = useRef(false);
 
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+  const fetchPdf = useCallback(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+    setState("loading");
     pdfMutation.mutateAsync({ doctype: doc.doctype, name: doc.name })
       .then(res => {
         const bytes = Uint8Array.from(atob(res.pdfBase64), ch => ch.charCodeAt(0));
@@ -756,9 +759,29 @@ function DocumentPrintCard({ doc }: { doc: { doctype: ErpDoctype; name: string }
         setState("ready");
       })
       .catch(e => { setError(e instanceof Error ? e.message : "تعذّر توليد الملف"); setState("error"); });
-    return () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [doc.doctype, doc.name]);
+
+  // المسودة لا تُطبع بالنموذج الرسمي (رمز QR الضريبي يُولَّد بعد الاعتماد فقط)،
+  // فنعرض زر اعتماد بدل الطباعة حتى يقرّر المستخدم صراحةً.
+  useEffect(() => {
+    if (statusQuery.data === undefined) return;
+    if (statusQuery.data.docstatus === 0) setState("draft");
+    else fetchPdf();
+  }, [statusQuery.data, fetchPdf]);
+
+  useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
+
+  const approve = async () => {
+    try {
+      await submitMutation.mutateAsync({ doctype: doc.doctype, name: doc.name });
+      fetchedRef.current = false;
+      fetchPdf();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذّر اعتماد المستند");
+      setState("error");
+    }
+  };
 
   const label = DOCTYPE_LABEL[doc.doctype] ?? doc.doctype;
 
@@ -776,15 +799,40 @@ function DocumentPrintCard({ doc }: { doc: { doctype: ErpDoctype; name: string }
       <div className="px-3 py-2 flex items-center gap-2 border-b border-primary/10">
         <FileText className="w-4 h-4 text-primary shrink-0" />
         <span className="font-semibold text-foreground">
-          {state === "loading" ? `جارٍ إصدار ${label} من النظام...` : `${label} — جاهزة`}
+          {state === "checking" ? `جارٍ فحص حالة ${label}...`
+            : state === "draft" ? `${label} — مسودة بانتظار الاعتماد`
+            : state === "loading" ? `جارٍ إصدار ${label} من النظام...`
+            : `${label} — جاهزة`}
         </span>
-        {state === "loading" && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground mr-auto" />}
+        {(state === "loading" || state === "checking") && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground mr-auto" />}
       </div>
 
       <div className="p-3">
         <p className="text-foreground mb-2">
           <span className="font-medium">الرقم:</span> <span className="font-mono font-bold">{doc.name}</span>
         </p>
+
+        {state === "draft" && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-[12.5px] leading-relaxed text-amber-900">
+              هذا المستند <strong>مسودة</strong> ولم يُسجَّل في الحسابات بعد، ولا يمكن إصداره بالشكل الضريبي
+              الرسمي قبل الاعتماد (رمز QR الضريبي يُولَّد عند الاعتماد فقط).
+            </p>
+            <p className="text-[11.5px] text-amber-800 mt-1.5">
+              الاعتماد يرحّل القيود المحاسبية ولا يمكن التراجع عنه إلا بالإلغاء.
+            </p>
+            <Button
+              size="sm"
+              className="mt-2.5 h-8 text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={submitMutation.isPending}
+              onClick={() => void approve()}
+            >
+              {submitMutation.isPending
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جارٍ الاعتماد...</>
+                : <><CheckCircle2 className="w-3.5 h-3.5" /> اعتماد {label} وإصدارها</>}
+            </Button>
+          </div>
+        )}
 
         {state === "ready" && file && (
           <>
