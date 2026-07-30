@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, LogIn, Eye, EyeOff } from "lucide-react";
+import { Loader2, LogIn, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Login() {
@@ -17,8 +17,19 @@ export default function Login() {
   const [isPending, setIsPending] = useState(false);
   const utils = trpc.useUtils();
 
+  // خطوة رمز التحقق (OTP) — تظهر بعد نجاح بيانات الدخول إن طلبها السيرفر
+  const [otp, setOtp] = useState<{ challengeId: string; maskedEmail: string } | null>(null);
+  const [code, setCode] = useState("");
+
   const loginMemberMutation = trpc.auth.loginMember.useMutation();
   const loginErpMutation = trpc.auth.loginWithErp.useMutation();
+  const verifyOtpMutation = trpc.auth.verifyLoginOtp.useMutation();
+
+  const finish = async (name?: string | null) => {
+    toast.success(`مرحباً ${name ?? ""}! تم تسجيل الدخول بنجاح`);
+    await utils.auth.me.invalidate();
+    navigate("/erp");
+  };
 
   // نجرّب أولاً دخول المستخدم الفرعي (باسورد محلي) — أسرع وأخف على ERPNext.
   // لو الحساب مش مستخدماً فرعياً، نجرّب دخول ERPNext المعتاد (لمالكي الحسابات).
@@ -30,23 +41,43 @@ export default function Login() {
     }
     setIsPending(true);
     try {
-      const data = await loginMemberMutation.mutateAsync({ email: email.trim(), password });
-      toast.success(`مرحباً ${data.name}! تم تسجيل الدخول بنجاح`);
-      await utils.auth.me.invalidate();
-      navigate("/erp");
-    } catch {
+      let data: Awaited<ReturnType<typeof loginMemberMutation.mutateAsync>>;
       try {
-        const data = await loginErpMutation.mutateAsync({ email: email.trim(), password });
-        toast.success(`مرحباً ${data.name}! تم تسجيل الدخول بنجاح`);
-        await utils.auth.me.invalidate();
-        navigate("/erp");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "تعذّر تسجيل الدخول");
+        data = await loginMemberMutation.mutateAsync({ email: email.trim(), password });
+      } catch {
+        data = await loginErpMutation.mutateAsync({ email: email.trim(), password });
       }
+      if ("otpRequired" in data && data.otpRequired) {
+        setOtp({ challengeId: data.challengeId, maskedEmail: data.maskedEmail });
+        toast.success(`أرسلنا رمز التحقق إلى ${data.maskedEmail}`);
+        return;
+      }
+      await finish(data.name);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "تعذّر تسجيل الدخول");
     } finally {
       setIsPending(false);
     }
   };
+
+  const submitOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otp || code.trim().length < 4) {
+      toast.error("أدخل رمز التحقق المرسل إلى بريدك");
+      return;
+    }
+    setIsPending(true);
+    try {
+      const data = await verifyOtpMutation.mutateAsync({ challengeId: otp.challengeId, code: code.trim() });
+      await finish(data.name);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "رمز غير صحيح");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const restart = () => { setOtp(null); setCode(""); setPassword(""); };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 p-4" dir="rtl">
@@ -63,6 +94,35 @@ export default function Login() {
           </div>
         </div>
 
+        {otp ? (
+          <form onSubmit={submitOtp} className="space-y-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center">
+              <ShieldCheck className="w-6 h-6 mx-auto text-primary mb-1.5" />
+              <p className="text-sm text-foreground font-medium">تحقّق من بريدك</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr" className="font-mono">{otp.maskedEmail}</span>
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="otp-code">رمز التحقق</Label>
+              <Input
+                id="otp-code" dir="ltr" inputMode="numeric" autoComplete="one-time-code"
+                placeholder="000000" maxLength={6} autoFocus
+                value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ""))}
+                disabled={isPending}
+                className="text-center text-2xl tracking-[0.5em] font-mono h-14"
+              />
+            </div>
+            <Button type="submit" className="w-full h-11 gap-2" disabled={isPending || code.length < 4}>
+              {isPending
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق...</>
+                : <><ShieldCheck className="w-4 h-4" /> تأكيد الدخول</>}
+            </Button>
+            <button type="button" onClick={restart} className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors">
+              الرجوع وإعادة تسجيل الدخول
+            </button>
+          </form>
+        ) : (
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="email">البريد الإلكتروني</Label>
@@ -109,6 +169,7 @@ export default function Login() {
               : <><LogIn className="w-4 h-4" /> تسجيل الدخول</>}
           </Button>
         </form>
+        )}
 
         <p className="text-sm text-muted-foreground text-center mt-5">
           ليس لديك حساب؟{" "}

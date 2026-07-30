@@ -61,6 +61,74 @@ async function erpFetch(path: string, userId: number): Promise<unknown> {
   return res.json();
 }
 
+// ─── سياسة تسجيل الدخول: تفعيل الحساب بالبريد + رمز التحقق (OTP) ─────────────
+// كلاهما مُفعّل افتراضياً، ويمكن إيقافه صراحةً بـ =false في البيئة.
+// **مبدأ مهم: fail-open** — إن تعذّر إرسال البريد (مزوّد غير مضبوط أو رفض المستلم)
+// لا نحبس العميل خارج حسابه، بل نسجّل تحذيراً ونكمل الدخول. البديل (fail-closed)
+// يعني قفل كل العملاء لحظة تعطّل البريد، وهذا أسوأ من تخطّي الخطوة مؤقتاً.
+function flagEnabled(name: string): boolean {
+  return (process.env[name] ?? "true").toLowerCase() !== "false";
+}
+
+type LoginUser = { id: number; openId: string; name: string | null; email: string | null; emailVerifiedAt: Date | null };
+
+async function loadLoginUser(openId: string): Promise<LoginUser | null> {
+  const { getDb } = await import("./db");
+  const db = await getDb();
+  if (!db) return null;
+  const { users: u } = await import("../drizzle/schema");
+  const rows = await db.select({
+    id: u.id, openId: u.openId, name: u.name, email: u.email, emailVerifiedAt: u.emailVerifiedAt,
+  }).from(u).where(eq(u.openId, openId)).limit(1);
+  return rows[0] ?? null;
+}
+
+function issueSession(ctx: { req: unknown; res: { cookie: (n: string, v: string, o: Record<string, unknown>) => void } }, token: string) {
+  const cookieOptions = getSessionCookieOptions(ctx.req as never);
+  ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
+}
+
+/**
+ * تُستدعى بعد نجاح بيانات الدخول. ترجع إما جلسة جاهزة، أو طلب رمز تحقق.
+ * ترمي FORBIDDEN إن كان الحساب غير مُفعَّل (بريد غير مؤكد) والبريد يعمل فعلاً.
+ */
+async function completeLogin(
+  ctx: { req: unknown; res: { cookie: (n: string, v: string, o: Record<string, unknown>) => void } },
+  openId: string,
+  fullName: string,
+): Promise<{ success: true; name: string; email: string | null; otpRequired?: false }
+         | { success: true; otpRequired: true; challengeId: string; maskedEmail: string; name?: undefined; email?: undefined }> {
+  const user = await loadLoginUser(openId);
+  const flows = await import("./emailFlows");
+  const { isEmailConfigured } = await import("./email");
+
+  // 1) تفعيل الحساب: يجب تأكيد البريد قبل الاستخدام
+  if (user && !user.emailVerifiedAt && flagEnabled("REQUIRE_EMAIL_VERIFICATION")) {
+    const sent = await flows.sendVerificationEmail(user.id).catch(() => ({ ok: false as const, reason: "خطأ غير متوقع" }));
+    if (sent.ok) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: `حسابك غير مُفعَّل بعد. أرسلنا رابط التفعيل إلى ${user.email ? flows.maskEmail(user.email) : "بريدك"} — أكّد بريدك ثم سجّل الدخول.`,
+      });
+    }
+    // البريد لا يعمل → لا نحبس العميل
+    console.warn(`[login] email verification gate skipped for user ${user.id}: ${sent.reason}`);
+  }
+
+  // 2) رمز التحقق عند تسجيل الدخول
+  if (user && flagEnabled("REQUIRE_LOGIN_OTP") && isEmailConfigured()) {
+    const otp = await flows.createAndSendLoginOtp(user.id).catch(() => ({ ok: false as const, reason: "خطأ غير متوقع" }));
+    if (otp.ok) {
+      return { success: true, otpRequired: true, challengeId: otp.challengeId, maskedEmail: otp.maskedEmail };
+    }
+    console.warn(`[login] OTP step skipped for user ${user.id}: ${otp.reason}`);
+  }
+
+  const token = await sdk.createSessionToken(openId, { name: fullName });
+  issueSession(ctx, token);
+  return { success: true, name: fullName, email: user?.email ?? null };
+}
+
 export const appRouter = router({
   system: systemRouter,
   // ─── تشخيص خفيف لمزود النموذج (لا يكشف الأسرار) ──────────────────────────
@@ -178,6 +246,25 @@ export const appRouter = router({
   }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ?? null),
+    /** الخطوة الثانية من تسجيل الدخول: التحقق من رمز البريد وإصدار الجلسة */
+    verifyLoginOtp: publicProcedure
+      .input(z.object({
+        challengeId: z.string().min(10).max(80),
+        code: z.string().trim().min(4).max(10),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const { verifyLoginOtp } = await import("./emailFlows");
+        const res = await verifyLoginOtp(input.challengeId, input.code);
+        if (!res.ok) throw new TRPCError({ code: "UNAUTHORIZED", message: res.reason });
+
+        const { getUserById: getUser } = await import("./db");
+        const user = await getUser(res.userId);
+        if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "الحساب غير موجود" });
+
+        const token = await sdk.createSessionToken(user.openId, { name: user.name ?? "" });
+        issueSession(ctx, token);
+        return { success: true, name: user.name, email: user.email } as const;
+      }),
     // تسجيل دخول مستخدم فرعي (بكلمة مرور محلية — لا يملك حساب ERPNext خاص به)
     loginMember: publicProcedure
       .input(z.object({
@@ -189,12 +276,7 @@ export const appRouter = router({
         if (!result.ok) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: result.error });
         }
-        const sessionToken = await sdk.createSessionToken(result.user.openId, {
-          name: result.user.name ?? "",
-        });
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
-        return { success: true, name: result.user.name, email: result.user.email } as const;
+        return completeLogin(ctx, result.user.openId, result.user.name ?? "");
       }),
     // تسجيل الدخول بحساب ERP (ERPNext أو Odoo) — نفس بريد وكلمة مرور النظام.
     // لا نطلب رابط النظام مجدداً: نبحث عن اتصال ERP المحفوظ للمستخدم من التسجيل ونتحقق مقابله مباشرة.
@@ -211,12 +293,7 @@ export const appRouter = router({
         if (!result.ok) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: result.error });
         }
-        const sessionToken = await sdk.createSessionToken(result.result.openId, {
-          name: result.result.fullName,
-        });
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: 365 * 24 * 60 * 60 * 1000 });
-        return { success: true, name: result.result.fullName, email: result.result.email } as const;
+        return completeLogin(ctx, result.result.openId, result.result.fullName);
       }),
     // فحص بيانات ERPNext أو Odoo مبكراً أثناء التسجيل (قبل اختيار الباقة) — رد فعل أسرع للمستخدم
     testErpCredentials: publicProcedure

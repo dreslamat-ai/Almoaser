@@ -106,9 +106,34 @@ export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean; skipp
   }
 }
 
-// ─── قالب موحّد (RTL، يعمل في Gmail/Outlook بأنماط سطرية) ─────────────────────
-const NAVY = "#1a2744";
+// ─── هوية القالب ──────────────────────────────────────────────────────────────
+// كل الأنماط سطرية (inline) لأن Gmail يحذف <style>، والتخطيط بجداول لأن Outlook
+// (محرك Word) لا يدعم flex/grid. الخطوط تسلسل احتياطي عربي آمن بلا خطوط خارجية.
+const NAVY = "#16233d";
+const NAVY_SOFT = "#25365a";
 const GOLD = "#c9a227";
+const INK = "#1f2a3d";
+const MUTED = "#6b7a94";
+const HAIRLINE = "#e8ecf3";
+const CANVAS = "#eef1f6";
+const FONT = "'IBM Plex Sans Arabic','Segoe UI',Tahoma,Arial,sans-serif";
+
+function logoUrl(): string {
+  return `${appBaseUrl()}/icons/icon-192x192.png`;
+}
+
+/** يمنع Gmail من قصّ الرسالة الطويلة ويخفي نص المعاينة */
+function preheader(text: string): string {
+  return `<div style="display:none;font-size:1px;color:${CANVAS};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${text}</div>`;
+}
+
+export type EmailTone = "default" | "success" | "warning";
+
+const TONE: Record<EmailTone, { bar: string; chipBg: string; chipInk: string }> = {
+  default: { bar: NAVY, chipBg: "#eef2fa", chipInk: NAVY },
+  success: { bar: "#1c7a53", chipBg: "#e7f6ee", chipInk: "#14603f" },
+  warning: { bar: "#a86a12", chipBg: "#fdf3e2", chipInk: "#8a5406" },
+};
 
 export function renderEmail(opts: {
   heading: string;
@@ -117,40 +142,104 @@ export function renderEmail(opts: {
   ctaLabel?: string;
   ctaUrl?: string;
   footerNote?: string;
+  /** نص المعاينة في صندوق الوارد */
+  preview?: string;
+  /** شارة صغيرة أعلى العنوان، مثل "إيصال دفع" */
+  badge?: string;
+  tone?: EmailTone;
 }): string {
-  const { heading, intro, bodyHtml, ctaLabel, ctaUrl, footerNote } = opts;
-  return `<!DOCTYPE html><html dir="rtl" lang="ar"><body style="margin:0;padding:0;background:#f4f6f9;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:24px 12px;">
-<tr><td align="center">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;font-family:'IBM Plex Sans Arabic',Tahoma,Arial,sans-serif;">
-    <tr><td style="background:${NAVY};padding:20px 24px;">
-      <div style="color:#ffffff;font-size:18px;font-weight:bold;">المعاصر — Almoaser AI ERP</div>
+  const { heading, intro, bodyHtml, ctaLabel, ctaUrl, footerNote, badge } = opts;
+  const t = TONE[opts.tone ?? "default"];
+  const host = appBaseUrl().replace(/^https?:\/\//, "");
+
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html dir="rtl" lang="ar" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="light only" />
+<meta name="supported-color-schemes" content="light only" />
+<title>${heading}</title>
+</head>
+<body style="margin:0;padding:0;background:${CANVAS};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+${preheader(opts.preview ?? intro ?? heading)}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${CANVAS};">
+<tr><td align="center" style="padding:28px 12px;">
+
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(22,35,61,0.08);">
+
+    <!-- شريط الهوية -->
+    <tr><td style="height:4px;background:${t.bar};line-height:4px;font-size:0;">&nbsp;</td></tr>
+
+    <!-- الترويسة -->
+    <tr><td style="padding:22px 28px 6px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td align="right" style="vertical-align:middle;">
+          <img src="${logoUrl()}" width="40" height="40" alt="المعاصر"
+               style="display:inline-block;vertical-align:middle;width:40px;height:40px;border:0;border-radius:9px;" />
+          <span style="display:inline-block;vertical-align:middle;padding-right:10px;font-family:${FONT};font-size:16px;font-weight:bold;color:${NAVY};">المعاصر</span>
+        </td>
+        <td align="left" style="vertical-align:middle;font-family:${FONT};font-size:11px;color:${MUTED};letter-spacing:.4px;">
+          Almoaser AI ERP
+        </td>
+      </tr></table>
     </td></tr>
-    <tr><td style="padding:26px 24px 8px;">
-      <h1 style="margin:0 0 10px;font-size:20px;color:${NAVY};">${heading}</h1>
-      ${intro ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.9;color:#40506b;">${intro}</p>` : ""}
+
+    <!-- المحتوى -->
+    <tr><td style="padding:14px 28px 4px;font-family:${FONT};">
+      ${badge ? `<span style="display:inline-block;background:${t.chipBg};color:${t.chipInk};font-size:11.5px;font-weight:bold;padding:5px 11px;border-radius:99px;margin-bottom:12px;">${badge}</span>` : ""}
+      <h1 style="margin:6px 0 10px;font-family:${FONT};font-size:21px;line-height:1.5;font-weight:bold;color:${INK};">${heading}</h1>
+      ${intro ? `<p style="margin:0 0 16px;font-family:${FONT};font-size:14.5px;line-height:1.95;color:${MUTED};">${intro}</p>` : ""}
       ${bodyHtml ?? ""}
-      ${ctaLabel && ctaUrl ? `<div style="margin:22px 0 6px;">
-        <a href="${ctaUrl}" style="display:inline-block;background:${NAVY};color:#ffffff;text-decoration:none;padding:12px 26px;border-radius:9px;font-size:15px;font-weight:bold;">${ctaLabel}</a>
-      </div>
-      <p style="margin:12px 0 0;font-size:11px;color:#8794ad;word-break:break-all;">أو انسخ هذا الرابط: ${ctaUrl}</p>` : ""}
+      ${ctaLabel && ctaUrl ? `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 8px;"><tr>
+        <td align="center" bgcolor="${NAVY}" style="border-radius:10px;">
+          <a href="${ctaUrl}" style="display:inline-block;padding:13px 30px;font-family:${FONT};font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:10px;background:${NAVY};">${ctaLabel}</a>
+        </td>
+      </tr></table>
+      <p style="margin:10px 0 0;font-family:${FONT};font-size:11px;line-height:1.7;color:#98a5bb;">
+        لا يعمل الزر؟ انسخ هذا الرابط في المتصفح:<br />
+        <span style="color:${NAVY_SOFT};word-break:break-all;">${ctaUrl}</span>
+      </p>` : ""}
     </td></tr>
-    <tr><td style="padding:18px 24px 24px;border-top:1px solid #eef1f6;">
-      ${footerNote ? `<p style="margin:0 0 8px;font-size:11.5px;color:#8794ad;line-height:1.8;">${footerNote}</p>` : ""}
-      <p style="margin:0;font-size:11.5px;color:#8794ad;">
-        فريق المعاصر · <a href="${appBaseUrl()}" style="color:${GOLD};text-decoration:none;">${appBaseUrl().replace(/^https?:\/\//, "")}</a>
+
+    <!-- التذييل -->
+    <tr><td style="padding:22px 28px 26px;">
+      <div style="height:1px;background:${HAIRLINE};line-height:1px;font-size:0;margin-bottom:16px;">&nbsp;</div>
+      ${footerNote ? `<p style="margin:0 0 10px;font-family:${FONT};font-size:11.5px;line-height:1.85;color:#98a5bb;">${footerNote}</p>` : ""}
+      <p style="margin:0;font-family:${FONT};font-size:11.5px;line-height:1.85;color:${MUTED};">
+        فريق <strong style="color:${NAVY};">المعاصر</strong> — نظام إدارة موارد الشركات بالذكاء الاصطناعي<br />
+        <a href="${appBaseUrl()}" style="color:${GOLD};text-decoration:none;font-weight:bold;">${host}</a>
       </p>
     </td></tr>
   </table>
-</td></tr></table></body></html>`;
+
+  <p style="margin:16px auto 0;max-width:600px;font-family:${FONT};font-size:10.5px;line-height:1.8;color:#9aa6bb;text-align:center;">
+    هذه رسالة آلية من نظام المعاصر — يُرجى عدم الرد عليها مباشرة.
+  </p>
+
+</td></tr></table>
+</body></html>`;
 }
 
-/** جدول بسيط لعرض بنود/قيم (يُستخدم في فواتير الدفع والتجديد) */
+/** جدول بنود/قيم — يُستخدم في الإيصالات وتفاصيل الاشتراك */
 export function renderRows(rows: Array<{ label: string; value: string; bold?: boolean }>): string {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:6px 0 4px;font-size:14px;">
-    ${rows.map(r => `<tr>
-      <td style="padding:9px 0;color:#5b6b88;border-bottom:1px solid #eef1f6;">${r.label}</td>
-      <td style="padding:9px 0;text-align:left;color:${NAVY};border-bottom:1px solid #eef1f6;${r.bold ? "font-weight:bold;" : ""}">${r.value}</td>
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:4px 0 2px;background:#fbfcfe;border:1px solid ${HAIRLINE};border-radius:12px;">
+    ${rows.map((r, i) => `<tr>
+      <td style="padding:12px 16px;font-family:${FONT};font-size:13.5px;color:${MUTED};${i > 0 ? `border-top:1px solid ${HAIRLINE};` : ""}white-space:nowrap;">${r.label}</td>
+      <td align="left" style="padding:12px 16px;font-family:${FONT};font-size:${r.bold ? "16px" : "13.5px"};color:${r.bold ? NAVY : INK};${i > 0 ? `border-top:1px solid ${HAIRLINE};` : ""}${r.bold ? "font-weight:bold;" : ""}">${r.value}</td>
     </tr>`).join("")}
   </table>`;
+}
+
+/** صندوق بارز لعرض رمز تحقق (OTP) بخط كبير متباعد */
+export function renderCode(code: string, note?: string): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 2px;"><tr>
+    <td align="center" style="background:#f7f9fd;border:1px solid ${HAIRLINE};border-radius:14px;padding:22px 16px;">
+      <div style="font-family:${FONT};font-size:11.5px;color:${MUTED};margin-bottom:8px;">رمز التحقق</div>
+      <div style="font-family:'SFMono-Regular',Consolas,'Courier New',monospace;font-size:34px;font-weight:bold;letter-spacing:9px;color:${NAVY};direction:ltr;">${code}</div>
+      ${note ? `<div style="font-family:${FONT};font-size:11.5px;color:${MUTED};margin-top:10px;">${note}</div>` : ""}
+    </td>
+  </tr></table>`;
 }

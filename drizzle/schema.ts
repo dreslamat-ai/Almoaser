@@ -329,3 +329,21 @@ export const emailVerificationTokens = mysqlTable("email_verification_tokens", {
 });
 
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+
+// ─── رمز تحقق الدخول (OTP) ────────────────────────────────────────────────────
+// يُنشأ بعد نجاح بيانات الدخول ويُطلب قبل إصدار الجلسة. نخزّن hash الرمز لا الرمز،
+// ومعه عدّاد محاولات لمنع التخمين.
+export const loginOtps = mysqlTable("login_otps", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  email: varchar("email", { length: 320 }).notNull(),
+  codeHash: varchar("codeHash", { length: 64 }).notNull(),
+  // معرّف عشوائي يُعاد للواجهة لربط الخطوة الثانية بالأولى دون كشف هوية المستخدم
+  challengeId: varchar("challengeId", { length: 64 }).notNull().unique(),
+  attempts: int("attempts").default(0).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  consumedAt: timestamp("consumedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type LoginOtp = typeof loginOtps.$inferSelect;

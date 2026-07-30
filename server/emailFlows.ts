@@ -36,13 +36,15 @@ export async function sendVerificationEmail(userId: number): Promise<{ ok: boole
   const url = `${appBaseUrl()}/verify-email?token=${token}`;
   const res = await sendEmail({
     to: user.email,
-    subject: "أكّد بريدك الإلكتروني — المعاصر",
+    subject: "أكّد بريدك الإلكتروني لتفعيل حسابك — المعاصر",
     html: renderEmail({
-      heading: `مرحباً ${user.name ?? ""}`.trim(),
-      intro: "لتأكيد بريدك الإلكتروني وتنشيط إشعارات حسابك، اضغط الزر أدناه.",
-      ctaLabel: "تأكيد البريد الإلكتروني",
+      badge: "تفعيل الحساب",
+      heading: `مرحباً ${user.name ?? ""}`.trim() || "مرحباً بك في المعاصر",
+      intro: "خطوة واحدة تفصلك عن استخدام حسابك: أكّد بريدك الإلكتروني بالضغط على الزر أدناه.",
+      preview: "أكّد بريدك الإلكتروني لتفعيل حسابك في المعاصر",
+      ctaLabel: "تأكيد البريد وتفعيل الحساب",
       ctaUrl: url,
-      footerNote: `الرابط صالح لمدة ${TOKEN_TTL_HOURS} ساعة. إن لم تكن أنت من طلب هذا، تجاهل الرسالة.`,
+      footerNote: `الرابط صالح لمدة ${TOKEN_TTL_HOURS} ساعة ويُستخدم مرة واحدة. إن لم تكن أنت من طلب هذا، تجاهل الرسالة.`,
     }),
   });
   return res.ok ? { ok: true } : { ok: false, reason: res.skipped ? "مزوّد البريد غير مضبوط" : res.error };
@@ -88,8 +90,10 @@ export async function emailNotification(userId: number, input: { title: string; 
     to,
     subject: input.title,
     html: renderEmail({
+      badge: "إشعار",
       heading: input.title,
       intro: input.body,
+      preview: input.body ?? input.title,
       ctaLabel: url ? "عرض التفاصيل" : undefined,
       ctaUrl: url,
       footerNote: "تتلقى هذه الرسالة لأن إشعارات البريد مفعّلة في حسابك — يمكنك إيقافها من إعدادات الحساب.",
@@ -108,6 +112,9 @@ export async function emailSubscriptionReminder(userId: number, input: {
     to,
     subject: `تنبيه: ${what} ينتهي بعد ${input.daysLeft} ${input.daysLeft === 1 ? "يوم" : "أيام"}`,
     html: renderEmail({
+      badge: "تذكير بالتجديد",
+      tone: "warning",
+      preview: `${what} ينتهي بعد ${input.daysLeft} ${input.daysLeft === 1 ? "يوم" : "أيام"}`,
       heading: `${what} على وشك الانتهاء`,
       intro: `لتفادي توقف الخدمة، يمكنك التجديد الآن من صفحة الاشتراك.`,
       bodyHtml: renderRows([
@@ -165,6 +172,9 @@ export async function emailPaymentReceipt(userId: number, input: {
     to,
     subject: isTopup ? `إيصال شراء نقاط — ${input.amount} ${currency}` : `إيصال دفع الاشتراك — ${input.amount} ${currency}`,
     html: renderEmail({
+      badge: "إيصال دفع",
+      tone: "success",
+      preview: `تم استلام ${input.amount.toLocaleString("en-US")} ${currency} بنجاح`,
       heading: "تم استلام دفعتك بنجاح",
       intro: "شكراً لك. هذه تفاصيل عمليتك، ويمكنك دائماً مراجعة سجل المدفوعات من حسابك.",
       bodyHtml: renderRows(detailRows),
@@ -173,4 +183,85 @@ export async function emailPaymentReceipt(userId: number, input: {
       footerNote: "الأسعار لا تشمل ضريبة القيمة المضافة إلا إن ذُكر خلاف ذلك.",
     }),
   });
+}
+
+// ─── رمز تحقق الدخول (OTP) ────────────────────────────────────────────────────
+
+const OTP_TTL_MINUTES = 10;
+const OTP_MAX_ATTEMPTS = 5;
+
+/**
+ * ينشئ رمز دخول من 6 أرقام ويرسله على بريد المستخدم.
+ * يرجع challengeId ليُمرَّر في خطوة التحقق. إن فشل الإرسال يرجع ok:false —
+ * والمُستدعي يقرر (نحن نسمح بالدخول بدون OTP عند فشل الإرسال بدل حبس العميل).
+ */
+export async function createAndSendLoginOtp(userId: number): Promise<{ ok: true; challengeId: string; maskedEmail: string } | { ok: false; reason: string }> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "قاعدة البيانات غير متاحة" };
+  const { loginOtps } = await import("../drizzle/schema");
+
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const user = rows[0];
+  if (!user?.email) return { ok: false, reason: "لا يوجد بريد إلكتروني مسجّل لهذا الحساب" };
+  if (!isEmailConfigured()) return { ok: false, reason: "خدمة البريد غير مضبوطة" };
+
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  const challengeId = crypto.randomBytes(24).toString("hex");
+  await db.insert(loginOtps).values({
+    userId,
+    email: user.email,
+    codeHash: hashToken(code),
+    challengeId,
+    expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000),
+  });
+
+  const { renderCode } = await import("./email");
+  const res = await sendEmail({
+    to: user.email,
+    subject: `رمز تسجيل الدخول: ${code} — المعاصر`,
+    html: renderEmail({
+      badge: "تسجيل الدخول",
+      heading: "رمز تأكيد تسجيل الدخول",
+      intro: "استخدم الرمز التالي لإكمال تسجيل الدخول إلى حسابك.",
+      preview: `رمز تسجيل الدخول الخاص بك: ${code}`,
+      bodyHtml: renderCode(code, `صالح لمدة ${OTP_TTL_MINUTES} دقائق`),
+      footerNote: "إن لم تكن أنت من حاول تسجيل الدخول، فلا تشارك هذا الرمز مع أي شخص، ويُستحسن تغيير كلمة مرور حسابك في نظام ERP.",
+    }),
+  });
+  if (!res.ok) return { ok: false, reason: res.skipped ? "خدمة البريد غير مضبوطة" : (res.error ?? "تعذّر إرسال الرمز") };
+
+  return { ok: true, challengeId, maskedEmail: maskEmail(user.email) };
+}
+
+/** يخفي أغلب البريد للعرض في الواجهة: ah***@gmail.com */
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!domain) return "***";
+  const head = local.slice(0, Math.min(2, local.length));
+  return `${head}${"*".repeat(Math.max(3, local.length - head.length))}@${domain}`;
+}
+
+/** يتحقق من الرمز. يستهلكه مرة واحدة ويحدّ من المحاولات */
+export async function verifyLoginOtp(challengeId: string, code: string): Promise<{ ok: true; userId: number } | { ok: false; reason: string }> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "قاعدة البيانات غير متاحة" };
+  const { loginOtps } = await import("../drizzle/schema");
+
+  const rows = await db.select().from(loginOtps).where(eq(loginOtps.challengeId, challengeId)).limit(1);
+  const rec = rows[0];
+  if (!rec) return { ok: false, reason: "طلب الدخول غير معروف — أعد تسجيل الدخول" };
+  if (rec.consumedAt) return { ok: false, reason: "هذا الرمز استُخدم بالفعل — أعد تسجيل الدخول" };
+  if (rec.expiresAt.getTime() < Date.now()) return { ok: false, reason: "انتهت صلاحية الرمز — أعد تسجيل الدخول لإرسال رمز جديد" };
+  if (rec.attempts >= OTP_MAX_ATTEMPTS) {
+    return { ok: false, reason: "تجاوزت عدد المحاولات المسموح — أعد تسجيل الدخول لإرسال رمز جديد" };
+  }
+
+  if (hashToken(code.trim()) !== rec.codeHash) {
+    await db.update(loginOtps).set({ attempts: rec.attempts + 1 }).where(eq(loginOtps.id, rec.id));
+    const left = OTP_MAX_ATTEMPTS - (rec.attempts + 1);
+    return { ok: false, reason: left > 0 ? `الرمز غير صحيح — متبقٍ ${left} محاولات` : "الرمز غير صحيح وتجاوزت عدد المحاولات — أعد تسجيل الدخول" };
+  }
+
+  await db.update(loginOtps).set({ consumedAt: new Date() }).where(eq(loginOtps.id, rec.id));
+  return { ok: true, userId: rec.userId };
 }
