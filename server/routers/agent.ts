@@ -818,6 +818,77 @@ const SINGLE_DOCTYPES = new Set([
   "Projects Settings", "Domain Settings",
 ]);
 
+// ─── الشركة ومركز التكلفة ─────────────────────────────────────────────────────
+// نمرّر company صراحةً في المستندات بدل الاعتماد على Global Defaults، لأن كثيراً
+// من تنصيبات ERPNext تحتوي default_company يشير إلى شركة محذوفة/معاد تسميتها،
+// فتفشل المستندات بأخطاء "مركز التكلفة لا ينتمي للشركة".
+type CompanyInfo = { name: string; costCenter: string | null };
+const companyCache = new Map<string, { info: CompanyInfo | null; expiry: number }>();
+const COMPANY_CACHE_TTL = 10 * 60 * 1000;
+
+async function resolveCompanyInfo(): Promise<CompanyInfo | null> {
+  const key = erpBaseUrl();
+  const cached = companyCache.get(key);
+  if (cached && Date.now() < cached.expiry) return cached.info;
+
+  let info: CompanyInfo | null = null;
+  try {
+    const fields = encodeURIComponent(JSON.stringify(["name", "cost_center"]));
+    const list = await erpGET(`/api/resource/Company?limit=20&fields=${fields}`) as { data?: Array<{ name: string; cost_center?: string }> };
+    const companies = list?.data ?? [];
+    if (companies.length === 1) {
+      info = { name: companies[0].name, costCenter: companies[0].cost_center ?? null };
+    } else if (companies.length > 1) {
+      // شركات متعددة: نستخدم الافتراضية إن كانت موجودة فعلاً، وإلا أول شركة
+      let preferred: string | null = null;
+      try {
+        const gd = await erpGET(`/api/resource/Global%20Defaults/Global%20Defaults`) as { data?: { default_company?: string } };
+        preferred = gd?.data?.default_company ?? null;
+      } catch { /* غير حرج */ }
+      const match = companies.find(c => c.name === preferred) ?? companies[0];
+      if (preferred && !companies.some(c => c.name === preferred)) {
+        console.warn(`[company] Global Defaults.default_company="${preferred}" لا يوجد ضمن الشركات الفعلية — استُخدمت "${match.name}" بدلاً منه`);
+      }
+      info = { name: match.name, costCenter: match.cost_center ?? null };
+    }
+  } catch (e) {
+    console.warn("[company] resolve failed:", e instanceof Error ? e.message : e);
+  }
+
+  companyCache.set(key, { info, expiry: Date.now() + COMPANY_CACHE_TTL });
+  return info;
+}
+
+/** هل الخطأ سببه مركز تكلفة لا ينتمي للشركة؟ (ERPNext يعرّبها) */
+function isCostCenterMismatch(err: unknown): boolean {
+  const raw = err instanceof Error ? err.message : String(err);
+  return /cost center|مركز التكلفة/i.test(raw) && /belong|ينتمي/i.test(raw);
+}
+
+/**
+ * ينشئ مستند بيع/شراء، وإن رفض ERPNext مركز التكلفة (لأن الأصناف تحمل
+ * item_defaults قديمة لشركة محذوفة) يعيد المحاولة مرة واحدة بمركز تكلفة الشركة
+ * الصحيح بدل أن يفشل الطلب على العميل.
+ */
+async function postDocWithCostCenterRetry(
+  path: string,
+  doc: Record<string, unknown>,
+  company: CompanyInfo | null,
+): Promise<unknown> {
+  try {
+    return await erpPOST(path, doc);
+  } catch (e) {
+    if (!isCostCenterMismatch(e) || !company?.costCenter) throw e;
+    console.warn(`[createDoc] cost center rejected — retrying with "${company.costCenter}"`);
+    const items = (doc.items as Array<Record<string, unknown>> | undefined) ?? [];
+    return erpPOST(path, {
+      ...doc,
+      cost_center: company.costCenter,
+      items: items.map(it => ({ ...it, cost_center: company.costCenter })),
+    });
+  }
+}
+
 /** يتحقق من صيغة الرقم الضريبي وفق بلد الشركة المسجّل في ERP */
 async function checkTaxIdForCompanyCountry(taxId: string): Promise<{ valid: true; normalized: string } | { valid: false; reason: string }> {
   const { validateTaxId, countryToTaxIdCountry } = await import("../taxId");
@@ -1011,7 +1082,9 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         taxTemplate = taxSetup.template;
         taxRows = taxSetup.taxRows;
       }
+      const company = await resolveCompanyInfo();
       const invoiceDoc = {
+        ...(company ? { company: company.name } : {}),
         customer: resolvedCustomer,
         posting_date: today,
         due_date: safeDueDate,
@@ -1023,7 +1096,7 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         })),
         ...(taxTemplate && taxRows.length > 0 ? { taxes_and_charges: taxTemplate, taxes: taxRows } : {}),
       };
-      const data = await erpPOST("/api/resource/Sales%20Invoice", invoiceDoc) as { data: { name: string; grand_total: number; total_taxes_and_charges?: number; net_total?: number } };
+      const data = await postDocWithCostCenterRetry("/api/resource/Sales%20Invoice", invoiceDoc, company) as { data: { name: string; grand_total: number; total_taxes_and_charges?: number; net_total?: number } };
       const invoiceName = data?.data?.name ?? "SINV-???";
       return {
         result: data?.data,
@@ -1234,13 +1307,15 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       const today = new Date().toISOString().split("T")[0];
       const requestedPiDue = (args.due_date as string) ?? today;
       const safePiDueDate = requestedPiDue < today ? today : requestedPiDue;
+      const piCompany = await resolveCompanyInfo();
       const piDoc = {
+        ...(piCompany ? { company: piCompany.name } : {}),
         supplier: resolvedSupplier,
         posting_date: today,
         due_date: safePiDueDate,
         items: resolvedItems.map(i => ({ item_code: i.item_code, qty: i.qty, rate: i.rate, amount: i.qty * i.rate })),
       };
-      const data = await erpPOST("/api/resource/Purchase%20Invoice", piDoc) as { data: { name: string; grand_total: number } };
+      const data = await postDocWithCostCenterRetry("/api/resource/Purchase%20Invoice", piDoc, piCompany) as { data: { name: string; grand_total: number } };
       return {
         result: data?.data,
         display: `__PURCHASE_INVOICE_CREATED__${JSON.stringify({ name: data?.data?.name, supplier: resolvedSupplier, items: resolvedItems, grand_total: data?.data?.grand_total })}`,
