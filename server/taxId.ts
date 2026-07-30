@@ -1,0 +1,113 @@
+/**
+ * التحقق من صيغة الرقم الضريبي حسب البلد.
+ *
+ * ملاحظة مهمة عن حدود هذا التحقق: **لا توجد واجهة برمجية (API) رسمية من هيئة
+ * الزكاة والضريبة والجمارك السعودية للتحقق من وجود رقم ضريبي فعلياً.** خدمة
+ * "التحقق من المنشآت المسجلة" على zatca.gov.sa تعمل يدوياً فقط وتتطلب CAPTCHA
+ * (أي أنها مصمّمة عمداً لمنع الاستدعاء الآلي)، ولا يجوز الالتفاف عليها.
+ *
+ * لذلك ما نفعله هنا هو التحقق البنيوي: يكشف الأرقام المستحيلة أو المفبركة بشكل
+ * واضح (طول خاطئ، بادئة/نهاية خاطئة، أرقام مكررة أو متسلسلة)، لكنه **لا يثبت**
+ * أن الرقم مسجّل فعلاً لدى الهيئة. أي ادعاء بغير ذلك سيكون تضليلاً للعميل.
+ */
+
+export type TaxIdCountry = "SA" | "EG" | "AE" | "OTHER";
+
+export type TaxIdCheck =
+  | { valid: true; normalized: string; country: TaxIdCountry; note: string }
+  | { valid: false; normalized: string; country: TaxIdCountry; reason: string };
+
+/** يحوّل الأرقام العربية إلى إنجليزية ويحذف المسافات والفواصل */
+export function normalizeTaxId(raw: string): string {
+  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
+  return raw
+    .split("")
+    .map(ch => {
+      const ai = arabicDigits.indexOf(ch);
+      return ai >= 0 ? String(ai) : ch;
+    })
+    .join("")
+    .replace(/[\s\-_.,]/g, "");
+}
+
+/** أنماط مفبركة واضحة: كل الأرقام متشابهة، أو متسلسلة تصاعدياً/تنازلياً */
+function looksFabricated(digits: string): string | null {
+  if (/^(\d)\1+$/.test(digits)) return "كل الأرقام متطابقة — هذا ليس رقماً ضريبياً حقيقياً";
+  const asc = "0123456789012345";
+  const desc = "9876543210987654";
+  const core = digits.length > 4 ? digits.slice(1, -1) : digits;
+  if (core.length >= 6 && (asc.includes(core) || desc.includes(core))) {
+    return "الأرقام متسلسلة بشكل غير واقعي — يبدو أنه رقم تجريبي أو مفبرك";
+  }
+  return null;
+}
+
+/**
+ * يتحقق من صيغة الرقم الضريبي. البلد يُستنتج من رمز بلد الشركة في ERP إن توفّر.
+ * قواعد السعودية مأخوذة من متطلبات ZATCA للفاتورة الإلكترونية:
+ * 15 رقماً، يبدأ بـ 3 وينتهي بـ 3.
+ */
+export function validateTaxId(raw: string, country: TaxIdCountry = "SA"): TaxIdCheck {
+  const normalized = normalizeTaxId(raw ?? "");
+
+  if (!normalized) {
+    return { valid: false, normalized, country, reason: "الرقم الضريبي فارغ" };
+  }
+  if (!/^\d+$/.test(normalized)) {
+    return { valid: false, normalized, country, reason: "الرقم الضريبي يجب أن يحتوي أرقاماً فقط" };
+  }
+
+  const fabricated = looksFabricated(normalized);
+  if (fabricated) return { valid: false, normalized, country, reason: fabricated };
+
+  switch (country) {
+    case "SA": {
+      if (normalized.length !== 15) {
+        return { valid: false, normalized, country, reason: `الرقم الضريبي السعودي يجب أن يكون 15 رقماً بالضبط (المُدخل ${normalized.length} رقماً)` };
+      }
+      if (!normalized.startsWith("3")) {
+        return { valid: false, normalized, country, reason: "الرقم الضريبي السعودي يجب أن يبدأ بالرقم 3" };
+      }
+      if (!normalized.endsWith("3")) {
+        return { valid: false, normalized, country, reason: "الرقم الضريبي السعودي يجب أن ينتهي بالرقم 3" };
+      }
+      return {
+        valid: true, normalized, country,
+        note: "الصيغة مطابقة لمتطلبات هيئة الزكاة والضريبة (15 رقماً تبدأ وتنتهي بـ 3). لا يمكن تأكيد تسجيله فعلياً لدى الهيئة آلياً — لا توجد واجهة رسمية لذلك، والتأكد النهائي يكون من بوابة الهيئة يدوياً",
+      };
+    }
+    case "EG": {
+      // رقم التسجيل الضريبي المصري (منظومة الفاتورة الإلكترونية ETA): 9 أرقام
+      if (normalized.length !== 9) {
+        return { valid: false, normalized, country, reason: `رقم التسجيل الضريبي المصري يجب أن يكون 9 أرقام (المُدخل ${normalized.length})` };
+      }
+      return { valid: true, normalized, country, note: "الصيغة مطابقة لرقم التسجيل الضريبي المصري (9 أرقام). التأكد من التسجيل الفعلي يكون من بوابة مصلحة الضرائب" };
+    }
+    case "AE": {
+      // رقم التسجيل الضريبي الإماراتي (TRN): 15 رقماً يبدأ بـ 100
+      if (normalized.length !== 15) {
+        return { valid: false, normalized, country, reason: `رقم التسجيل الضريبي الإماراتي (TRN) يجب أن يكون 15 رقماً (المُدخل ${normalized.length})` };
+      }
+      if (!normalized.startsWith("100")) {
+        return { valid: false, normalized, country, reason: "رقم التسجيل الضريبي الإماراتي يبدأ عادةً بـ 100" };
+      }
+      return { valid: true, normalized, country, note: "الصيغة مطابقة لرقم TRN الإماراتي" };
+    }
+    default: {
+      if (normalized.length < 8 || normalized.length > 20) {
+        return { valid: false, normalized, country, reason: `طول الرقم الضريبي غير معقول (${normalized.length} رقماً) — تأكد من الرقم مع العميل` };
+      }
+      return { valid: true, normalized, country, note: "لم يُتحقق من قواعد بلد محددة — تأكد أن الرقم مطابق لمتطلبات بلد الشركة" };
+    }
+  }
+}
+
+/** يستنتج البلد من رمز/اسم البلد المسجل في ERP */
+export function countryToTaxIdCountry(country?: string | null): TaxIdCountry {
+  const c = (country ?? "").trim().toLowerCase();
+  if (!c) return "OTHER";
+  if (/saudi|السعود|ksa|\bsa\b/.test(c)) return "SA";
+  if (/egypt|مصر|\beg\b/.test(c)) return "EG";
+  if (/emirat|united arab|الإمارات|الامارات|\bae\b|uae/.test(c)) return "AE";
+  return "OTHER";
+}

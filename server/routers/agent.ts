@@ -818,6 +818,18 @@ const SINGLE_DOCTYPES = new Set([
   "Projects Settings", "Domain Settings",
 ]);
 
+/** يتحقق من صيغة الرقم الضريبي وفق بلد الشركة المسجّل في ERP */
+async function checkTaxIdForCompanyCountry(taxId: string): Promise<{ valid: true; normalized: string } | { valid: false; reason: string }> {
+  const { validateTaxId, countryToTaxIdCountry } = await import("../taxId");
+  let country: string | null = null;
+  try {
+    const comp = await erpGET(`/api/resource/Company?limit=1&fields=${encodeURIComponent(JSON.stringify(["name", "country"]))}`) as { data?: Array<{ country?: string }> };
+    country = comp?.data?.[0]?.country ?? null;
+  } catch { /* نكمل بالافتراضي */ }
+  const res = validateTaxId(taxId, countryToTaxIdCountry(country));
+  return res.valid ? { valid: true, normalized: res.normalized } : { valid: false, reason: res.reason };
+}
+
 // ─── فحص إعدادات الضريبة في نظام العميل ───────────────────────────────────────
 // يرجع القالب الافتراضي وصفوفه إن كانت الإعدادات سليمة، أو تفصيل ما هو ناقص
 // حتى يبلّغ الوكيل العميل ويأخذ موافقته على ضبطها (setup_tax_settings)
@@ -1042,6 +1054,14 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       return { result: report, display: `__REPORT__${JSON.stringify(report)}` };
     }
     case "create_customer": {
+      // تحقق من صيغة الرقم الضريبي قبل تخزينه — لا نُخزّن رقماً مستحيلاً أو مفبركاً
+      if (args.tax_id) {
+        const check = await checkTaxIdForCompanyCountry(String(args.tax_id));
+        if (!check.valid) {
+          return { result: { needs_clarification: true, reason: "invalid_tax_id", provided: String(args.tax_id), problem: check.reason, message: "الرقم الضريبي الذي أعطاه العميل غير صحيح الصيغة — أبلغه بالمشكلة واطلب الرقم الصحيح" }, display: "" };
+        }
+        args.tax_id = check.normalized;
+      }
       // منع التكرار: ابحث عن عميل مطابق أو مشابه أولاً
       const newName = args.customer_name as string;
       const existing = await findSimilarCustomers(newName);
@@ -1482,10 +1502,14 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       const comp = compList?.data?.[0];
       if (!comp) return { result: { error: "لم يُعثر على شركة في النظام" }, display: "" };
 
-      // 1) تسجيل الرقم الضريبي للشركة إن أُعطي
+      // 1) تسجيل الرقم الضريبي للشركة إن أُعطي — بعد التحقق من صيغته
       if (args.company_tax_id) {
-        await erpPUT(`/api/resource/Company/${encodeURIComponent(comp.name)}`, { tax_id: String(args.company_tax_id).trim() });
-        done.push(`سُجّل الرقم الضريبي للشركة: ${String(args.company_tax_id).trim()}`);
+        const check = await checkTaxIdForCompanyCountry(String(args.company_tax_id));
+        if (!check.valid) {
+          return { result: { needs_clarification: true, reason: "invalid_tax_id", provided: String(args.company_tax_id), problem: check.reason, message: "الرقم الضريبي للشركة غير صحيح الصيغة — أبلغ العميل بالمشكلة واطلب الرقم الصحيح" }, display: "" };
+        }
+        await erpPUT(`/api/resource/Company/${encodeURIComponent(comp.name)}`, { tax_id: check.normalized });
+        done.push(`سُجّل الرقم الضريبي للشركة: ${check.normalized}`);
       }
 
       // إن كان قالب الضريبة سليماً بالفعل ولم يكن الناقص إلا الرقم الضريبي، لا نُنشئ قالباً مكرراً
@@ -1756,6 +1780,7 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 14أ. **إعدادات الضريبة غير المضبوطة — إبلاغ ثم موافقة (مهم)**: إذا أعادت create_invoice نتيجة needs_clarification بسبب tax_settings_not_configured، أو أظهرت check_tax_setup نقصاً: **لا تُصدر الفاتورة بدون ضريبة بصمت أبداً**. بدلاً من ذلك: 1) أبلغ العميل بوضوح بما هو ناقص بالتحديد (من حقل missing) وأثره — "فاتورتك لن تكون فاتورة ضريبية نظامية بدون هذا" 2) اسأله عن نسبة الضريبة المطبقة في بلده إن لم تكن معروفة (15% السعودية، 14% مصر، 5% الإمارات) وعن الرقم الضريبي للشركة إن كان ناقصاً 3) **اطلب موافقته الصريحة**: "هل تسمح لي أضبط لك إعدادات الضريبة الآن؟" 4) بعد موافقته فقط، استدعِ setup_tax_settings مع confirmed: true 5) ثم أعد إنشاء الفاتورة. الأداة نفسها ترفض التنفيذ بدون confirmed: true — فلا تحاول تجاوز خطوة الموافقة. إن رفض العميل، أخبره أن الفاتورة ستُصدر بدون ضريبة وانتظر تأكيده على ذلك (apply_vat: false)
 15. **الرقم الضريبي للعملاء (إلزامي لا اختياري)**: أي عميل من نوع شركة/مؤسسة **يجب** أن يكون له رقم ضريبي مسجّل قبل إصدار أي فاتورة مبيعات له. عند إنشاء عميل جديد اسأل عن الرقم الضريبي وامرّره في tax_id فوراً. إن حاولت إنشاء فاتورة مبيعات لعميل شركة بلا رقم ضريبي، ستُعيد create_invoice نتيجة needs_clarification بسبب missing_tax_id — عندها **توقف واسأل المستخدم عن الرقم الضريبي صراحةً**، سجّله بـ update_document (Customer، fields: {tax_id: "..."})، ثم أعد محاولة إنشاء الفاتورة. لا تنشئ الفاتورة بدون الرقم الضريبي ولا تتجاوز هذا الشرط إلا إذا أكّد المستخدم صراحةً أن العميل فرد (Individual) لا يملك سجلاً تجارياً
 16. **ترتيب أسئلة إنشاء الفاتورة**: عندما يطلب العميل تسجيل فاتورة ولم يُعطِ كل التفاصيل دفعة واحدة، اسأل بالترتيب التالي (سؤالاً واحداً في كل مرة، لا تسأل كل الأسئلة دفعة واحدة): 1) اسم العميل — ثم تحقق من الرقم الضريبي المسجل له (راجع قاعدة 15) 2) الصنف أو الخدمة 3) الكمية 4) السعر. إذا ذكر المستخدم بعض التفاصيل مسبقاً في رسالته، لا تعد سؤالها، واسأل فقط عمّا تبقّى بنفس الترتيب
+16أ. **التحقق من الرقم الضريبي**: النظام يتحقق تلقائياً من **صيغة** الرقم الضريبي حسب بلد الشركة (السعودية: 15 رقماً تبدأ وتنتهي بـ 3 — وفق متطلبات هيئة الزكاة والضريبة؛ مصر: 9 أرقام؛ الإمارات: 15 رقماً تبدأ بـ 100)، ويرفض الأرقام المستحيلة أو المفبركة بشكل واضح (كل الخانات متطابقة، أو أرقام متسلسلة). إن أعادت الأداة invalid_tax_id → أبلغ العميل بالمشكلة المحددة (حقل problem) واطلب الرقم الصحيح. **مهم جداً — لا تدّعِ أبداً أنك "تحققت من الرقم لدى هيئة الزكاة" أو أنه "مسجّل رسمياً"**: لا توجد واجهة برمجية رسمية من الهيئة للتحقق من التسجيل الفعلي، وخدمة التحقق على بوابتها يدوية فقط. أقصى ما نؤكده هو مطابقة الصيغة. إن سأل العميل عن التأكد النهائي، أرشده لبوابة الهيئة (zatca.gov.sa ← الخدمات الإلكترونية ← التحقق من المنشآت المسجلة في ضريبة القيمة المضافة)
 17. **متطلبات الفوترة الإلكترونية حسب البلد**: قبل إنشاء أول فاتورة لعميل جديد، تحقق من بلد الشركة (get_settings على Company — الحقل country) إن لم تكن متأكداً منه بالفعل في هذه المحادثة. في السعودية: الرقم الضريبي 15 رقماً يبدأ وينتهي بـ 3 (قاعدة ZATCA) وهذا محقق تلقائياً عبر تنسيق النظام. في مصر أو أي دولة أخرى لها منظومة فوترة إلكترونية إلزامية (مثل منظومة الفاتورة الإلكترونية المصرية ETA)، لا تفترض صيغة الرقم الضريبي — اسأل المستخدم صراحةً: "هل عميلك مسجّل في منظومة الفوترة الإلكترونية في بلدكم؟ ما رقم تسجيله الضريبي؟" وسجّل ما يقوله دون التحقق من صيغة محددة. الهدف: لا تُصدر فاتورة لعميل شركة دون رقم ضريبي مسجل أياً كان بلد الشركة
 ## صلاحياتك الكاملة في النظام
 أنت تملك صلاحيات كاملة للإدخال والتسجيل والاعتماد والتعديل والإلغاء والحذف في كل وحدات النظام (ضمن صلاحيات مستخدم ERPNext المتصل):
