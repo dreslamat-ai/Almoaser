@@ -503,7 +503,7 @@ export async function executeOdooTool(
  * العميل من واجهة Odoo عند الضغط على "طباعة" على المستند (شعاره وتخطيطه المُعدّين
  * في "إعدادات المحاسبة > تخطيط المستندات")، وليس نموذجاً مُعاد بناؤه في تطبيقنا.
  */
-export async function getOdooDocumentPdf(config: OdooConfig, doctype: string, nameOrId: string): Promise<{ pdfBase64: string; filename: string } | { error: string }> {
+export async function getOdooDocumentPdf(config: OdooConfig, doctype: string, nameOrId: string): Promise<{ pdfBase64: string; filename: string; printFormat?: string } | { error: string }> {
   try {
     let reportNames: string[];
     let id: number;
@@ -529,7 +529,7 @@ export async function getOdooDocumentPdf(config: OdooConfig, doctype: string, na
     for (const reportName of reportNames) {
       try {
         const result = await execute<[string, string]>(config, "ir.actions.report", "render_qweb_pdf", [reportName, [id]]);
-        return { pdfBase64: result[0], filename: `${nameOrId}.pdf` };
+        return { pdfBase64: result[0], filename: `${nameOrId}.pdf`, printFormat: reportName };
       } catch (e) {
         lastError = e;
       }
