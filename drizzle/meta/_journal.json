@@ -92,6 +92,13 @@
       "when": 1785379846568,
       "tag": "0012_handy_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1785382094657,
+      "tag": "0013_worthless_cloak",
+      "breakpoints": true
     }
   ]
 }
