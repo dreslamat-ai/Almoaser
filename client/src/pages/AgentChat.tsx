@@ -731,18 +731,91 @@ const DOCTYPE_LABEL: Record<ErpDoctype, string> = {
   "Journal Entry": "القيد اليومي",
 };
 
-function DocumentPrintCard({ doc, onDownload }: { doc: { doctype: ErpDoctype; name: string }; onDownload: (doctype: ErpDoctype, name: string) => void }) {
+/**
+ * يسلّم ملف PDF فعلياً داخل المحادثة: يجلبه تلقائياً بمجرد ظهور البطاقة
+ * (بنموذج الطباعة الافتراضي المضبوط في نظام العميل) ثم يعرضه كملف جاهز
+ * للفتح أو التحميل — بدل زر يطلب من المستخدم يجيبه بنفسه.
+ */
+function DocumentPrintCard({ doc }: { doc: { doctype: ErpDoctype; name: string } }) {
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [file, setFile] = useState<{ url: string; sizeKb: number; filename: string; printFormat?: string } | null>(null);
+  const [error, setError] = useState("");
+  const pdfMutation = trpc.agent.getDocumentPdf.useMutation();
+  const startedRef = useRef(false);
+  const urlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    pdfMutation.mutateAsync({ doctype: doc.doctype, name: doc.name })
+      .then(res => {
+        const bytes = Uint8Array.from(atob(res.pdfBase64), ch => ch.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        urlRef.current = url;
+        setFile({ url, sizeKb: Math.max(1, Math.round(bytes.length / 1024)), filename: res.filename, printFormat: res.printFormat });
+        setState("ready");
+      })
+      .catch(e => { setError(e instanceof Error ? e.message : "تعذّر توليد الملف"); setState("error"); });
+    return () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const label = DOCTYPE_LABEL[doc.doctype] ?? doc.doctype;
+
+  if (state === "error") {
+    return (
+      <div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm">
+        <p className="font-semibold text-red-800">تعذّر إصدار ملف {label}</p>
+        <p className="text-red-700 text-xs mt-1">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-2 rounded-xl border border-primary/20 bg-primary/5 overflow-hidden text-sm">
       <div className="px-3 py-2 flex items-center gap-2 border-b border-primary/10">
-        <FileText className="w-4 h-4 text-primary" />
-        <span className="font-semibold text-foreground">{DOCTYPE_LABEL[doc.doctype] ?? doc.doctype} جاهزة للتحميل</span>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-auto" onClick={() => onDownload(doc.doctype, doc.name)}>
-          <Download className="w-3 h-3" /> تحميل PDF
-        </Button>
+        <FileText className="w-4 h-4 text-primary shrink-0" />
+        <span className="font-semibold text-foreground">
+          {state === "loading" ? `جارٍ إصدار ${label} من النظام...` : `${label} — جاهزة`}
+        </span>
+        {state === "loading" && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground mr-auto" />}
       </div>
+
       <div className="p-3">
-        <p className="text-foreground"><span className="font-medium">الرقم:</span> <span className="font-mono font-bold">{doc.name}</span></p>
+        <p className="text-foreground mb-2">
+          <span className="font-medium">الرقم:</span> <span className="font-mono font-bold">{doc.name}</span>
+        </p>
+
+        {state === "ready" && file && (
+          <>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-background p-2.5">
+              <div className="w-9 h-9 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+                <FileText className="w-4 h-4 text-red-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-foreground truncate" dir="ltr">{file.filename}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  PDF · {file.sizeKb} KB{file.printFormat ? ` · نموذج: ${file.printFormat}` : ""}
+                </p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <a href={file.url} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="outline" className="h-7 text-xs">فتح</Button>
+                </a>
+                <a href={file.url} download={file.filename}>
+                  <Button size="sm" className="h-7 text-xs gap-1">
+                    <Download className="w-3 h-3" /> تحميل
+                  </Button>
+                </a>
+              </div>
+            </div>
+            <object data={file.url} type="application/pdf" className="w-full h-72 mt-2 rounded-lg border border-border bg-white">
+              <p className="p-3 text-xs text-muted-foreground">
+                متصفحك لا يعرض PDF مباشرة — استخدم زر «فتح» أو «تحميل».
+              </p>
+            </object>
+          </>
+        )}
       </div>
     </div>
   );
@@ -837,7 +910,7 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
   if (display.startsWith("__DOCUMENT_PRINT__")) {
     try {
       const doc = JSON.parse(display.replace("__DOCUMENT_PRINT__", "")) as { doctype: ErpDoctype; name: string };
-      return <DocumentPrintCard doc={doc} onDownload={onDownloadDoc} />;
+      return <DocumentPrintCard doc={doc} />;
     } catch { return null; }
   }
   if (display.startsWith("__CUSTOMER_CREATED__")) {
