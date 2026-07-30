@@ -301,6 +301,8 @@ export async function getAllOrgsUsageSummary() {
   type TokenAgg = { promptTokens: number; completionTokens: number; totalTokens: number; costUsd: number; calls: number };
   const tokensBySub = new Map<number, TokenAgg>();
   for (const t of tokenRows) {
+    // استدعاءات بلا userId (نظامية/مجدولة) لا تُنسب لأي عميل
+    if (t.userId == null) continue;
     const ownerId = userToOwner.get(t.userId) ?? t.userId;
     const subId = subByOwner.get(ownerId);
     if (!subId) continue; // مستخدم بلا اشتراك (مثلاً أدمن المنصة) — لا يُنسب لأي عميل
