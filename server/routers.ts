@@ -244,6 +244,76 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+  /**
+   * حالة إعداد الحساب — تقود القسم الثابت في لوحة العميل.
+   * يبقى ظاهراً حتى تكتمل الخطوات الأساسية حتى لا يُنسى الربط أو تأكيد الجوال.
+   */
+  accountSetup: router({
+    status: protectedProcedure.query(async ({ ctx }) => {
+      const { getDb } = await import("./db");
+      const db = await getDb();
+      const { maskPhone } = await import("./phone");
+
+      let erpConnected = false;
+      let phone: string | null = null;
+      let phoneVerified = false;
+      let emailVerified = false;
+
+      if (db) {
+        const { erpnextConnections: conns, users: usersTable } = await import("../drizzle/schema");
+        const [connRows, userRows] = await Promise.all([
+          db.select({ id: conns.id }).from(conns).where(eq(conns.userId, ctx.user.id)).limit(1),
+          db.select({ phone: usersTable.phone, phoneVerifiedAt: usersTable.phoneVerifiedAt, emailVerifiedAt: usersTable.emailVerifiedAt })
+            .from(usersTable).where(eq(usersTable.id, ctx.user.id)).limit(1),
+        ]);
+        erpConnected = connRows.length > 0;
+        phone = userRows[0]?.phone ?? null;
+        phoneVerified = userRows[0]?.phoneVerifiedAt != null;
+        emailVerified = userRows[0]?.emailVerifiedAt != null;
+      }
+
+      const steps = [
+        {
+          key: "erp" as const,
+          done: erpConnected,
+          title: "اربط نظامك المحاسبي",
+          detail: "حتى يعمل الوكيل الذكي على بياناتك الحقيقية بدل البيانات التجريبية.",
+          href: "/channels",
+          cta: "اربط الآن",
+          critical: true,
+        },
+        {
+          key: "phone" as const,
+          done: phoneVerified,
+          title: "أكّد رقم جوالك",
+          detail: phone ? `أرسلنا رمزاً إلى ${maskPhone(phone)}` : "أضف رقم جوالك لتأمين حسابك واستقبال التنبيهات المهمة.",
+          href: "/settings",
+          cta: phone ? "أكّد الرقم" : "أضف رقمك",
+          critical: true,
+        },
+        {
+          key: "email" as const,
+          done: emailVerified,
+          title: "أكّد بريدك الإلكتروني",
+          detail: "لاستقبال الفواتير وتنبيهات التجديد.",
+          href: "/settings",
+          cta: "أكّد البريد",
+          critical: false,
+        },
+      ];
+
+      const remaining = steps.filter(s => !s.done);
+      return {
+        steps,
+        remaining: remaining.length,
+        // القسم لا يختفي ما دامت خطوة أساسية ناقصة
+        showBanner: remaining.some(s => s.critical),
+        phone,
+        phoneMasked: phone ? maskPhone(phone) : null,
+      };
+    }),
+  }),
+
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ?? null),
 

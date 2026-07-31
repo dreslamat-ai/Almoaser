@@ -8,6 +8,7 @@ import { InstallAppButton } from "@/components/InstallAppButton";
 import NotificationBell from "@/components/NotificationBell";
 import FloatingChatButton from "@/components/FloatingChatButton";
 import { AdminConsole } from "./AdminPanel";
+import AccountSetupCard from "@/components/AccountSetupCard";
 import { useState } from "react";
 import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu, Users, ShieldCheck } from "lucide-react";
 
@@ -201,6 +202,7 @@ export default function Dashboard() {
         </div>
 
         {isAdmin ? <AdminConsole /> : <>
+        <AccountSetupCard />
         <GettingStartedCard
           hasErpConnection={Boolean(erpConn)}
           hasConversation={(conversations?.length ?? 0) > 0}

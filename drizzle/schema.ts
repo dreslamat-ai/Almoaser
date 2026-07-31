@@ -48,6 +48,11 @@ export const users = mysqlTable("users", {
   passwordHash: text("passwordHash"),
   // تاريخ تأكيد البريد الإلكتروني (null = غير مؤكد بعد)
   emailVerifiedAt: timestamp("emailVerifiedAt"),
+  // رقم الجوال بصيغة E.164 (‎+9665XXXXXXXX) — يُطلب عند التسجيل
+  phone: varchar("phone", { length: 20 }),
+  // تاريخ تأكيد الجوال (null = غير مؤكد). التأكيد مؤجَّل لا مُتخطّى:
+  // لو تعذّر الإرسال يدخل العميل ويظل التذكير ظاهراً حتى يتأكد فعلياً.
+  phoneVerifiedAt: timestamp("phoneVerifiedAt"),
   // تفضيل استلام الإشعارات والتذكيرات على البريد
   emailNotifications: boolean("emailNotifications").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -347,3 +352,21 @@ export const loginOtps = mysqlTable("login_otps", {
 });
 
 export type LoginOtp = typeof loginOtps.$inferSelect;
+
+// ─── رمز تأكيد رقم الجوال ─────────────────────────────────────────────────────
+// منفصل عن loginOtps لأن الغرض مختلف: هذا يثبت ملكية الرقم، وذاك يصدر جلسة.
+export const phoneOtps = mysqlTable("phone_otps", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  codeHash: varchar("codeHash", { length: 64 }).notNull(),
+  challengeId: varchar("challengeId", { length: 64 }).notNull().unique(),
+  attempts: int("attempts").default(0).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  consumedAt: timestamp("consumedAt"),
+  // سبب فشل الإرسال إن وُجد — يُعرض للمدير ويُستخدم لإعادة المحاولة تلقائياً
+  sendError: text("sendError"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PhoneOtp = typeof phoneOtps.$inferSelect;
