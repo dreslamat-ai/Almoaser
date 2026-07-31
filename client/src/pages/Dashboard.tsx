@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { InstallAppButton } from "@/components/InstallAppButton";
 import NotificationBell from "@/components/NotificationBell";
 import FloatingChatButton from "@/components/FloatingChatButton";
+import { AdminConsole } from "./AdminPanel";
 import { useState } from "react";
 import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu, Users, ShieldCheck } from "lucide-react";
 
@@ -21,7 +22,7 @@ function SidebarContent({ active, onNavigate }: { active: string; onNavigate?: (
     { path: "/subscription", label: "الاشتراك", icon: <DollarSign className="w-5 h-5" /> },
     { path: "/erp", label: "نظام ERP", icon: <Database className="w-5 h-5" /> },
     ...(user?.orgRole === "owner" ? [{ path: "/team", label: "الفريق", icon: <Users className="w-5 h-5" /> }] : []),
-    ...(user?.role === "admin" ? [{ path: "/admin", label: "مدير النظام", icon: <ShieldCheck className="w-5 h-5" /> }] : []),
+    // لوحة المالك لم تعد بنداً مستقلاً — أصبحت هي محتوى "الرئيسية" للمسؤول
   ];
   return (
     <div className="w-full h-full bg-navy-hero flex flex-col">
@@ -140,12 +141,15 @@ function GettingStartedCard({ hasErpConnection, hasConversation, isOwner }: {
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, navigate] = useLocation();
-  const { data: tasks } = trpc.tasks.list.useQuery(undefined, { enabled: isAuthenticated });
-  const { data: invoices } = trpc.invoices.list.useQuery(undefined, { enabled: isAuthenticated });
-  const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: isAuthenticated });
-  const { data: plans } = trpc.plans.list.useQuery();
-  const { data: erpConn } = trpc.erpConnection.get.useQuery(undefined, { enabled: isAuthenticated });
-  const { data: conversations } = trpc.agent.listConversations.useQuery(undefined, { enabled: isAuthenticated });
+  // للمسؤول تعرض "الرئيسية" لوحة المالك، فلا داعي لجلب بيانات لوحة العميل
+  const isAdmin = user?.role === "admin";
+  const customerData = isAuthenticated && !isAdmin;
+  const { data: tasks } = trpc.tasks.list.useQuery(undefined, { enabled: customerData });
+  const { data: invoices } = trpc.invoices.list.useQuery(undefined, { enabled: customerData });
+  const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: customerData });
+  const { data: plans } = trpc.plans.list.useQuery(undefined, { enabled: !isAdmin });
+  const { data: erpConn } = trpc.erpConnection.get.useQuery(undefined, { enabled: customerData });
+  const { data: conversations } = trpc.agent.listConversations.useQuery(undefined, { enabled: customerData });
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>;
   if (!isAuthenticated) {
@@ -179,14 +183,24 @@ export default function Dashboard() {
       <main className="flex-1 p-4 md:p-8">
         <div className="mb-8 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-navy">مرحباً، {user?.name ?? "عزيزي العميل"} 👋</h1>
-            <p className="text-muted-foreground mt-1">هذا ملخص حسابك في Almoaser AI ERP</p>
+            <h1 className="text-2xl font-bold text-navy flex items-center gap-2 flex-wrap">
+              مرحباً، {user?.name ?? "عزيزي العميل"} 👋
+              {isAdmin && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-navy/5 text-navy border border-navy/10 rounded-full px-2 py-0.5">
+                  <ShieldCheck className="w-3 h-3" /> مالك المنصة
+                </span>
+              )}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {isAdmin ? "نظرة كاملة على المنصة: العملاء والاستهلاك والربحية وإدارة الاشتراكات" : "هذا ملخص حسابك في Almoaser AI ERP"}
+            </p>
           </div>
           <div className="hidden md:block">
             <NotificationBell />
           </div>
         </div>
 
+        {isAdmin ? <AdminConsole /> : <>
         <GettingStartedCard
           hasErpConnection={Boolean(erpConn)}
           hasConversation={(conversations?.length ?? 0) > 0}
@@ -281,6 +295,7 @@ export default function Dashboard() {
             </a>
           </div>
         </div>
+        </>}
         <FloatingChatButton />
       </main>
     </div>
