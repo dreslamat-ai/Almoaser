@@ -9,11 +9,52 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap,
   ChevronDown, ChevronUp, Coins, Hash, StickyNote, Gift, PlusCircle, CalendarPlus, Receipt, Ban,
-  Search, DollarSign, TrendingUp, Download, Cpu,
+  Search, DollarSign, TrendingUp, Download, Cpu, RefreshCw,
 } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState, Fragment } from "react";
 import { toast } from "sonner";
+
+/**
+ * بيانات الاستهلاك لحظية: تُجلب من جديد عند كل فتح للصفحة (لا نعرض نسخة مخزَّنة)،
+ * وكل 15 ثانية أثناء بقاء الصفحة مفتوحة، وعند الرجوع إليها من تبويب آخر.
+ * الجداول صغيرة (استعلامات تجميع بسيطة) فالتكلفة مهملة.
+ */
+const LIVE_REFRESH_MS = 15000;
+const liveQueryOptions = {
+  refetchInterval: LIVE_REFRESH_MS,
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: true,
+  refetchOnMount: "always",
+  staleTime: 0,
+} as const;
+
+/** مؤشر "مباشر" مع وقت آخر تحديث وزر تحديث فوري */
+function LiveBadge({ updatedAt, isFetching, onRefresh }: {
+  updatedAt: number; isFetching: boolean; onRefresh: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
+      <span className="relative flex w-2 h-2 shrink-0" aria-hidden="true">
+        <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-70 animate-ping" />
+        <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+      </span>
+      <span>
+        مباشر · آخر تحديث{" "}
+        <span style={{ fontVariantNumeric: "tabular-nums" }}>
+          {updatedAt ? new Date(updatedAt).toLocaleTimeString("en-GB") : "—"}
+        </span>
+      </span>
+      <button
+        type="button" onClick={onRefresh} disabled={isFetching}
+        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-0.5 hover:border-navy hover:text-navy transition-colors disabled:opacity-50"
+      >
+        <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
+        تحديث
+      </button>
+    </div>
+  );
+}
 
 const subStatusOptions = [
   { value: "active", label: "نشط" },
@@ -215,11 +256,20 @@ export function AdminConsole() {
   const { data: tasks } = trpc.admin.tasks.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const { data: plans } = trpc.plans.list.useQuery();
   const { data: allUsers } = trpc.admin.users.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
-  const { data: usageSummary } = trpc.admin.usageSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
-  const { data: insights } = trpc.admin.platformInsights.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
+  // ─── استهلاك الوكلاء: لحظي ──────────────────────────────────────────────────
+  const usageQuery = trpc.admin.usageSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin", ...liveQueryOptions });
+  const insightsQuery = trpc.admin.platformInsights.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin", ...liveQueryOptions });
+  const usageSummary = usageQuery.data;
+  const insights = insightsQuery.data;
+
   const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
-  const { data: revenueSummary } = trpc.admin.revenueSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", refetchInterval: 30000 });
-  const { data: llmCostSummary } = trpc.admin.llmCostSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", refetchInterval: 30000 });
+  const { data: revenueSummary } = trpc.admin.revenueSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", ...liveQueryOptions });
+  const { data: llmCostSummary } = trpc.admin.llmCostSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", ...liveQueryOptions });
+
+  // آخر لحظة وصلت فيها بيانات الاستهلاك، وحالة الجلب لأي من الاستعلامين
+  const liveUpdatedAt = Math.max(usageQuery.dataUpdatedAt, insightsQuery.dataUpdatedAt);
+  const liveFetching = usageQuery.isFetching || insightsQuery.isFetching;
+  const refreshLive = () => { void usageQuery.refetch(); void insightsQuery.refetch(); };
   const exportQuery = trpc.admin.exportFinancialReport.useQuery(undefined, { enabled: false });
   const utils = trpc.useUtils();
 
@@ -272,6 +322,10 @@ export function AdminConsole() {
 
   return (
     <>
+      <div className="flex justify-end mb-3">
+        <LiveBadge updatedAt={liveUpdatedAt} isFetching={liveFetching} onRefresh={refreshLive} />
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
           { label: "طلبات التسجيل", value: registrations?.length ?? 0, icon: <Users className="w-5 h-5" />, color: "text-blue-600", bg: "bg-blue-50" },
@@ -437,11 +491,12 @@ export function AdminConsole() {
         )}
         {tab === "usage" && (
           <div>
-            <div className="p-3 border-b border-gray-100">
-              <div className="relative max-w-xs">
+            <div className="p-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+              <div className="relative max-w-xs flex-1 min-w-[180px]">
                 <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={usageSearch} onChange={e => setUsageSearch(e.target.value)} placeholder="بحث بالاسم أو البريد..." className="h-9 text-sm pr-9" />
               </div>
+              <LiveBadge updatedAt={liveUpdatedAt} isFetching={liveFetching} onRefresh={refreshLive} />
             </div>
             <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px]">
