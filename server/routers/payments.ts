@@ -6,7 +6,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { getDb, getPlanById, getSubscriptionByUserId } from "../db";
 import { payments } from "../../drizzle/schema";
 import { createPaymentLink, getPaymentStatus, isMyFatoorahConfigured } from "../myfatoorah";
-import { yearlyPrice, topupPriceSAR, isValidTopupCredits } from "../credits";
+import { yearlyPrice, topupPriceSAR, isValidTopupCredits, TOPUP_MIN_CREDITS, TOPUP_MAX_CREDITS } from "../credits";
 import { finalizePaymentByReference } from "../paymentFinalize";
 
 function appBaseUrl(reqOrigin?: string): string {
@@ -56,15 +56,15 @@ export const paymentsRouter = router({
       return { paymentUrl: link.InvoiceURL, paymentId };
     }),
 
-  // إنشاء دفعة شحن نقاط (مضاعفات 100 نقطة، كل 100 نقطة = 100 ريال) — لمالك الحساب فقط
+  // إنشاء دفعة شحن نقاط (أي عدد ابتداءً من الحد الأدنى، بسعر ريال للنقطة) — لمالك الحساب فقط
   createTopupPayment: protectedProcedure
-    .input(z.object({ credits: z.number().int().min(100).max(10000) }))
+    .input(z.object({ credits: z.number().int().min(TOPUP_MIN_CREDITS).max(TOPUP_MAX_CREDITS) }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.user.orgRole !== "owner") {
         throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الفوترة متاحة لمالك الحساب فقط" });
       }
       if (!isValidTopupCredits(input.credits)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "الشحن يكون بمضاعفات 100 نقطة" });
+        throw new TRPCError({ code: "BAD_REQUEST", message: `أقل شحنة ${TOPUP_MIN_CREDITS} نقطة` });
       }
       const sub = await getSubscriptionByUserId(ctx.user.id);
       if (!sub) throw new TRPCError({ code: "NOT_FOUND", message: "يجب الاشتراك في باقة أولاً" });

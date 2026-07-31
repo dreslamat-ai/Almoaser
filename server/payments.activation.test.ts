@@ -39,7 +39,7 @@ vi.mock("./credits", async importOriginal => {
 });
 
 import { paymentsRouter } from "./routers/payments";
-import { yearlyPrice, topupPriceSAR, isValidTopupCredits } from "./credits";
+import { yearlyPrice, topupPriceSAR, isValidTopupCredits, TOPUP_MIN_CREDITS } from "./credits";
 
 function makeCaller() {
   return paymentsRouter.createCaller({
@@ -147,11 +147,13 @@ describe("دوال التسعير المساعدة", () => {
   it("السعر السنوي = 12 شهراً بخصم 15%", () => {
     expect(yearlyPrice(699, 15)).toBe(Math.round(699 * 12 * 0.85));
   });
-  it("سعر الشحن: كل 100 نقطة = 100 ريال", () => {
+  it("سعر الشحن: النقطة بريال", () => {
     expect(topupPriceSAR(200)).toBe(200);
   });
-  it("الشحن بمضاعفات 100 فقط", () => {
+  // كانت القاعدة مضاعفات 100؛ صارت أي عدد ابتداءً من الحد الأدنى
+  it("الشحن بأي عدد ابتداءً من الحد الأدنى", () => {
     expect(isValidTopupCredits(100)).toBe(true);
-    expect(isValidTopupCredits(150)).toBe(false);
+    expect(isValidTopupCredits(150)).toBe(true);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS - 1)).toBe(false);
   });
 });

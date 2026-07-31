@@ -1,7 +1,7 @@
 // ─── نظام نقاط الرصيد الشهرية ─────────────────────────────────────────────────
 // كل رسالة للوكيل = 1 نقطة، كل مستند يُنشأ في ERP = 5 نقاط
 // رصيد الباقة الشهري = maxDocuments × 5 (150 / 250 / 500)
-// الشحن الإضافي: كل 100 نقطة = 100 ريال سعودي
+// الشحن الإضافي: النقطة بريال سعودي، وأقل شحنة TOPUP_MIN_CREDITS نقطة
 import { getDb } from "./db";
 import { subscriptions, plans, creditTransactions } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -9,19 +9,24 @@ import { eq } from "drizzle-orm";
 export const MESSAGE_COST = 1;
 export const DOCUMENT_COST = 5;
 export const CREDITS_PER_DOCUMENT = 5;
-// سعر شحن النقاط: 100 نقطة = 100 ريال (أي 1 ريال للنقطة)
+// سعر شحن النقاط: 1 ريال للنقطة
 export const TOPUP_UNIT_CREDITS = 100;
 export const TOPUP_UNIT_PRICE_SAR = 100;
+// أقل شحنة مقبولة. الشحن كان محصوراً في مضاعفات 100، فمن يحتاج 60 نقطة كان
+// مضطراً لشراء 100 — الآن أي عدد ابتداءً من هذا الحد. الحدود من ملف مشترك
+// حتى لا يفترض الطرفان رقمين مختلفين.
+export { TOPUP_MIN_CREDITS, TOPUP_MAX_CREDITS } from "../shared/credits";
+import { TOPUP_MIN_CREDITS, TOPUP_MAX_CREDITS } from "../shared/credits";
 // طول الدورة الشهرية بالمللي ثانية (30 يوماً)
 export const CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function topupPriceSAR(credits: number): number {
-  // النقاط تُشحن بمضاعفات 100
+  // السعر خطّي بالنقطة، فأي عدد يُسعَّر بلا تقريب إلى مضاعفات
   return (credits / TOPUP_UNIT_CREDITS) * TOPUP_UNIT_PRICE_SAR;
 }
 
 export function isValidTopupCredits(credits: number): boolean {
-  return Number.isInteger(credits) && credits >= TOPUP_UNIT_CREDITS && credits % TOPUP_UNIT_CREDITS === 0;
+  return Number.isInteger(credits) && credits >= TOPUP_MIN_CREDITS && credits <= TOPUP_MAX_CREDITS;
 }
 
 // حساب السعر السنوي بعد خصم 15%
@@ -102,7 +107,7 @@ export async function getCreditsBalance(userId: number) {
 export class InsufficientCreditsError extends Error {
   constructor(public balance: number, public required: number) {
     super(
-      `رصيد النقاط غير كافٍ (المتبقي ${balance} نقطة، المطلوب ${required}). يمكنك شحن رصيد إضافي: كل 100 نقطة = 100 ريال سعودي من صفحة الاشتراك.`
+      `رصيد النقاط غير كافٍ (المتبقي ${balance} نقطة، المطلوب ${required}). يمكنك شحن رصيد إضافي من صفحة الاشتراك: النقطة بريال سعودي، وأقل شحنة ${TOPUP_MIN_CREDITS} نقطة.`
     );
     this.name = "InsufficientCreditsError";
   }

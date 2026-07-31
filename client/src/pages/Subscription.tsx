@@ -5,12 +5,16 @@ import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CheckCircle2, Zap, Bot, BookOpen, Crown, Coins, Plus, History, BarChart3 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { toArabicDigits, digitsOnly } from "@shared/digits";
+import { TOPUP_MIN_CREDITS } from "@shared/credits";
 
 export default function Subscription() {
   const { isAuthenticated, loading } = useAuth();
   const utils = trpc.useUtils();
   const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
   const [showHistory, setShowHistory] = useState(false);
+  const [customTopup, setCustomTopup] = useState("");
   const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: isAuthenticated });
   const { data: plans } = trpc.plans.list.useQuery();
   const { data: creditsInfo } = trpc.credits.balance.useQuery(undefined, { enabled: isAuthenticated });
@@ -56,8 +60,16 @@ export default function Subscription() {
       toast.info("بوابة الدفع قيد التفعيل — سيتوفر شحن النقاط قريباً");
       return;
     }
+    if (!Number.isInteger(credits) || credits < TOPUP_MIN_CREDITS) {
+      toast.error(`أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة`);
+      return;
+    }
     topupMutation.mutate({ credits });
   };
+
+  // الحقل يحتفظ بأرقام لاتينية داخلياً ويُعرض هندياً — الحساب يحتاج رقماً لا نصاً
+  const customCredits = Number(customTopup || 0);
+  const customValid = Number.isInteger(customCredits) && customCredits >= TOPUP_MIN_CREDITS;
 
   const handleSwitchPlan = (planId: number) => {
     if (!paymentsReady) {
@@ -147,13 +159,52 @@ export default function Subscription() {
               </div>
               <p className="text-xs text-muted-foreground mb-3">كل رسالة للوكيل = نقطة واحدة • كل مستند = 5 نقاط • يتجدد الرصيد شهرياً</p>
               <div className="flex flex-wrap gap-2">
-                {[100, 200, 500].map(c => (
+                {[50, 100, 200, 500].map(c => (
                   <Button key={c} size="sm" variant="outline" className="border-gold/50 text-gold-ink hover:bg-gold/10 gap-1"
                     disabled={topupMutation.isPending} onClick={() => handleTopup(c)}>
-                    <Plus className="w-3.5 h-3.5" /> {c} نقطة — {c} ريال
+                    <Plus className="w-3.5 h-3.5" /> {toArabicDigits(c)} نقطة — {toArabicDigits(c)} ريال
                   </Button>
                 ))}
               </div>
+
+              {/* مبلغ مخصّص: الأزرار الجاهزة لا تغطي من يحتاج عدداً بعينه */}
+              <form
+                className="flex items-end gap-2 mt-3"
+                onSubmit={e => { e.preventDefault(); handleTopup(customCredits); }}
+              >
+                <div className="flex-1">
+                  <label htmlFor="custom-topup" className="block text-xs text-muted-foreground mb-1">
+                    أو اكتب عدد النقاط
+                  </label>
+                  <Input
+                    id="custom-topup"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder={toArabicDigits(TOPUP_MIN_CREDITS)}
+                    // يُعرض هندياً ويُخزَّن لاتينياً، ويقبل ما تكتبه أي لوحة مفاتيح
+                    value={toArabicDigits(customTopup)}
+                    onChange={e => setCustomTopup(digitsOnly(e.target.value))}
+                    aria-describedby="custom-topup-hint"
+                    aria-invalid={customTopup !== "" && !customValid}
+                    className="h-11"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-11 bg-gold text-navy hover:bg-gold-dark gap-1 shrink-0"
+                  disabled={topupMutation.isPending || !customValid}
+                >
+                  <Plus className="w-3.5 h-3.5" /> اشحن
+                </Button>
+              </form>
+              <p id="custom-topup-hint" className="text-[11px] text-muted-foreground mt-1">
+                {customTopup !== "" && !customValid
+                  ? `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة`
+                  : customValid
+                    ? `${toArabicDigits(customCredits)} نقطة — ${toArabicDigits(customCredits)} ريال`
+                    : `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة · النقطة بريال`}
+              </p>
               {!paymentsReady && <p className="text-[11px] text-muted-foreground mt-2">بوابة الدفع قيد التفعيل — شحن النقاط سيتوفر قريباً</p>}
             </div>
           </div>
