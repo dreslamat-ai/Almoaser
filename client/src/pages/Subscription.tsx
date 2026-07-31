@@ -228,9 +228,9 @@ export default function Subscription() {
           {/* مبدّل الفوترة */}
           <div className="inline-flex items-center gap-1 p-1 rounded-full bg-white border border-gray-200">
             <button onClick={() => setBilling("monthly")}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-navy text-white" : "text-muted-foreground"}`}>شهري</button>
+              className={`px-4 py-1.5 [@media(pointer:coarse)]:min-h-11 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-navy text-white" : "text-muted-foreground"}`}>شهري</button>
             <button onClick={() => setBilling("yearly")}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${billing === "yearly" ? "bg-navy text-white" : "text-muted-foreground"}`}>
+              className={`px-4 py-1.5 [@media(pointer:coarse)]:min-h-11 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${billing === "yearly" ? "bg-navy text-white" : "text-muted-foreground"}`}>
               سنوي <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-ink"}`}>-15%</span>
             </button>
           </div>

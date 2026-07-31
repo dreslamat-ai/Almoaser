@@ -1381,7 +1381,7 @@ export default function AgentChat() {
                 <button
                   onClick={() => navigate("/subscription")}
                   title="رصيد النقاط — اضغط لإدارة الاشتراك"
-                  className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1 [@media(pointer:coarse)]:min-h-11 rounded-full border font-medium transition-colors ${
                     low ? "text-red-600 border-red-200 bg-red-50 hover:bg-red-100" : "text-gold-dark border-gold/30 bg-gold/10 hover:bg-gold/15"
                   }`}
                 >
@@ -1394,8 +1394,9 @@ export default function AgentChat() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               متصل
             </Badge>
-            <Button variant="outline" size="sm" className="text-xs gap-1 px-2"
+            <Button variant="outline" size="sm" className="text-xs gap-1 px-2 [@media(pointer:coarse)]:min-w-11"
               onClick={toggleSound}
+              aria-label={soundEnabled ? "كتم صوت الإشعار" : "تفعيل صوت الإشعار"}
               title={soundEnabled ? "كتم صوت الإشعار" : "تفعيل صوت الإشعار"}>
               {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5 text-muted-foreground" />}
             </Button>

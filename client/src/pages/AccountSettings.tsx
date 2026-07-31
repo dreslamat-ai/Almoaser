@@ -213,7 +213,7 @@ function EmailSettingsCard({ isAuthenticated }: { isAuthenticated: boolean }) {
               checked={data.notificationsEnabled}
               disabled={prefMutation.isPending}
               onChange={e => prefMutation.mutate({ enabled: e.target.checked })}
-              className="w-4 h-4 accent-navy"
+              className="w-4 h-4 accent-navy relative [@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:content-[''] [@media(pointer:coarse)]:after:-inset-4"
             />
             <span className="text-foreground">استلام الإشعارات والتذكيرات على البريد الإلكتروني</span>
           </label>
