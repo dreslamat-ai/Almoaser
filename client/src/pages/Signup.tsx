@@ -67,6 +67,12 @@ export default function Signup() {
       toast.error("أدخل كلمة المرور");
       return;
     }
+    // الرقم يُتحقَّق منه هنا لا في الخطوة الثانية: حقله في هذه الخطوة، ومنعُ
+    // التقدّم بلا رسالة يترك المستخدم أمام زر ميت لا يرى سببه.
+    if (!phone.trim()) {
+      toast.error("أدخل رقم جوالك");
+      return;
+    }
     const result = await testCredsMutation.mutateAsync({
       erpUrl: erpUrl.trim(), email: email.trim(), password,
       provider, database: provider === "odoo" ? database.trim() : undefined,
@@ -263,7 +269,7 @@ export default function Signup() {
               <Button variant="outline" className="h-11 gap-2" onClick={() => setStep(1)} disabled={signupMutation.isPending}>
                 <ArrowRight className="w-4 h-4" /> رجوع
               </Button>
-              <Button className="flex-1 h-11 gap-2" onClick={submit} disabled={signupMutation.isPending || !planId || !phone.trim()}>
+              <Button className="flex-1 h-11 gap-2" onClick={submit} disabled={signupMutation.isPending || !planId}>
                 {signupMutation.isPending
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق من نظامك وإنشاء الحساب...</>
                   : <><Sparkles className="w-4 h-4" /> ابدأ التجربة المجانية</>}
