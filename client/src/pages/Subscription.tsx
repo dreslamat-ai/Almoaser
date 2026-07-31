@@ -159,7 +159,7 @@ export default function Subscription() {
               </div>
               <p className="text-xs text-muted-foreground mb-3">كل رسالة للوكيل = نقطة واحدة • كل مستند = 5 نقاط • يتجدد الرصيد شهرياً</p>
               <div className="flex flex-wrap gap-2">
-                {[50, 100, 200, 500].map(c => (
+                {[500, 1000, 2000, 5000].map(c => (
                   <Button key={c} size="sm" variant="outline" className="border-gold/50 text-gold-ink hover:bg-gold/10 gap-1"
                     disabled={topupMutation.isPending} onClick={() => handleTopup(c)}>
                     <Plus className="w-3.5 h-3.5" /> {toArabicDigits(c)} نقطة — {toArabicDigits(formatSAR(topupPriceSAR(c)))} ريال

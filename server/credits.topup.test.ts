@@ -14,17 +14,17 @@ describe("isValidTopupCredits", () => {
     expect(isValidTopupCredits(-100)).toBe(false);
   });
 
-  // جوهر التعديل: الشحن كان محصوراً في مضاعفات 100
+  // جوهر التعديل: الشحن كان محصوراً في مضاعفات 100. الأعداد نسبية للحد عمداً
+  // حتى لا يكسر تعديلُ الحد اختباراً يفحص شيئاً آخر.
   it("يقبل أي عدد صحيح فوق الحد، لا مضاعفات 100 فقط", () => {
-    expect(isValidTopupCredits(50)).toBe(true);
-    expect(isValidTopupCredits(60)).toBe(true);
-    expect(isValidTopupCredits(137)).toBe(true);
-    expect(isValidTopupCredits(999)).toBe(true);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS + 1)).toBe(true);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS + 37)).toBe(true);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS + 99)).toBe(true);
   });
 
   it("يرفض الكسور", () => {
-    expect(isValidTopupCredits(50.5)).toBe(false);
-    expect(isValidTopupCredits(100.1)).toBe(false);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS + 0.5)).toBe(false);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS * 2 + 0.1)).toBe(false);
   });
 
   it("يرفض ما ليس عدداً", () => {
@@ -54,7 +54,7 @@ describe("topupPriceSAR", () => {
 
   // عمود المبلغ decimal(10,2) ولا يقبل ذيلاً عشرياً طويلاً من القسمة
   it("لا يُسرِّب أخطاء الفاصلة العائمة", () => {
-    for (let c = TOPUP_MIN_CREDITS; c <= 300; c++) {
+    for (let c = TOPUP_MIN_CREDITS; c <= TOPUP_MIN_CREDITS + 500; c++) {
       const price = topupPriceSAR(c);
       expect(Number(price.toFixed(2))).toBe(price);
     }

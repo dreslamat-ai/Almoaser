@@ -4,8 +4,8 @@
 
 /** كم نقطة يشتريها الريال الواحد */
 export const CREDITS_PER_SAR = 5;
-/** أقل عدد نقاط يمكن شحنه في المرة الواحدة */
-export const TOPUP_MIN_CREDITS = 50;
+/** أقل عدد نقاط يمكن شحنه في المرة الواحدة (٥٠٠ نقطة = ١٠٠ ريال) */
+export const TOPUP_MIN_CREDITS = 500;
 /** سقف الشحنة الواحدة */
 export const TOPUP_MAX_CREDITS = 10000;
 

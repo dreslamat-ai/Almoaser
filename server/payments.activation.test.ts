@@ -152,8 +152,8 @@ describe("دوال التسعير المساعدة", () => {
   });
   // كانت القاعدة مضاعفات 100؛ صارت أي عدد ابتداءً من الحد الأدنى
   it("الشحن بأي عدد ابتداءً من الحد الأدنى", () => {
-    expect(isValidTopupCredits(100)).toBe(true);
-    expect(isValidTopupCredits(150)).toBe(true);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS)).toBe(true);
+    expect(isValidTopupCredits(TOPUP_MIN_CREDITS + 50)).toBe(true);
     expect(isValidTopupCredits(TOPUP_MIN_CREDITS - 1)).toBe(false);
   });
 });
