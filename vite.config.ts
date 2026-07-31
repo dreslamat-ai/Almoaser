@@ -233,7 +233,12 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, "client"),
   publicDir: path.resolve(import.meta.dirname, "client", "public"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    // يوجَّه إلى مجلد إصدار جانبي أثناء النشر (scripts/deploy.sh) بدل الكتابة
+    // فوق المجلد الذي يخدم العملاء: emptyOutDir يفرّغ الهدف أولاً، فالبناء
+    // مباشرةً في مكان الخدمة يترك الأصول غائبة طوال مدته.
+    outDir: process.env.CLIENT_OUT_DIR
+      ? path.resolve(process.env.CLIENT_OUT_DIR)
+      : path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
   },
   server: {
