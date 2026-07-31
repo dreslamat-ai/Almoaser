@@ -60,6 +60,15 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
+  // ملف مفقود تحت /assets هو أصل مبني قديم أو غير موجود، لا مسار تنقّل. بدون
+  // هذا يبتلعه الرد الاحتياطي أدناه فيعود HTML بحالة 200، فيفشل import() في
+  // المتصفح برسالة "Importing a module script failed" بدل 404 مفهوم — وهو ما
+  // يحدث لكل عميل مفتوح لديه التطبيق أثناء إعادة البناء، لأن emptyOutDir
+  // يفرّغ المجلد فتغيب الأصول جميعها لعشرات الثواني.
+  app.use("/assets", (_req, res) => {
+    res.status(404).type("text/plain").send("Not found");
+  });
+
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));
