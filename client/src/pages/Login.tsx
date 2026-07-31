@@ -139,7 +139,10 @@ export default function Login() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="password">كلمة المرور</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="password">كلمة المرور</Label>
+              <Link href="/forgot-password" className="text-xs text-primary hover:underline">نسيت كلمة المرور؟</Link>
+            </div>
             <div className="relative">
               <Input
                 id="password"

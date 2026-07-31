@@ -246,6 +246,83 @@ export const appRouter = router({
   }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ?? null),
+
+    /**
+     * "نسيت كلمة المرور": يرسل رمزاً للبريد المسجَّل ليدخل به المستخدم بدون كلمة مرور.
+     *
+     * مالك الحساب يسجّل دخوله ببيانات ERPNext/Odoo التي لا نملكها ولا نستطيع
+     * تغييرها، فالدخول بالرمز هو مسار الاستعادة الوحيد الممكن له.
+     *
+     * لا نكشف أبداً ما إذا كان البريد مسجّلاً عندنا أم لا: الرد واحد في الحالتين
+     * (رمز تحدٍّ وهمي عند عدم وجود الحساب)، وإلا صارت الصفحة أداة لحصر عملائنا.
+     */
+    requestLoginOtp: publicProcedure
+      .input(z.object({ email: z.string().trim().min(3).max(320) }))
+      .mutation(async ({ input, ctx }) => {
+        const { rateLimit, clientIp } = await import("./rateLimit");
+        const { isEmailConfigured } = await import("./email");
+        const { createAndSendLoginOtp, maskEmail } = await import("./emailFlows");
+
+        const email = input.email.trim().toLowerCase();
+        const ip = clientIp(ctx.req);
+
+        const perEmail = rateLimit(`otp-req:email:${email}`, 3, 15 * 60 * 1000);
+        const perIp = rateLimit(`otp-req:ip:${ip}`, 10, 15 * 60 * 1000);
+        const limited = !perEmail.ok ? perEmail : !perIp.ok ? perIp : null;
+        if (limited) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: `طلبات كثيرة. حاول مجدداً بعد ${Math.ceil(limited.retryAfterSec / 60)} دقيقة.`,
+          });
+        }
+
+        // انقطاع خدمة البريد عطل تشغيلي، لا يكشف شيئاً عن الحساب — نصرّح به
+        if (!isEmailConfigured()) {
+          throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "خدمة البريد غير مضبوطة حالياً — تواصل مع الدعم" });
+        }
+
+        const crypto = await import("node:crypto");
+        const decoy = () => ({ challengeId: crypto.randomBytes(24).toString("hex"), maskedEmail: maskEmail(email) });
+
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) return decoy();
+        const { users: usersTable } = await import("../drizzle/schema");
+        const found = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+        const user = found[0];
+        if (!user || !user.isActive) return decoy();
+
+        const sent = await createAndSendLoginOtp(user.id);
+        if (!sent.ok) {
+          console.warn(`[requestLoginOtp] send failed for user ${user.id}: ${sent.reason}`);
+          return decoy();
+        }
+        return { challengeId: sent.challengeId, maskedEmail: sent.maskedEmail };
+      }),
+
+    /**
+     * تعيين كلمة مرور محلية جديدة بعد الدخول بالرمز.
+     * متاح للمستخدمين الفرعيين فقط: مالك الحساب كلمة مروره في نظام ERP نفسه،
+     * وتغييرها من هنا سيوهمه أنه استعادها بينما لا شيء تغيّر فعلياً.
+     */
+    setLocalPassword: protectedProcedure
+      .input(z.object({ password: z.string().min(8, "كلمة المرور 8 أحرف على الأقل").max(256) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.orgRole !== "member") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "حسابك يسجّل الدخول ببيانات نظام ERP الخاص بك، ولا نملك كلمة مروره. غيّرها من نظام ERPNext أو Odoo مباشرة.",
+          });
+        }
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+        const { hashPassword } = await import("./password");
+        const { users: usersTable } = await import("../drizzle/schema");
+        await db.update(usersTable).set({ passwordHash: hashPassword(input.password) }).where(eq(usersTable.id, ctx.user.id));
+        return { success: true };
+      }),
+
     /** الخطوة الثانية من تسجيل الدخول: التحقق من رمز البريد وإصدار الجلسة */
     verifyLoginOtp: publicProcedure
       .input(z.object({

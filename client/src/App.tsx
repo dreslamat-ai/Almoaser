@@ -18,6 +18,7 @@ import ErpInvoices from "./pages/ErpInvoices";
 import ErpCustomers from "./pages/ErpCustomers";
 import ErpReports from "./pages/ErpReports";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 import Signup from "./pages/Signup";
 import PaymentCallback from "./pages/PaymentCallback";
 import VerifyEmail from "./pages/VerifyEmail";
@@ -27,6 +28,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/signup" component={Signup} />
       <Route path="/home" component={Home} />
       <Route path="/dashboard" component={Dashboard} />
