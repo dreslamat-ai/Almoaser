@@ -1,0 +1,1 @@
+ALTER TABLE `payments` ADD `vatAmount` decimal(10,2);

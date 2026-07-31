@@ -8,6 +8,7 @@ import { CheckCircle2, Zap, Bot, BookOpen, Crown, Coins, Plus, History, BarChart
 import { Input } from "@/components/ui/input";
 import { toArabicDigits, digitsOnly } from "@shared/digits";
 import { TOPUP_MIN_CREDITS, CREDITS_PER_SAR, topupPriceSAR, formatSAR } from "@shared/credits";
+import { withVat } from "@shared/tax";
 
 export default function Subscription() {
   const { isAuthenticated, loading } = useAuth();
@@ -202,8 +203,11 @@ export default function Subscription() {
                 {customTopup !== "" && !customValid
                   ? `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة`
                   : customValid
-                    ? `${toArabicDigits(customCredits)} نقطة — ${toArabicDigits(formatSAR(topupPriceSAR(customCredits)))} ريال`
-                    : `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة · كل ريال يشتري ${toArabicDigits(CREDITS_PER_SAR)} نقاط`}
+                    ? (() => {
+                        const { net, vat, total } = withVat(topupPriceSAR(customCredits));
+                        return `${toArabicDigits(customCredits)} نقطة — ${toArabicDigits(formatSAR(net))} + ${toArabicDigits(formatSAR(vat))} ضريبة = ${toArabicDigits(formatSAR(total))} ريال`;
+                      })()
+                    : `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة · كل ريال يشتري ${toArabicDigits(CREDITS_PER_SAR)} نقاط · تُضاف ١٥٪ ضريبة عند الدفع`}
               </p>
               {!paymentsReady && <p className="text-[11px] text-muted-foreground mt-2">بوابة الدفع قيد التفعيل — شحن النقاط سيتوفر قريباً</p>}
             </div>

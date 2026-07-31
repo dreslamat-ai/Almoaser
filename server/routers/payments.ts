@@ -7,6 +7,7 @@ import { getDb, getPlanById, getSubscriptionByUserId } from "../db";
 import { payments } from "../../drizzle/schema";
 import { createPaymentLink, getPaymentStatus, isMyFatoorahConfigured } from "../myfatoorah";
 import { yearlyPrice, topupPriceSAR, isValidTopupCredits, TOPUP_MIN_CREDITS, TOPUP_MAX_CREDITS } from "../credits";
+import { withVat } from "../../shared/tax";
 import { finalizePaymentByReference } from "../paymentFinalize";
 
 function appBaseUrl(reqOrigin?: string): string {
@@ -27,7 +28,10 @@ export const paymentsRouter = router({
       const plan = await getPlanById(input.planId);
       if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "الباقة غير موجودة" });
       const monthly = Number(plan.price);
-      const amount = input.billing === "yearly" ? yearlyPrice(monthly, plan.yearlyDiscountPct) : monthly;
+      const listed = input.billing === "yearly" ? yearlyPrice(monthly, plan.yearlyDiscountPct) : monthly;
+      // الأسعار معلنة بلا ضريبة وتُضاف عند التحصيل — amount هو المبلغ المحصَّل
+      // فعلاً ليطابق كشف البوابة، وvatAmount يفصل الجزء الذي ليس إيراداً.
+      const { vat, total: amount } = withVat(listed);
 
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
@@ -37,6 +41,7 @@ export const paymentsRouter = router({
         planId: plan.id,
         billing: input.billing,
         amount: String(amount),
+        vatAmount: String(vat),
         status: "pending",
       });
       const paymentId = Number((inserted as unknown as [{ insertId: number }])[0]?.insertId ?? 0);
@@ -68,7 +73,7 @@ export const paymentsRouter = router({
       }
       const sub = await getSubscriptionByUserId(ctx.user.id);
       if (!sub) throw new TRPCError({ code: "NOT_FOUND", message: "يجب الاشتراك في باقة أولاً" });
-      const amount = topupPriceSAR(input.credits);
+      const { vat, total: amount } = withVat(topupPriceSAR(input.credits));
 
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
@@ -77,6 +82,7 @@ export const paymentsRouter = router({
         purpose: "topup",
         credits: input.credits,
         amount: String(amount),
+        vatAmount: String(vat),
         status: "pending",
       });
       const paymentId = Number((inserted as unknown as [{ insertId: number }])[0]?.insertId ?? 0);

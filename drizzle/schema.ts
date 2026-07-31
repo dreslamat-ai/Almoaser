@@ -133,7 +133,11 @@ export const payments = mysqlTable("payments", {
   billing: mysqlEnum("billing", ["monthly", "yearly"]),
   // عدد النقاط عند الشحن
   credits: int("credits"),
+  // المبلغ المحصَّل فعلاً شاملاً الضريبة — هو ما يُطابق كشف بوابة الدفع
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  // ضريبة القيمة المضافة داخل amount. تبقى null للصفوف القديمة السابقة لتطبيق
+  // الضريبة، فيحسبها تقرير الإيرادات صفراً ولا تتغيّر أرقام الماضي بأثر رجعي.
+  vatAmount: decimal("vatAmount", { precision: 10, scale: 2 }),
   currency: varchar("currency", { length: 10 }).default("SAR").notNull(),
   status: mysqlEnum("status", ["pending", "paid", "failed", "expired"]).default("pending").notNull(),
   // معرف الفاتورة لدى MyFatoorah

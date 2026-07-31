@@ -695,11 +695,22 @@ export function AdminConsole() {
               </Button>
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
                 <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-3"><TrendingUp className="w-5 h-5" /></div>
                 <div className="text-2xl font-bold text-navy">{(revenueSummary?.totalPaidRevenue ?? 0).toLocaleString("ar-SA")} ريال</div>
                 <div className="text-sm text-muted-foreground">إجمالي الإيرادات الفعلية المحصّلة</div>
+                <div className="text-[11px] text-muted-foreground mt-1">صافٍ بعد استبعاد ضريبة القيمة المضافة</div>
+              </div>
+              {/* الضريبة المحصَّلة ليست إيراداً — تُعرض منفصلة كرقم مرجعي للإقرار */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center mb-3"><Receipt className="w-5 h-5" /></div>
+                <div className="text-2xl font-bold text-navy">{(revenueSummary?.vatThisQuarter ?? 0).toLocaleString("ar-SA")} ريال</div>
+                <div className="text-sm text-muted-foreground">ضريبة محصّلة — الربع الجاري</div>
+                <div className="text-[11px] text-muted-foreground mt-1">
+                  مستحقة للهيئة، ليست إيراداً
+                  {revenueSummary?.vatQuarterStart ? ` · منذ ${String(revenueSummary.vatQuarterStart).slice(0, 10)}` : ""}
+                </div>
               </div>
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
                 <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center mb-3"><Gift className="w-5 h-5" /></div>

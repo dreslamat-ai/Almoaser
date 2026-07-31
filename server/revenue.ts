@@ -14,9 +14,11 @@ export async function getRevenueSummary() {
     return { totalPaidRevenue: 0, totalAdminGrantsValue: 0, byMonth: [] as Array<{ month: string; paidRevenue: number; grantsValue: number }> };
   }
 
-  const [paidRows, grantsRows, monthlyRows] = await Promise.all([
+  const [paidRows, grantsRows, monthlyRows, vatRows] = await Promise.all([
     db
-      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      // الضريبة المحصَّلة ليست إيراداً بل أمانة تُورَّد للهيئة، فتُطرح.
+      // الصفوف السابقة لتطبيق الضريبة قيمتها null فتُحسب صفراً ولا يتغير الماضي.
+      .select({ total: sql<string>`coalesce(sum(${payments.amount} - coalesce(${payments.vatAmount}, 0)), 0)` })
       .from(payments)
       .where(and(eq(payments.status, "paid"), eq(payments.grantedByAdmin, false))),
     db
@@ -26,18 +28,35 @@ export async function getRevenueSummary() {
     db
       .select({
         month: sql<string>`date_format(${payments.createdAt}, '%Y-%m')`,
-        paidRevenue: sql<string>`coalesce(sum(case when ${payments.grantedByAdmin} = false and ${payments.status} = 'paid' then ${payments.amount} else 0 end), 0)`,
+        paidRevenue: sql<string>`coalesce(sum(case when ${payments.grantedByAdmin} = false and ${payments.status} = 'paid' then ${payments.amount} - coalesce(${payments.vatAmount}, 0) else 0 end), 0)`,
         grantsValue: sql<string>`coalesce(sum(case when ${payments.grantedByAdmin} = true then ${payments.equivalentValue} else 0 end), 0)`,
       })
       .from(payments)
       .groupBy(sql`date_format(${payments.createdAt}, '%Y-%m')`)
       .orderBy(desc(sql`date_format(${payments.createdAt}, '%Y-%m')`))
       .limit(12),
+    // ─── الضريبة المحصَّلة في الربع الجاري ───────────────────────────────────
+    // إقرار ضريبة القيمة المضافة في السعودية ربع سنوي، فالرقم المفيد هو ما
+    // حُصِّل منذ بداية الربع الحالي — يبدأ من صفر مع كل ربع بحكم النطاق نفسه،
+    // لا بتصفير مخزَّن يمكن أن يضيع أو يُنفَّذ مرتين.
+    db
+      .select({
+        total: sql<string>`coalesce(sum(coalesce(${payments.vatAmount}, 0)), 0)`,
+        since: sql<string>`makedate(year(now()), 1) + interval (quarter(now()) - 1) quarter`,
+      })
+      .from(payments)
+      .where(and(
+        eq(payments.status, "paid"),
+        eq(payments.grantedByAdmin, false),
+        sql`${payments.createdAt} >= makedate(year(now()), 1) + interval (quarter(now()) - 1) quarter`,
+      )),
   ]);
 
   return {
     totalPaidRevenue: Number(paidRows[0]?.total ?? 0),
     totalAdminGrantsValue: Number(grantsRows[0]?.total ?? 0),
+    vatThisQuarter: Number(vatRows[0]?.total ?? 0),
+    vatQuarterStart: String(vatRows[0]?.since ?? ""),
     byMonth: monthlyRows.map(r => ({
       month: r.month,
       paidRevenue: Number(r.paidRevenue),
