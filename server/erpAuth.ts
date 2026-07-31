@@ -177,6 +177,12 @@ export async function signupWithErpAccount(params: {
     await db.insert(erpnextConnections).values({ userId: user.id, ...connValues });
   }
 
+  // الرقم يخص المستخدم لا الاشتراك: الاشتراك قد يتغيّر ويظل صاحبه هو نفسه.
+  // يُحفظ غير مؤكَّد — التأكيد خطوة مستقلة لا يجوز أن يمنحها التسجيل ضمناً.
+  if (params.phone?.trim()) {
+    await db.update(users).set({ phone: params.phone.trim() }).where(eq(users.id, user.id));
+  }
+
   // إنشاء اشتراك تجريبي 3 أيام إن لم يوجد اشتراك سابق
   const TRIAL_DAYS = 3;
   const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);

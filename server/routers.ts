@@ -523,12 +523,16 @@ export const appRouter = router({
         password: z.string().min(1).max(256),
         planId: z.number().int().positive(),
         companyName: z.string().trim().max(255).optional(),
-        phone: z.string().trim().max(20).optional(),
+        phone: z.string().trim().min(6).max(24),
         provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
         database: z.string().trim().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const result = await signupWithErpAccount(input);
+        // نوحّد الرقم هنا لا في الواجهة: أي عميل يستدعي الـAPI مباشرة يمر بنفس القاعدة
+        const { normalizePhone } = await import("./phone");
+        const normPhone = normalizePhone(input.phone);
+        if (!normPhone.ok) throw new TRPCError({ code: "BAD_REQUEST", message: normPhone.error });
+        const result = await signupWithErpAccount({ ...input, phone: normPhone.e164 });
         if (!result.ok) {
           throw new TRPCError({ code: "BAD_REQUEST", message: result.error });
         }

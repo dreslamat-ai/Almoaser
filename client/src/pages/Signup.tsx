@@ -89,13 +89,17 @@ export default function Signup() {
       toast.error("اختر الباقة المناسبة لك");
       return;
     }
+    if (!phone.trim()) {
+      toast.error("أدخل رقم جوالك");
+      return;
+    }
     signupMutation.mutate({
       erpUrl: erpUrl.trim(),
       email: email.trim(),
       password,
       planId,
       companyName: companyName.trim() || undefined,
-      phone: phone.trim() || undefined,
+      phone: phone.trim(),
       provider,
       database: provider === "odoo" ? database.trim() : undefined,
     });
@@ -189,8 +193,10 @@ export default function Signup() {
                 <Input id="s-company" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="شركتك" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="s-phone">الجوال (اختياري)</Label>
-                <Input id="s-phone" dir="ltr" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+9665xxxxxxxx" className="text-left" />
+                <Label htmlFor="s-phone">رقم الجوال</Label>
+                <Input id="s-phone" dir="ltr" inputMode="tel" autoComplete="tel" value={phone}
+                  onChange={e => setPhone(e.target.value)} placeholder="05xxxxxxxx" className="text-left" />
+                <p className="text-[11px] text-muted-foreground mt-1">سنطلب تأكيده لاحقاً لتأمين حسابك</p>
               </div>
             </div>
             <Button type="submit" className="w-full h-11 gap-2" disabled={testCredsMutation.isPending}>
@@ -257,7 +263,7 @@ export default function Signup() {
               <Button variant="outline" className="h-11 gap-2" onClick={() => setStep(1)} disabled={signupMutation.isPending}>
                 <ArrowRight className="w-4 h-4" /> رجوع
               </Button>
-              <Button className="flex-1 h-11 gap-2" onClick={submit} disabled={signupMutation.isPending || !planId}>
+              <Button className="flex-1 h-11 gap-2" onClick={submit} disabled={signupMutation.isPending || !planId || !phone.trim()}>
                 {signupMutation.isPending
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق من نظامك وإنشاء الحساب...</>
                   : <><Sparkles className="w-4 h-4" /> ابدأ التجربة المجانية</>}
