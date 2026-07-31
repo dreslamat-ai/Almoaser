@@ -16,6 +16,7 @@ import { parsePermissions } from "../organizations";
 import type { MemberPermissions, User } from "../../drizzle/schema";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { trimHistory, messageCreditCost, MAX_MESSAGE_CHARS, MAX_MESSAGES } from "../../shared/chatLimits";
 
 // ─── صلاحيات المستخدمين الفرعيين على أدوات الوكيل ─────────────────────────────
 // null = القراءة/الاستخدام العام متاحة لكل المستخدمين (مالك أو فرعي) بلا قيد
@@ -1749,21 +1750,28 @@ export const agentRouter = router({
       conversationId: z.number().optional(),
       messages: z.array(z.object({
         role: z.enum(["user", "assistant", "tool"]),
-        content: z.string(),
+        // المتصفح يرسل التاريخ كاملاً والخصم نقطة واحدة مهما كبر، فبلا سقف
+        // يستطيع أي عميل تحميل الحساب تكلفة نموذج ضخمة مقابل نقطة.
+        content: z.string().max(MAX_MESSAGE_CHARS, `أقصى طول للرسالة ${MAX_MESSAGE_CHARS} حرف`),
         tool_call_id: z.string().optional(),
         tool_calls: z.array(z.object({
           id: z.string(),
           type: z.literal("function"),
           function: z.object({ name: z.string(), arguments: z.string() }),
         })).optional(),
-      })),
+      })).max(MAX_MESSAGES, "المحادثة طويلة جداً — ابدأ محادثة جديدة"),
     }))
     .mutation(async ({ input, ctx }) => {
-      // ─── خصم نقطة رصيد لكل رسالة (رسالة = 1 نقطة) — من رصيد المنظمة المشترك ───
+      // ─── خصم رصيد الرسالة — من رصيد المنظمة المشترك ───
+      // الرسالة الطويلة بنقطتين: التكلفة الفعلية يحكمها البرومبت الثابت لا نص
+      // العميل، لكن السقف يمنع أن تمر رسالة ضخمة بسعر رسالة عادية.
       const credits = await import("../credits");
+      const lastUserContent = [...input.messages].reverse().find(m => m.role === "user")?.content ?? "";
+      const messageCost = messageCreditCost(lastUserContent);
       try {
         if (ctx.effectiveUserId) {
-          await credits.deductCredits(ctx.effectiveUserId, credits.MESSAGE_COST, "message", "رسالة للوكيل الذكي");
+          await credits.deductCredits(ctx.effectiveUserId, messageCost, "message",
+            messageCost > 1 ? "رسالة طويلة للوكيل الذكي" : "رسالة للوكيل الذكي");
         }
       } catch (e) {
         if (e instanceof credits.InsufficientCreditsError) {
@@ -1920,7 +1928,10 @@ ${buildExpertSkillsSection(hasCfoSkill)}
         tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
       }> = [
         { role: "system", content: SYSTEM },
-        ...input.messages.map(m => ({
+        // نرسل آخر نافذة من التاريخ لا التاريخ كله: كل استدعاء يعيد إرسال
+        // السياق بالكامل، فمحادثة طويلة تضاعف تكلفة كل رسالة تالية فيها.
+        // القصّ يقع عند رسالة user حتى لا تُيتَّم رسالة tool فيُرفض الطلب.
+        ...trimHistory(input.messages).map(m => ({
           role: m.role,
           content: m.content,
           ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),

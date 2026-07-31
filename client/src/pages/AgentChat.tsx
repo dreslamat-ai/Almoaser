@@ -6,6 +6,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { MAX_MESSAGE_CHARS, LONG_MESSAGE_CHARS } from "@shared/chatLimits";
 import { Badge } from "@/components/ui/badge";
 import { Streamdown } from "streamdown";
 import { toast } from "sonner";
@@ -1600,7 +1601,10 @@ export default function AgentChat() {
               </Button>
               <Textarea
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                // القصّ هنا لا مجرد تحذير: السيرفر يرفض ما يتجاوز الحد، ورفضٌ
+                // بعد كتابة رسالة طويلة يضيّع ما كتبه العميل.
+                onChange={e => setInput(e.target.value.slice(0, MAX_MESSAGE_CHARS))}
+                maxLength={MAX_MESSAGE_CHARS}
                 onKeyDown={handleKey}
                 aria-label="اكتب رسالتك للوكيل الذكي" placeholder={recording ? "🎙️ جارٍ التسجيل... اضغط زر الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص..." : "اكتب أمرك أو تحدث بالصوت أو ارفع صورة فاتورة..."}
                 className="flex-1 min-h-[44px] max-h-32 resize-none text-sm"
@@ -1621,6 +1625,12 @@ export default function AgentChat() {
               <MessageSquare className="w-3 h-3 inline ml-1" />
               Enter للإرسال · 🎙️ تحدث بالصوت · 📷 ارفع صورة فاتورة/سند — الوكيل يفهم وينفذ مباشرة على Almoaser AI ERP
             </p>
+            {/* التكلفة تُعرض قبل الإرسال لا بعده — لا يُفاجأ العميل بخصم نقطتين */}
+            {input.length > LONG_MESSAGE_CHARS && (
+              <p className="text-xs text-amber-700 mt-1 text-center">
+                رسالة طويلة — ستُحتسب بنقطتين ({input.length.toLocaleString("ar-SA")} من {MAX_MESSAGE_CHARS.toLocaleString("ar-SA")} حرف)
+              </p>
+            )}
           </div>
         </Card>
       </div>
