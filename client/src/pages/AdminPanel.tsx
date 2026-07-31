@@ -806,7 +806,20 @@ function ChartTooltip({ active, payload, label }: {
 function RevenueTrendChart({ byMonth }: { byMonth: InsightsData["finance"]["byMonth"] }) {
   // المصدر يرجع الأحدث أولاً؛ نعكسه ليقرأ الزمن تصاعدياً ثم نعكس المحور ليبدأ الأقدم من اليمين
   const data = [...byMonth].reverse().map(r => ({ ...r, label: monthLabel(r.month) }));
-  if (data.length < 2) return null;
+
+  // خط بنقطة واحدة لا يرسم اتجاهاً — نوضّح السبب بدل إخفاء البطاقة بصمت
+  if (data.length < 2) {
+    return (
+      <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+        <h3 className="font-semibold text-navy mb-1">الإيراد الشهري مقابل المنح</h3>
+        <p className="text-[11.5px] text-muted-foreground">
+          {data.length === 0
+            ? "لا توجد مدفوعات مسجّلة بعد — سيظهر المخطط تلقائياً بعد أول عملية دفع."
+            : `البيانات المتاحة شهر واحد فقط (${data[0].label}) — يحتاج المخطط شهرين على الأقل ليُظهر اتجاهاً.`}
+        </p>
+      </div>
+    );
+  }
 
   const lastIndex = data.length - 1;
   const latest = data[lastIndex];
