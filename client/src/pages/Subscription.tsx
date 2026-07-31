@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Zap, Bot, BookOpen, Crown, Coins, Plus, History, BarChart3 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toArabicDigits, digitsOnly } from "@shared/digits";
-import { TOPUP_MIN_CREDITS } from "@shared/credits";
+import { TOPUP_MIN_CREDITS, CREDITS_PER_SAR, topupPriceSAR, formatSAR } from "@shared/credits";
 
 export default function Subscription() {
   const { isAuthenticated, loading } = useAuth();
@@ -162,7 +162,7 @@ export default function Subscription() {
                 {[50, 100, 200, 500].map(c => (
                   <Button key={c} size="sm" variant="outline" className="border-gold/50 text-gold-ink hover:bg-gold/10 gap-1"
                     disabled={topupMutation.isPending} onClick={() => handleTopup(c)}>
-                    <Plus className="w-3.5 h-3.5" /> {toArabicDigits(c)} نقطة — {toArabicDigits(c)} ريال
+                    <Plus className="w-3.5 h-3.5" /> {toArabicDigits(c)} نقطة — {toArabicDigits(formatSAR(topupPriceSAR(c)))} ريال
                   </Button>
                 ))}
               </div>
@@ -202,8 +202,8 @@ export default function Subscription() {
                 {customTopup !== "" && !customValid
                   ? `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة`
                   : customValid
-                    ? `${toArabicDigits(customCredits)} نقطة — ${toArabicDigits(customCredits)} ريال`
-                    : `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة · النقطة بريال`}
+                    ? `${toArabicDigits(customCredits)} نقطة — ${toArabicDigits(formatSAR(topupPriceSAR(customCredits)))} ريال`
+                    : `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة · كل ريال يشتري ${toArabicDigits(CREDITS_PER_SAR)} نقاط`}
               </p>
               {!paymentsReady && <p className="text-[11px] text-muted-foreground mt-2">بوابة الدفع قيد التفعيل — شحن النقاط سيتوفر قريباً</p>}
             </div>
