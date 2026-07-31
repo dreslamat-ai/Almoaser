@@ -13,6 +13,9 @@
   --color-gold: oklch(0.72 0.14 75);
   --color-gold-light: oklch(0.82 0.12 75);
   --color-gold-dark: oklch(0.58 0.16 75);
+  /* ذهبي للنصوص على خلفية فاتحة: --color-gold يعطي تبايناً 2.4:1 فقط وهو غير مقروء.
+     يُستخدم مع text-gold-ink حيثما كان الذهبي نصاً لا خلفية. */
+  --color-gold-ink: oklch(0.40 0.12 75);
   --color-brand-red: oklch(0.55 0.20 25);
 
   /* ─── Semantic Tokens ─── */
@@ -45,6 +48,9 @@
   --color-sidebar-accent-foreground: oklch(1 0 0);
   --color-sidebar-border: oklch(0.30 0.07 245);
   --color-sidebar-ring: oklch(0.72 0.14 75);
+  /* نص ثانوي فوق الشريط الكحلي: muted-foreground العام مصمَّم لخلفية فاتحة
+     ويعطي 3.1:1 هنا فقط. هذا الرمز يتجاوز 4.5:1 فوق --color-sidebar. */
+  --color-sidebar-muted-foreground: oklch(0.80 0.03 245);
 
   --radius: 0.75rem;
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;

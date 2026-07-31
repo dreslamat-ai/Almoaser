@@ -141,7 +141,7 @@ export default function Login() {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="password">كلمة المرور</Label>
-              <Link href="/forgot-password" className="text-xs text-primary hover:underline">نسيت كلمة المرور؟</Link>
+              <Link href="/forgot-password" className="text-xs text-primary hover:underline inline-flex items-center [@media(pointer:coarse)]:min-h-11">نسيت كلمة المرور؟</Link>
             </div>
             <div className="relative">
               <Input
@@ -158,7 +158,9 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setShowPassword(s => !s)}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                aria-pressed={showPassword}
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

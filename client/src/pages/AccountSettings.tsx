@@ -68,12 +68,12 @@ export default function AccountSettings() {
           <form onSubmit={e => { e.preventDefault(); profileMutation.mutate({ name: profile.name || undefined, email: profile.email || undefined }); }} className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label className="text-navy font-medium">الاسم</Label>
-                <Input value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} placeholder="اسمك الكامل" className="mt-1" />
+                <Label htmlFor="acc-name" className="text-navy font-medium">الاسم</Label>
+                <Input value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} id="acc-name" placeholder="اسمك الكامل" className="mt-1" />
               </div>
               <div>
-                <Label className="text-navy font-medium">البريد الإلكتروني</Label>
-                <Input type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} placeholder="you@example.com" className="mt-1" dir="ltr" />
+                <Label htmlFor="acc-email" className="text-navy font-medium">البريد الإلكتروني</Label>
+                <Input type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} id="acc-email" placeholder="you@example.com" className="mt-1" dir="ltr" />
               </div>
             </div>
             <Button type="submit" disabled={profileMutation.isPending} className="bg-navy-gradient text-white">
@@ -100,20 +100,20 @@ export default function AccountSettings() {
             <form onSubmit={e => { e.preventDefault(); companyMutation.mutate(company); }} className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-navy font-medium">اسم الشركة</Label>
-                  <Input value={company.companyName} onChange={e => setCompany(c => ({ ...c, companyName: e.target.value }))} placeholder="اسم شركتك" className="mt-1" />
+                  <Label htmlFor="co-name" className="text-navy font-medium">اسم الشركة</Label>
+                  <Input value={company.companyName} onChange={e => setCompany(c => ({ ...c, companyName: e.target.value }))} id="co-name" placeholder="اسم شركتك" className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-navy font-medium">نوع النشاط</Label>
-                  <Input value={company.companyType} onChange={e => setCompany(c => ({ ...c, companyType: e.target.value }))} placeholder="مثال: تجارة تجزئة" className="mt-1" />
+                  <Label htmlFor="co-type" className="text-navy font-medium">نوع النشاط</Label>
+                  <Input value={company.companyType} onChange={e => setCompany(c => ({ ...c, companyType: e.target.value }))} id="co-type" placeholder="مثال: تجارة تجزئة" className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-navy font-medium">رقم الجوال</Label>
-                  <Input value={company.phone} onChange={e => setCompany(c => ({ ...c, phone: e.target.value }))} placeholder="05xxxxxxxx" className="mt-1" dir="ltr" />
+                  <Label htmlFor="co-phone" className="text-navy font-medium">رقم الجوال</Label>
+                  <Input value={company.phone} onChange={e => setCompany(c => ({ ...c, phone: e.target.value }))} id="co-phone" placeholder="05xxxxxxxx" className="mt-1" dir="ltr" />
                 </div>
                 <div>
-                  <Label className="text-navy font-medium">الرقم الضريبي</Label>
-                  <Input value={company.vatNumber} onChange={e => setCompany(c => ({ ...c, vatNumber: e.target.value }))} placeholder="3xxxxxxxxxxxxxx" className="mt-1" dir="ltr" />
+                  <Label htmlFor="co-vat" className="text-navy font-medium">الرقم الضريبي</Label>
+                  <Input value={company.vatNumber} onChange={e => setCompany(c => ({ ...c, vatNumber: e.target.value }))} id="co-vat" placeholder="3xxxxxxxxxxxxxx" className="mt-1" dir="ltr" />
                 </div>
               </div>
               <Button type="submit" disabled={companyMutation.isPending} className="bg-navy-gradient text-white">
@@ -138,7 +138,7 @@ export default function AccountSettings() {
               <p className="text-xs text-muted-foreground">انتقلت إدارة اتصال نظام ERP إلى صفحة القنوات والربط لتكون مع إعدادات واتساب وتيليجرام</p>
             </div>
             {erpConn && (
-              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-3 py-1">
+              <span className="flex items-center gap-1 text-xs text-green-800 bg-green-50 border border-green-200 rounded-full px-3 py-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 متصل
               </span>
@@ -180,7 +180,7 @@ function EmailSettingsCard({ isAuthenticated }: { isAuthenticated: boolean }) {
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="font-semibold text-navy">البريد الإلكتروني</h2>
             {data.verified ? (
-              <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-2.5 py-0.5">
+              <span className="flex items-center gap-1 text-xs text-green-800 bg-green-50 border border-green-200 rounded-full px-2.5 py-0.5">
                 <CheckCircle2 className="w-3.5 h-3.5" /> مؤكَّد
               </span>
             ) : (

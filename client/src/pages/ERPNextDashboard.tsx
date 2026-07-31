@@ -117,10 +117,10 @@ export default function ERPNextDashboard() {
       <div className="space-y-5 max-w-7xl mx-auto" key={refreshKey}>
 
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-foreground">لوحة التحكم</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">نظرة عامة على أداء الشركة · demo.almoaser.cloud</p>
+            <p className="text-xs text-muted-foreground mt-0.5 break-words">نظرة عامة على أداء الشركة · demo.almoaser.cloud</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-1.5 h-8 text-xs">

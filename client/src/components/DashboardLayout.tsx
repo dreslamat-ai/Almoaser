@@ -77,11 +77,11 @@ function PWAInstallBanner() {
         <span>ثبّت التطبيق على جهازك للوصول السريع</span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <button onClick={() => void install()} className="px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 transition-colors text-xs font-medium">
+        <button onClick={() => void install()} className="px-4 min-h-11 rounded-md bg-white/20 hover:bg-white/30 transition-colors text-xs font-medium">
           تثبيت
         </button>
-        <button onClick={dismiss} className="hover:bg-white/20 rounded p-0.5 transition-colors">
-          <X className="w-3.5 h-3.5" />
+        <button onClick={dismiss} aria-label="إخفاء إشعار التثبيت" className="hover:bg-white/20 rounded min-w-11 min-h-11 flex items-center justify-center transition-colors">
+          <X className="w-4 h-4" />
         </button>
       </div>
     </div>
@@ -214,10 +214,10 @@ function DashboardLayoutContent({
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
-                aria-label="Toggle navigation"
+                className="h-11 w-11 flex items-center justify-center hover:bg-sidebar-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring shrink-0"
+                aria-label="طيّ أو فتح القائمة الجانبية"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                <PanelLeft className="h-4 w-4 text-sidebar-muted-foreground" />
               </button>
              {!isCollapsed ? (
                <div className="flex items-center gap-2 min-w-0">
@@ -226,11 +226,12 @@ function DashboardLayoutContent({
                     alt="المعاصر"
                     className="h-8 w-8 rounded-lg shrink-0 object-contain bg-white"
                   />
+                  {/* الشريط خلفيته كحلية: text-foreground هنا أسود على كحلي (1.05:1) */}
                   <div className="flex flex-col min-w-0 leading-tight">
-                    <span className="font-bold tracking-tight truncate text-foreground text-sm">
+                    <span className="font-bold tracking-tight truncate text-sidebar-foreground text-sm">
                       Almoaser AI ERP
                     </span>
-                    <span className="text-[10px] text-muted-foreground truncate">
+                    <span className="text-[11px] text-sidebar-muted-foreground truncate">
                       حساباتك في أمان
                     </span>
                   </div>
@@ -265,17 +266,21 @@ function DashboardLayoutContent({
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
+                <button
+                  aria-label={`حساب ${user?.name || "المستخدم"} — فتح القائمة`}
+                  className="flex items-center gap-3 rounded-lg px-1 py-2 min-h-11 hover:bg-sidebar-accent transition-colors w-full text-right group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                >
+                  {/* الحرف كان يرث لون نص الشريط (أبيض) فوق خلفية فاتحة = غير مرئي */}
+                  <Avatar className="h-9 w-9 border border-sidebar-border shrink-0">
+                    <AvatarFallback className="text-xs font-bold bg-sidebar-accent text-sidebar-foreground">
                       {user?.name?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
+                    <p className="text-sm font-medium truncate leading-none text-sidebar-foreground">
                       {user?.name || "-"}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
+                    <p className="text-xs text-sidebar-muted-foreground truncate mt-1.5">
                       {user?.email || "-"}
                     </p>
                   </div>
@@ -308,7 +313,7 @@ function DashboardLayoutContent({
           {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
+              <SidebarTrigger className="h-11 w-11 rounded-lg bg-background" />
               <div className="flex items-center gap-3">
                 <div className="flex flex-col gap-1">
                   <span className="tracking-tight text-foreground">

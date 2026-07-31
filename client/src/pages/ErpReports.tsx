@@ -18,7 +18,7 @@ function KpiBox({ title, value, subtitle, icon: Icon, color }: {
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">{title}</p>
           <p className="text-lg font-bold truncate">{value}</p>
-          <p className="text-[10px] text-muted-foreground">{subtitle}</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
       </CardContent>
     </Card>
@@ -132,14 +132,27 @@ export default function ErpReports() {
               {pieData.length === 0 ? (
                 <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">لا توجد بيانات</div>
               ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, value }) => `${name}: ${value}`}>
-                      {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      {/* بلا تسميات على الشرائح: recharts يلوّنها بلون الشريحة نفسها،
+                          فتصير أخضر/رمادي على أبيض بتباين 2.5:1. المفتاح تحت يحمل الهوية. */}
+                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
+                        {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="#fff" strokeWidth={2} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <ul className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 mt-2">
+                    {pieData.map(d => (
+                      <li key={d.name} className="flex items-center gap-1.5 text-xs text-foreground">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} aria-hidden="true" />
+                        {d.name}
+                        <span className="font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>{d.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </CardContent>
           </Card>

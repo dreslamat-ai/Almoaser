@@ -38,7 +38,7 @@ export default function ErpCustomers() {
         <div className="relative max-w-sm">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="ابحث باسم العميل..."
+            aria-label="ابحث باسم العميل" placeholder="ابحث باسم العميل..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="pr-9 h-9 text-sm"

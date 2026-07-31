@@ -102,7 +102,7 @@ export default function Subscription() {
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="text-sm">
                         <span className="text-white/80">الدفع السنوي: </span>
-                        <span className="font-bold text-gold">{yearlyTotal.toLocaleString("ar-SA")} ريال/سنة</span>
+                        <span className="font-bold text-gold-ink">{yearlyTotal.toLocaleString("ar-SA")} ريال/سنة</span>
                         <span className="text-white/60 text-xs"> بدلاً من {(monthly * 12).toLocaleString("ar-SA")} ريال</span>
                         <div className="text-xs text-emerald-300 mt-0.5">توفّر {saved.toLocaleString("ar-SA")} ريال (خصم {pct}%)</div>
                       </div>
@@ -131,7 +131,7 @@ export default function Subscription() {
             <div className="bg-white rounded-2xl p-6 border-2 border-gold/40">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Coins className="w-6 h-6 text-gold-dark" />
+                  <Coins className="w-6 h-6 text-gold-ink" />
                   <span className="font-bold text-navy">رصيد النقاط</span>
                 </div>
                 <button onClick={() => setShowHistory(v => !v)} className="text-xs text-muted-foreground hover:text-navy flex items-center gap-1">
@@ -148,7 +148,7 @@ export default function Subscription() {
               <p className="text-xs text-muted-foreground mb-3">كل رسالة للوكيل = نقطة واحدة • كل مستند = 5 نقاط • يتجدد الرصيد شهرياً</p>
               <div className="flex flex-wrap gap-2">
                 {[100, 200, 500].map(c => (
-                  <Button key={c} size="sm" variant="outline" className="border-gold/50 text-gold-dark hover:bg-gold/10 gap-1"
+                  <Button key={c} size="sm" variant="outline" className="border-gold/50 text-gold-ink hover:bg-gold/10 gap-1"
                     disabled={topupMutation.isPending} onClick={() => handleTopup(c)}>
                     <Plus className="w-3.5 h-3.5" /> {c} نقطة — {c} ريال
                   </Button>
@@ -176,7 +176,7 @@ export default function Subscription() {
                 <div className="text-xs text-muted-foreground">رسالة</div>
               </div>
               <div className="bg-gray-50 rounded-xl p-3 text-center">
-                <div className="text-xl font-bold text-gold-dark">{usageSummary.totalCreditsConsumed}</div>
+                <div className="text-xl font-bold text-gold-ink">{usageSummary.totalCreditsConsumed}</div>
                 <div className="text-xs text-muted-foreground">نقطة مستهلكة</div>
               </div>
             </div>
@@ -231,7 +231,7 @@ export default function Subscription() {
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-navy text-white" : "text-muted-foreground"}`}>شهري</button>
             <button onClick={() => setBilling("yearly")}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${billing === "yearly" ? "bg-navy text-white" : "text-muted-foreground"}`}>
-              سنوي <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-dark"}`}>-15%</span>
+              سنوي <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-ink"}`}>-15%</span>
             </button>
           </div>
         </div>
@@ -247,7 +247,7 @@ export default function Subscription() {
             const yearlyPerMonth = Math.round(yearlyTotal / 12);
             return (
               <div key={plan.id} className={`rounded-2xl border-2 bg-white p-6 relative ${isCurrent ? "border-gold" : isPopular ? "border-navy" : "border-gray-200"}`}>
-                {isCurrent && <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-gold text-white text-xs font-bold px-3 py-1 rounded-full">باقتك الحالية</div>}
+                {isCurrent && <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-gold text-navy text-xs font-bold px-3 py-1 rounded-full">باقتك الحالية</div>}
                 {isPopular && !isCurrent && <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-navy text-white text-xs font-bold px-3 py-1 rounded-full">الأكثر طلباً</div>}
                 <div className={`w-12 h-12 rounded-xl mb-4 flex items-center justify-center ${isPopular ? "bg-navy-gradient text-white" : "bg-gray-100 text-navy"}`}>{planIcons[i]}</div>
                 <h3 className="text-xl font-bold text-navy mb-1">{plan.nameAr}</h3>
@@ -264,13 +264,13 @@ export default function Subscription() {
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
                       <span className="line-through">{(monthly * 12).toLocaleString("ar-SA")}</span>
-                      <span className="text-gold-dark font-bold mr-1"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
+                      <span className="text-gold-ink font-bold mr-1"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
                     </div>
                   </div>
                 )}
                 <div className="flex items-center gap-2 mb-4 text-[11px] font-medium">
                   <span className="px-2 py-0.5 rounded-full bg-navy/5 text-navy">{plan.maxDocuments ?? 30} مستنداً/شهر</span>
-                  <span className="px-2 py-0.5 rounded-full bg-gold/10 text-gold-dark">{plan.monthlyCredits ?? 150} نقطة/شهر</span>
+                  <span className="px-2 py-0.5 rounded-full bg-gold/10 text-gold-ink">{plan.monthlyCredits ?? 150} نقطة/شهر</span>
                 </div>
                 <ul className="space-y-2 mb-6">
                   {features.map((f, j) => (

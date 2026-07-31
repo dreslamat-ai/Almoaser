@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId, isValidElement, cloneElement } from "react";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,11 +16,18 @@ import {
 } from "lucide-react";
 
 function FieldGroup({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+  // كانت التسمية مجاورة للحقل بصرياً فقط بلا htmlFor، فقارئ الشاشة ومدير كلمات
+  // المرور لا يعرفان الحقل. نولّد معرّفاً ونمرّره للحقل إن لم يكن له واحد.
+  const autoId = useId();
+  const child = isValidElement<{ id?: string }>(children)
+    ? cloneElement(children, { id: children.props.id ?? autoId })
+    : children;
+  const htmlFor = isValidElement<{ id?: string }>(children) ? (children.props.id ?? autoId) : undefined;
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm font-medium">{label}</Label>
+      <Label htmlFor={htmlFor} className="text-sm font-medium">{label}</Label>
       {description && <p className="text-xs text-muted-foreground">{description}</p>}
-      {children}
+      {child}
     </div>
   );
 }
@@ -81,7 +88,7 @@ function ErpConnectionCard() {
         <form onSubmit={e => { e.preventDefault(); erpSaveMutation.mutate(erp); }} className="space-y-4">
           <FieldGroup label="نوع النظام">
             <Select value={erp.provider} onValueChange={v => setErp(p => ({ ...p, provider: v as "erpnext" | "odoo" }))}>
-              <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="نوع نظام ERP" className="text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="erpnext">ERPNext</SelectItem>
                 <SelectItem value="odoo">Odoo</SelectItem>
@@ -102,8 +109,8 @@ function ErpConnectionCard() {
             </FieldGroup>
             <FieldGroup label="كلمة المرور" description="تُحفظ مشفرة (AES-256) ولا تُعرض مجدداً">
               <div className="relative">
-                <Input type={showPwd ? "text" : "password"} value={erp.password} onChange={e => setErp(p => ({ ...p, password: e.target.value }))} placeholder={erpConn ? "••••••• (اتركها فارغة للإبقاء)" : "كلمة المرور"} dir="ltr" className="pl-10 font-mono text-xs" />
-                <button type="button" onClick={() => setShowPwd(s => !s)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <Input id="erp-password" aria-label="كلمة مرور نظام ERP" type={showPwd ? "text" : "password"} value={erp.password} onChange={e => setErp(p => ({ ...p, password: e.target.value }))} placeholder={erpConn ? "••••••• (اتركها فارغة للإبقاء)" : "كلمة المرور"} dir="ltr" className="pl-10 font-mono text-xs" />
+                <button type="button" onClick={() => setShowPwd(s => !s)} aria-label={showPwd ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"} aria-pressed={showPwd} className="absolute left-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-muted-foreground hover:text-foreground">
                   {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -211,7 +218,7 @@ export default function ChannelSettings() {
                   <p className="text-xs text-muted-foreground">الرد التلقائي على الرسائل الواردة</p>
                 </div>
               </div>
-              <Switch checked={agentEnabled} onCheckedChange={setAgentEnabled} />
+              <Switch checked={agentEnabled} onCheckedChange={setAgentEnabled} aria-label="تفعيل الوكيل الذكي" />
             </div>
           </CardContent>
         </Card>
@@ -240,13 +247,13 @@ export default function ChannelSettings() {
                 <div className="relative">
                   <Input
                     type={showTokens ? "text" : "password"}
-                    placeholder="EAAxxxxxxxxxx..."
+                    aria-label="رمز الوصول (Access Token)" placeholder="EAAxxxxxxxxxx..."
                     value={waToken}
                     onChange={e => setWaToken(e.target.value)}
                     className="pl-10 font-mono text-xs"
                     dir="ltr"
                   />
-                  <button className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowTokens(v => !v)}>
+                  <button type="button" aria-label={showTokens ? "إخفاء الرموز" : "إظهار الرموز"} aria-pressed={showTokens} className="absolute left-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-muted-foreground hover:text-foreground" onClick={() => setShowTokens(v => !v)}>
                     {showTokens ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
@@ -276,7 +283,7 @@ export default function ChannelSettings() {
 
             {/* Test */}
             <div className="flex items-center gap-2">
-              <Input placeholder="رقم الاختبار (مثال: 96891234567)" value={waTestNumber} onChange={e => setWaTestNumber(e.target.value)} className="flex-1 text-sm" dir="ltr" />
+              <Input aria-label="رقم واتساب للاختبار" placeholder="رقم الاختبار (مثال: 96891234567)" value={waTestNumber} onChange={e => setWaTestNumber(e.target.value)} className="flex-1 text-sm" dir="ltr" />
               <Button
                 variant="outline" size="sm"
                 disabled={!waToken || !waPhoneId || !waTestNumber || testWaMutation.isPending}
@@ -314,7 +321,7 @@ export default function ChannelSettings() {
                 <div className="relative">
                   <Input
                     type={showTokens ? "text" : "password"}
-                    placeholder="123456:ABCdef..."
+                    aria-label="رمز بوت تليجرام" placeholder="123456:ABCdef..."
                     value={tgToken}
                     onChange={e => setTgToken(e.target.value)}
                     className="font-mono text-xs"

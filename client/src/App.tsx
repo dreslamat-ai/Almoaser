@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Redirect, Route, Switch } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -22,6 +23,39 @@ import ForgotPassword from "./pages/ForgotPassword";
 import Signup from "./pages/Signup";
 import PaymentCallback from "./pages/PaymentCallback";
 import VerifyEmail from "./pages/VerifyEmail";
+
+const BRAND = "Almoaser AI ERP — المعاصر";
+/** كل المسارات كانت تشترك في عنوان واحد، فالتبويبات والسجل والمفضّلة بلا تمييز */
+const PAGE_TITLES: Record<string, string> = {
+  "/": "حساباتك في أمان",
+  "/home": "حساباتك في أمان",
+  "/login": "تسجيل الدخول",
+  "/signup": "إنشاء حساب",
+  "/forgot-password": "استعادة الدخول",
+  "/verify-email": "تأكيد البريد الإلكتروني",
+  "/dashboard": "الرئيسية",
+  "/tasks": "المهام",
+  "/invoices": "الفواتير",
+  "/subscription": "الاشتراك",
+  "/payment/callback": "تأكيد الدفع",
+  "/erp": "لوحة ERP",
+  "/erp/invoices": "فواتير ERP",
+  "/erp/customers": "العملاء",
+  "/erp/reports": "التقارير",
+  "/agent": "المحادثة الذكية",
+  "/channels": "إعدادات القنوات",
+  "/settings": "إعدادات الحساب",
+  "/team": "الفريق",
+};
+
+function DocumentTitle() {
+  const [location] = useLocation();
+  useEffect(() => {
+    const page = PAGE_TITLES[location];
+    document.title = page ? `${page} · ${BRAND}` : `الصفحة غير موجودة · ${BRAND}`;
+  }, [location]);
+  return null;
+}
 
 function Router() {
   return (
@@ -59,6 +93,7 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
+          <DocumentTitle />
           <Router />
         </TooltipProvider>
       </ThemeProvider>

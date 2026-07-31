@@ -148,7 +148,7 @@ function MemberRow({ member }: { member: {
         <div className="min-w-0">
           <div className="font-medium text-navy text-sm flex items-center gap-2">
             {member.name ?? "بدون اسم"}
-            {member.orgRole === "owner" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/15 text-gold-dark font-bold">مالك الحساب</span>}
+            {member.orgRole === "owner" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/15 text-gold-ink font-bold">مالك الحساب</span>}
             {!member.isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full badge-cancelled font-bold">معطّل</span>}
           </div>
           <div className="text-xs text-muted-foreground flex items-center gap-1 truncate">

@@ -99,7 +99,7 @@ function Navbar() {
             <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر" className="w-8 h-8 object-contain" />
           </div>
           <div>
-            <span className="font-bold text-lg text-navy">Almoaser <span className="text-gold font-light text-sm">AI ERP</span></span>
+            <span className="font-bold text-lg text-navy">Almoaser <span className="text-gold-ink font-light text-sm">AI ERP</span></span>
             <div className="text-[10px] text-muted-foreground leading-none">خدمات مسك الدفاتر</div>
           </div>
         </div>
@@ -155,13 +155,13 @@ function HeroSection() {
           <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
             {isAuthenticated ? (
               <Button size="lg" onClick={() => navigate("/erp")}
-                className="bg-gold text-white hover:bg-gold/90 text-base px-8 py-4 h-auto">
+                className="bg-gold text-navy hover:bg-gold/90 text-base px-8 py-4 h-auto font-semibold">
                 الذهاب للوحة التحكم
                 <ArrowLeft className="w-5 h-5 mr-2" />
               </Button>
             ) : (
               <Button size="lg" onClick={() => navigate("/signup")}
-                className="bg-gold text-white hover:bg-gold/90 text-base px-8 py-4 h-auto">
+                className="bg-gold text-navy hover:bg-gold/90 text-base px-8 py-4 h-auto font-semibold">
                 ابدأ تجربتك المجانية
                 <ArrowLeft className="w-5 h-5 mr-2" />
               </Button>
@@ -242,7 +242,7 @@ function HowItWorksSection() {
     <section id="how" className="py-24" ref={ref}>
       <div className="container">
         <div className={`text-center mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/10 text-gold-dark text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/10 text-gold-ink text-sm font-medium mb-4">
             <Clock className="w-4 h-4" />
             كيف نعمل
           </div>
@@ -313,7 +313,7 @@ function TelegramDemoSection() {
             محاكاة حية
           </div>
           <h2 className="text-4xl font-bold text-navy mb-4">
-            شاهد النظام الذكي <span className="text-gold">يعمل الآن</span>
+            شاهد النظام الذكي <span className="text-gold-ink">يعمل الآن</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             أرسل أمراً بالعربية عبر تليجرام أو من الموقع مباشرة — النظام يفهمه وينفذه في نظامك المحاسبي خلال ثوانٍ.
@@ -354,7 +354,7 @@ function TelegramDemoSection() {
                 </div>
                 {/* رأس المحادثة */}
                 <div className="bg-[#242f3d] px-4 py-3 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#2ea6da] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">AI</div>
+                  <div className="w-10 h-10 rounded-full bg-[#12719e] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">AI</div>
                   <div>
                     <p className="text-white font-semibold text-sm">Almoaser Bot</p>
                     <p className="text-[#5eb5f7] text-xs flex items-center gap-1">
@@ -519,7 +519,7 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
               className={`px-5 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${billing === "yearly" ? "bg-navy text-white shadow" : "text-muted-foreground hover:text-navy"}`}
             >
               سنوي
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-dark"}`}>خصم 15%</span>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-ink"}`}>خصم 15%</span>
             </button>
           </div>
         </div>
@@ -558,13 +558,13 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
                         <span className="line-through">{(monthly * 12).toLocaleString("ar-SA")}</span>
-                        <span className="text-gold-dark font-bold mr-1"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
+                        <span className="text-gold-ink font-bold mr-1"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
                       </div>
                     </div>
                   )}
                   <div className="flex items-center gap-2 mb-6 text-xs font-medium">
                     <span className="px-2 py-1 rounded-full bg-navy/5 text-navy">{plan.maxDocuments ?? 30} مستنداً / شهر</span>
-                    <span className="px-2 py-1 rounded-full bg-gold/10 text-gold-dark">{plan.monthlyCredits ?? 150} نقطة / شهر</span>
+                    <span className="px-2 py-1 rounded-full bg-gold/10 text-gold-ink">{plan.monthlyCredits ?? 150} نقطة / شهر</span>
                   </div>
                   <ul className="space-y-3 mb-8">
                     {features.map((f, j) => (
@@ -821,7 +821,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                         </p>
                       </div>
                       {!phoneTouched && (
-                        <p className="text-xs text-gray-400 mt-1">الصيغ المقبولة: 0512345678 أو +966512345678</p>
+                        <p className="text-xs text-gray-600 mt-1">الصيغ المقبولة: 0512345678 أو +966512345678</p>
                       )}
                       {phoneTouched && isPhoneValid && (
                         <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
@@ -865,7 +865,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                       onChange={e => setForm(f => ({ ...f, businessSector: e.target.value }))}
                       placeholder="مثال: استيراد وتصدير مواد غذائية، مقاولات بنية تحتية..."
                       className="mt-1" />
-                    <p className="text-xs text-gray-400 mt-1">اختياري — يساعدنا في تخصيص الخدمة لنشاطك</p>
+                    <p className="text-xs text-gray-600 mt-1">اختياري — يساعدنا في تخصيص الخدمة لنشاطك</p>
                   </div>
                   <div>
                     <Label className="text-navy font-medium">الباقة المهتم بها</Label>

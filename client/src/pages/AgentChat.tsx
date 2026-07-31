@@ -1360,19 +1360,20 @@ export default function AgentChat() {
     <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-6rem)] max-w-4xl mx-auto gap-3">
         {/* Header */}
-       <div className="flex items-center justify-between shrink-0">
-         <div className="flex items-center gap-3">
+       {/* يلتف على الشاشات الضيقة: بدون ذلك يتجاوز محتواه عرض الجوال ويُزيح الصفحة كلها */}
+       <div className="flex items-center justify-between gap-2 shrink-0 flex-wrap">
+         <div className="flex items-center gap-3 min-w-0">
             <img
               src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
               alt="المعاصر AI"
-              className="w-10 h-10 rounded-xl object-contain bg-white border border-border"
+              className="w-10 h-10 rounded-xl object-contain bg-white border border-border shrink-0"
             />
-           <div>
-              <h1 className="text-lg font-bold text-foreground">المعاصر AI — المحاسب الذكي</h1>
-             <p className="text-xs text-muted-foreground">متصل بـ Almoaser AI ERP · ينفذ العمليات مباشرة</p>
+           <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-foreground truncate">المعاصر AI — المحاسب الذكي</h1>
+             <p className="text-xs text-muted-foreground truncate">متصل بـ Almoaser AI ERP · ينفذ العمليات مباشرة</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <NotificationBell />
             {creditsInfo && (() => {
               const low = creditsInfo.monthlyCredits > 0 && creditsInfo.balance / creditsInfo.monthlyCredits <= 0.15;
@@ -1389,7 +1390,7 @@ export default function AgentChat() {
                 </button>
               );
             })()}
-            <Badge variant="outline" className="text-xs gap-1 text-emerald-600 border-emerald-200 bg-emerald-50">
+            <Badge variant="outline" className="text-xs gap-1 text-emerald-800 border-emerald-200 bg-emerald-50">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               متصل
             </Badge>
@@ -1600,13 +1601,14 @@ export default function AgentChat() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKey}
-                placeholder={recording ? "🎙️ جارٍ التسجيل... اضغط زر الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص..." : "اكتب أمرك أو تحدث بالصوت أو ارفع صورة فاتورة..."}
+                aria-label="اكتب رسالتك للوكيل الذكي" placeholder={recording ? "🎙️ جارٍ التسجيل... اضغط زر الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص..." : "اكتب أمرك أو تحدث بالصوت أو ارفع صورة فاتورة..."}
                 className="flex-1 min-h-[44px] max-h-32 resize-none text-sm"
                 rows={1}
                 disabled={chatMutation.isPending || recording || transcribing}
               />
               <Button
                 onClick={() => void send()}
+                aria-label="إرسال الرسالة"
                 disabled={!input.trim() || chatMutation.isPending}
                 size="icon"
                 className="h-11 w-11 shrink-0"

@@ -291,7 +291,7 @@ export default function Dashboard() {
               <p className="text-white/70 text-sm">أرسل أوامرك عبر تليجرام وسينفذها النظام الذكي فوراً بإشراف محاسبينا</p>
             </div>
             <a href="https://t.me/AlmoaserBot" target="_blank" rel="noopener noreferrer">
-              <Button className="bg-gold text-white hover:bg-gold/90 flex-shrink-0">تواصل عبر تليجرام</Button>
+              <Button className="bg-gold text-navy hover:bg-gold/90 flex-shrink-0 font-semibold">تواصل عبر تليجرام</Button>
             </a>
           </div>
         </div>
