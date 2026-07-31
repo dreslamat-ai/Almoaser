@@ -28,6 +28,21 @@ async function loadFirebaseAuth() {
 type ConfirmationLike = { confirm: (code: string) => Promise<{ user: { getIdToken: () => Promise<string> } }> };
 
 /**
+ * وعد لا يُحسم أبداً يترك الزر يدور بلا نهاية ولا يقول للعميل شيئاً — وهي الحالة
+ * التي يقع فيها Firebase حين يرفض reCAPTCHA النطاق: لا خطأ ولا استجابة. نفرض
+ * حداً زمنياً حتى يفشل الأمر صراحةً ويعرف العميل أن عليه المحاولة أو إبلاغنا.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    p.then(
+      value => { clearTimeout(timer); resolve(value); },
+      error => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
+/**
  * تأكيد رقم الجوال عبر Firebase.
  *
  * الإرسال والتأكيد يحدثان في المتصفح، ثم نرسل رمز الهوية للسيرفر ليتحقق من
@@ -65,11 +80,21 @@ export default function PhoneVerification() {
       recaptchaRef.current?.clear();
       const verifier = new auth.RecaptchaVerifier(instance, "recaptcha-holder", { size: "invisible" });
       recaptchaRef.current = verifier;
-      const result = await auth.signInWithPhoneNumber(instance, saved.phone, verifier);
+      const result = await withTimeout(
+        auth.signInWithPhoneNumber(instance, saved.phone, verifier),
+        45_000,
+        "لم يستجب مزوّد التحقق. حاول مرة أخرى، وإن تكرر فأبلغ الدعم.",
+      );
       setConfirmation(result as unknown as ConfirmationLike);
       toast.success("أرسلنا رمزاً إلى جوالك");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "تعذّر إرسال الرمز";
+      // reCAPTCHA يبقى في حالة نصف مكتملة بعد الفشل فلا تنجح محاولة ثانية بدونه
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+      // تلميح للمشغّل لا للعميل: أشيع أسباب الصمت هنا نطاق غير مصرّح به
+      console.warn("[phone] تعذّر إرسال الرمز:", err,
+        "— تأكد أن نطاق الموقع مضاف في Firebase ← Authentication ← Settings ← Authorized domains");
       // الرقم محفوظ بالفعل، فنسمح بالمتابعة ونُبقي التذكير ظاهراً
       setDeferred(msg);
       await utils.accountSetup.status.invalidate();
