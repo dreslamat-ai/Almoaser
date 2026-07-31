@@ -19,7 +19,7 @@ import { notifyUser, notifyAdmins, maybeNotifyTrialEnding } from "./notification
 import { notificationsRouter } from "./routers/notificationsRouter";
 import { sdk } from "./_core/sdk";
 import { erpnextConnections } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import {
   getActivePlans, getPlanById,
   getSubscriptionByUserId, createSubscription, updateSubscription,
@@ -312,6 +312,66 @@ export const appRouter = router({
         phoneMasked: phone ? maskPhone(phone) : null,
       };
     }),
+  }),
+
+  phone: router({
+    /** يعتمد رقم الجوال بعد أن يثبت المتصفح ملكيته عبر Firebase */
+    confirm: protectedProcedure
+      .input(z.object({ idToken: z.string().min(20).max(4000) }))
+      .mutation(async ({ input, ctx }) => {
+        const { verifyFirebasePhoneToken } = await import("./firebasePhone");
+        const { normalizePhone } = await import("./phone");
+
+        const res = await verifyFirebasePhoneToken(input.idToken);
+        if (!res.ok) throw new TRPCError({ code: "BAD_REQUEST", message: res.error });
+
+        const norm = normalizePhone(res.phone);
+        if (!norm.ok) throw new TRPCError({ code: "BAD_REQUEST", message: norm.error });
+
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+        const { users: usersTable } = await import("../drizzle/schema");
+
+        // رقم واحد لا يخدم حسابين: وإلا صار تأكيد الجوال بلا معنى
+        const taken = await db.select({ id: usersTable.id }).from(usersTable)
+          .where(and(eq(usersTable.phone, norm.e164), ne(usersTable.id, ctx.user.id))).limit(1);
+        if (taken.length > 0) {
+          throw new TRPCError({ code: "CONFLICT", message: "هذا الرقم مرتبط بحساب آخر بالفعل" });
+        }
+
+        await db.update(usersTable)
+          .set({ phone: norm.e164, phoneVerifiedAt: new Date() })
+          .where(eq(usersTable.id, ctx.user.id));
+
+        return { success: true, phone: norm.e164 } as const;
+      }),
+
+    /** يحفظ الرقم قبل التأكيد حتى لا يضيع إن تعذّرت الخدمة (التأكيد مؤجَّل لا متخطّى) */
+    save: protectedProcedure
+      .input(z.object({ phone: z.string().min(6).max(24) }))
+      .mutation(async ({ input, ctx }) => {
+        const { normalizePhone } = await import("./phone");
+        const norm = normalizePhone(input.phone);
+        if (!norm.ok) throw new TRPCError({ code: "BAD_REQUEST", message: norm.error });
+
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+        const { users: usersTable } = await import("../drizzle/schema");
+
+        const taken = await db.select({ id: usersTable.id }).from(usersTable)
+          .where(and(eq(usersTable.phone, norm.e164), ne(usersTable.id, ctx.user.id))).limit(1);
+        if (taken.length > 0) {
+          throw new TRPCError({ code: "CONFLICT", message: "هذا الرقم مرتبط بحساب آخر بالفعل" });
+        }
+
+        // تغيير الرقم يُلغي أي تأكيد سابق
+        await db.update(usersTable)
+          .set({ phone: norm.e164, phoneVerifiedAt: null })
+          .where(eq(usersTable.id, ctx.user.id));
+        return { success: true, phone: norm.e164, national: norm.national } as const;
+      }),
   }),
 
   auth: router({

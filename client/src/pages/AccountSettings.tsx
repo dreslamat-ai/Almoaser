@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import PhoneVerification from "@/components/PhoneVerification";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -220,6 +221,12 @@ function EmailSettingsCard({ isAuthenticated }: { isAuthenticated: boolean }) {
           <p className="text-[11px] text-muted-foreground mt-1">
             إيصالات الدفع والتجديد تُرسل دائماً لأنها مستندات مالية.
           </p>
+
+          {/* تأكيد الجوال — خطوة مستقلة عن البريد ولها مسار تحقق خاص */}
+          <div className="mt-6 pt-5 border-t border-gray-100">
+            <h2 className="font-semibold text-navy mb-3">رقم الجوال</h2>
+            <PhoneVerification />
+          </div>
         </div>
       </div>
     </div>
