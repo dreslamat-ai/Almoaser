@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   BookOpen, Bot, CheckCircle2, ChevronDown, DollarSign, FileText,
   BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
-  ArrowLeft, Star, Clock, TrendingUp, Send
+  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles
 } from "lucide-react";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
@@ -488,6 +488,7 @@ function TelegramDemoSection() {
 
 function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => void }) {
   const { ref, inView } = useInView();
+  const [, navigate] = useLocation();
   const { data: plans, isLoading } = trpc.plans.list.useQuery();
   const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
 
@@ -574,16 +575,28 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
                       </li>
                     ))}
                   </ul>
+                  {/* الزر كان يقول "اطلب استشارة" ويُنزل لفورم التواصل، فلا يصل أحد
+                      إلى التسجيل من هنا. الآن يبدأ التجربة مباشرة والباقة محمولة معه. */}
                   <Button
                     className={`w-full ${isPopular ? "bg-navy-gradient text-white hover:opacity-90" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
                     variant={isPopular ? "default" : "outline"}
                     onClick={() => {
                       onSelectPlan(plan.id);
-                      document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+                      navigate(`/signup?plan=${plan.id}`);
                     }}
                   >
-                    اطلب استشارة مجانية
+                    ابدأ التجربة المجانية — 3 أيام
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectPlan(plan.id);
+                      document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="w-full mt-2 text-xs text-muted-foreground hover:text-navy transition-colors [@media(pointer:coarse)]:min-h-11"
+                  >
+                    أو تحدّث مع مستشار أولاً
+                  </button>
                 </div>
               );
             })}
@@ -596,6 +609,7 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
 
 function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
   const { ref, inView } = useInView();
+  const [, navigate] = useLocation();
   const { data: plans } = trpc.plans.list.useQuery();
   const [submitted, setSubmitted] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
@@ -607,28 +621,8 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
     if (initialPlanId != null) setForm(f => ({ ...f, planId: String(initialPlanId) }));
   }, [initialPlanId]);
 
-  // ─── عداد تنازلي للتوجيه إلى الباقات ─────────────────────────────────
-  const [countdown, setCountdown] = useState(5);
-  useEffect(() => {
-    if (!submitted) return;
-    setCountdown(5);
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          // التمرير السلس إلى قسم الباقات
-          const pricingSection = document.getElementById("pricing");
-          if (pricingSection) {
-            pricingSection.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [submitted]);
-  // ─────────────────────────────────────────────────────────────────────
+  // لا عدّاد ولا إعادة توجيه تلقائية: كانت تُرجع العميل لقسم الباقات حيث الزر
+  // يُنزله للفورم من جديد — حلقة لا مخرج منها. الآن الخطوة التالية زر صريح.
 
   // ─── تحقق رقم الجوال السعودي ─────────────────────────────────────────
   const saudiPhoneRegex = /^(?:(?:\+|00)966|0)5[0-9]{8}$/;
@@ -721,25 +715,12 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                 <p className="text-gray-600 text-sm leading-relaxed mb-6 max-w-xs">
                   تم استلام طلبك بنجاح. سيتواصل معك فريق <strong>Almoaser AI</strong> خلال <strong>24 ساعة</strong> لتحديد موعد الاستشارة المجانية.
                 </p>
-                {/* شريط العداد التنازلي */}
-                <div className="w-full mb-5">
-                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                    <span>سيتم توجيهك لاختيار الباقة خلال</span>
-                    <span className="font-bold text-navy text-sm">{countdown} ثوانٍ</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-navy-gradient rounded-full transition-all duration-1000 ease-linear"
-                      style={{ width: `${((5 - countdown) / 5) * 100}%` }}
-                    />
-                  </div>
-                </div>
                 {/* بطاقات الخطوات التالية */}
                 <div className="w-full space-y-3 mb-5">
                   {[
                     { icon: <Phone className="w-4 h-4" />, text: "سيتصل بك مستشارنا قريباً", color: "text-blue-600 bg-blue-50" },
                     { icon: <MessageCircle className="w-4 h-4" />, text: "أو تواصل معنا عبر واتساب الآن", color: "text-green-600 bg-green-50" },
-                    { icon: <CheckCircle2 className="w-4 h-4" />, text: "اختر الباقة المناسبة لعملك أدناه", color: "text-gold bg-yellow-50" },
+                    { icon: <CheckCircle2 className="w-4 h-4" />, text: "أو ابدأ تجربتك المجانية فوراً دون انتظار", color: "text-gold bg-yellow-50" },
                   ].map((step, i) => (
                     <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${step.color} animate-fade-in-up`}
                       style={{ animationDelay: `${0.2 + i * 0.15}s` }}>
@@ -759,13 +740,10 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                   </a>
                   <Button
                     className="flex-1 bg-navy-gradient text-white gap-2 hover:opacity-90"
-                    onClick={() => {
-                      const pricingSection = document.getElementById("pricing");
-                      if (pricingSection) pricingSection.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }}
+                    onClick={() => navigate(form.planId ? `/signup?plan=${form.planId}` : "/signup")}
                   >
-                    <ArrowLeft className="w-4 h-4" />
-                    اختر باقتك
+                    <Sparkles className="w-4 h-4" />
+                    ابدأ التجربة المجانية
                   </Button>
                 </div>
               </div>

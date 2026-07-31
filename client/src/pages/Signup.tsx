@@ -23,7 +23,13 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
-  const [planId, setPlanId] = useState<number | null>(null);
+  // الباقة تصل من بطاقة الأسعار عبر ?plan= فلا نسأل عنها مرة ثانية
+  const [planId, setPlanId] = useState<number | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("plan");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isInteger(n) && n > 0 ? n : null;
+  });
+  const [showAllPlans, setShowAllPlans] = useState(false);
   const utils = trpc.useUtils();
 
   const plansQuery = trpc.plans.list.useQuery();
@@ -72,6 +78,11 @@ export default function Signup() {
     toast.success(`تم التحقق من حسابك — مرحباً ${result.fullName}`);
     setStep(2);
   };
+
+  // رابط بباقة غير موجودة يجب ألا يترك القائمة فارغة والمستخدم عالقاً
+  const allPlans = plansQuery.data ?? [];
+  const chosenExists = planId != null && allPlans.some(p => p.id === planId);
+  const visiblePlans = showAllPlans || !chosenExists ? allPlans : allPlans.filter(p => p.id === planId);
 
   const submit = () => {
     if (!planId) {
@@ -207,7 +218,7 @@ export default function Signup() {
             )}
 
             <div className="space-y-2">
-              {plansQuery.data?.map(plan => (
+              {visiblePlans.map(plan => (
                 <button key={plan.id} type="button" onClick={() => setPlanId(plan.id)}
                   className={`w-full flex items-center gap-3 rounded-xl border p-4 text-right transition-all ${
                     planId === plan.id
@@ -232,6 +243,13 @@ export default function Signup() {
                 </button>
               ))}
             </div>
+
+            {!showAllPlans && chosenExists && allPlans.length > 1 && (
+              <button type="button" onClick={() => setShowAllPlans(true)}
+                className="w-full text-xs text-primary hover:underline [@media(pointer:coarse)]:min-h-11">
+                عرض باقي الباقات
+              </button>
+            )}
 
             <p className="text-[11px] text-muted-foreground text-center">الأسعار لا تشمل ضريبة القيمة المضافة (15%) · خصم 15% عند الدفع السنوي</p>
 
