@@ -50,6 +50,33 @@ function requireToolPermission(user: User, toolName: string): void {
   }
 }
 
+/** هل يملك المستخدم صلاحية استخدام هذه الأداة؟ نفس قاعدة requireToolPermission بلا رمي. */
+export function canUseTool(user: Pick<User, "orgRole" | "permissions">, toolName: string): boolean {
+  if (user.orgRole === "owner") return true;
+  const required = TOOL_PERMISSIONS[toolName];
+  if (!required) return true;
+  return Boolean(parsePermissions(user.permissions)[required]);
+}
+
+/**
+ * الأدوات التي تُرسل تعريفاتها للنموذج.
+ *
+ * كانت الـ27 تعريفاً تُرسل كاملة لكل مستخدم ثم تُرفض عند التنفيذ إن لم يكن
+ * مخوَّلاً. لذلك ضرران: تعريفات لا يمكن استعمالها تُدفع تكلفتها في كل استدعاء
+ * (‏~21,400 حرف)، والأسوأ أن الوكيل كان يَعِد المستخدم بإجراء ثم يصطدم بالرفض
+ * في منتصف المحادثة. الحجب هنا يجعله يقول "لا أستطيع" من البداية.
+ *
+ * هذا تضييق لا توسيع: requireToolPermission يظل هو الحارس عند التنفيذ، وما
+ * يُحجب هنا كان سيُرفض هناك على أي حال.
+ */
+export function toolsForUser<T extends { function: { name: string } }>(
+  tools: T[],
+  user: Pick<User, "orgRole" | "permissions">,
+): T[] {
+  if (user.orgRole === "owner") return tools;
+  return tools.filter(t => canUseTool(user, t.function.name));
+}
+
 // ─── ERPNext Per-User Connection (AsyncLocalStorage) ─────────────────────────
 // كل طلب يحمل إعدادات اتصال المستخدم (رابطه/مستخدمه/كلمة مروره) عبر سياق غير متزامن،
 // فتعمل كل helpers (erpGET/erpPOST/submitDoc...) على نظام المستخدم دون تمرير config يدوياً
@@ -1939,6 +1966,9 @@ ${buildExpertSkillsSection(hasCfoSkill)}
         })),
       ];
 
+      // لا نعرض على النموذج أدوات سيُرفض تنفيذها لهذا المستخدم أصلاً
+      const availableTools = toolsForUser(TOOLS, ctx.user);
+
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
 
       // تشغيل كامل حلقة الوكيل ضمن سياق اتصال ERPNext الخاص بالمستخدم الحالي
@@ -1948,7 +1978,7 @@ ${buildExpertSkillsSection(hasCfoSkill)}
         try {
           response = await invokeAgentLLM({
             messages: llmMessages,
-            tools: TOOLS,
+            tools: availableTools,
             tool_choice: "auto",
             maxTokens: 2000,
           });
