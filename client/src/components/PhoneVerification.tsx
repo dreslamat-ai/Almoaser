@@ -28,6 +28,36 @@ async function loadFirebaseAuth() {
 type ConfirmationLike = { confirm: (code: string) => Promise<{ user: { getIdToken: () => Promise<string> } }> };
 
 /**
+ * رسائل Firebase تصل بالإنجليزية وبمفردات مطوّرين ("region enabled by the app
+ * developer") — لا تصلح لعميل عربي لا يملك عن حسابنا شيئاً. نترجم ما يعنيه الخطأ
+ * له، ونترك النص الأصلي للكونسول ليقرأه من يشغّل المنصة.
+ */
+function arabicAuthError(err: unknown): string {
+  const code = (err as { code?: string } | null)?.code ?? "";
+  switch (code) {
+    case "auth/invalid-phone-number":
+      return "رقم الجوال غير صالح — تأكد من الرقم ورمز الدولة.";
+    case "auth/missing-phone-number":
+      return "أدخل رقم جوالك أولاً.";
+    case "auth/too-many-requests":
+      return "حاولت مرات كثيرة. انتظر قليلاً ثم أعد المحاولة.";
+    case "auth/quota-exceeded":
+      return "تعذّر الإرسال الآن لبلوغ حد الرسائل. سنعالجها — أبلغ الدعم إن تكررت.";
+    case "auth/operation-not-allowed":
+      return "إرسال الرسائل غير مفعّل لبلد هذا الرقم عندنا بعد. أبلغ الدعم بالبلد لتفعيله.";
+    case "auth/captcha-check-failed":
+    case "auth/invalid-app-credential":
+      return "فشل التحقق الأمني. أعد تحميل الصفحة ثم حاول مرة أخرى.";
+    case "auth/unauthorized-domain":
+      return "هذا الموقع غير مصرّح له بإرسال الرموز بعد. أبلغ الدعم.";
+    case "auth/network-request-failed":
+      return "تعذّر الاتصال بالشبكة. تحقق من اتصالك ثم أعد المحاولة.";
+    default:
+      return err instanceof Error && err.message ? err.message : "تعذّر إرسال الرمز";
+  }
+}
+
+/**
  * وعد لا يُحسم أبداً يترك الزر يدور بلا نهاية ولا يقول للعميل شيئاً — وهي الحالة
  * التي يقع فيها Firebase حين يرفض reCAPTCHA النطاق: لا خطأ ولا استجابة. نفرض
  * حداً زمنياً حتى يفشل الأمر صراحةً ويعرف العميل أن عليه المحاولة أو إبلاغنا.
@@ -63,8 +93,23 @@ export default function PhoneVerification() {
   const [busy, setBusy] = useState(false);
   const [deferred, setDeferred] = useState<string | null>(null);
   const recaptchaRef = useRef<{ clear: () => void } | null>(null);
+  const holderRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => () => { recaptchaRef.current?.clear(); }, []);
+
+  /**
+   * reCAPTCHA يَسِم العنصر الذي رسم نفسه فيه، ولا يزيل clear() ذلك الوسم — فأي
+   * محاولة ثانية على العنصر نفسه تفشل بـ "reCAPTCHA has already been rendered in
+   * this element". لذا نعطي كل محاولة عنصراً وليداً جديداً بدل إعادة استعمال واحد.
+   */
+  const freshRecaptchaHost = () => {
+    const holder = holderRef.current;
+    if (!holder) throw new Error("تعذّر تهيئة التحقق الأمني");
+    holder.innerHTML = "";
+    const host = document.createElement("div");
+    holder.appendChild(host);
+    return host;
+  };
 
   const verified = setup?.steps.find(s => s.key === "phone")?.done ?? false;
 
@@ -78,7 +123,7 @@ export default function PhoneVerification() {
       const saved = await savePhone.mutateAsync({ phone: phone.trim() });
       const { auth, instance } = await loadFirebaseAuth();
       recaptchaRef.current?.clear();
-      const verifier = new auth.RecaptchaVerifier(instance, "recaptcha-holder", { size: "invisible" });
+      const verifier = new auth.RecaptchaVerifier(instance, freshRecaptchaHost(), { size: "invisible" });
       recaptchaRef.current = verifier;
       const result = await withTimeout(
         auth.signInWithPhoneNumber(instance, saved.phone, verifier),
@@ -88,13 +133,13 @@ export default function PhoneVerification() {
       setConfirmation(result as unknown as ConfirmationLike);
       toast.success("أرسلنا رمزاً إلى جوالك");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "تعذّر إرسال الرمز";
+      const msg = arabicAuthError(err);
       // reCAPTCHA يبقى في حالة نصف مكتملة بعد الفشل فلا تنجح محاولة ثانية بدونه
       recaptchaRef.current?.clear();
       recaptchaRef.current = null;
-      // تلميح للمشغّل لا للعميل: أشيع أسباب الصمت هنا نطاق غير مصرّح به
+      // النص الأصلي للمشغّل: أشيع الأسباب نطاق غير مصرّح به أو بلد غير مفعّل
       console.warn("[phone] تعذّر إرسال الرمز:", err,
-        "— تأكد أن نطاق الموقع مضاف في Firebase ← Authentication ← Settings ← Authorized domains");
+        "— راجع في Firebase ← Authentication ← Settings كلاً من Authorized domains وSMS region policy");
       // الرقم محفوظ بالفعل، فنسمح بالمتابعة ونُبقي التذكير ظاهراً
       setDeferred(msg);
       await utils.accountSetup.status.invalidate();
@@ -134,7 +179,8 @@ export default function PhoneVerification() {
   return (
     <div className="space-y-3">
       {/* حاوية reCAPTCHA غير المرئية التي يتطلبها Firebase */}
-      <div id="recaptcha-holder" />
+      {/* حاوية فقط: العنصر الذي يرسم فيه reCAPTCHA يُنشأ داخلها من جديد كل محاولة */}
+      <div ref={holderRef} />
 
       {deferred && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
