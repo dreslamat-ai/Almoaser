@@ -130,6 +130,22 @@ async function completeLogin(
   return { success: true, name: fullName, email: user?.email ?? null };
 }
 
+/**
+ * يوحّد رابط نظام العميل: يضيف https إن غاب، ويزيل المسار والشرطة الأخيرة.
+ * من يكتب "company.erpnext.com" لم يخطئ خطأً يستحق الرفض، ومن ينسخ الرابط من
+ * المتصفح يأتي معه مسار — والاثنان كانا يُردّان برسالة تختفي خلف القائمة.
+ */
+function normalizeErpUrl(raw: string): string | null {
+  let v = raw.trim().replace(/\s+/g, "");
+  if (!v) return null;
+  if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+  try {
+    const u = new URL(v);
+    if (!u.hostname.includes(".")) return null;
+    return `${u.protocol}//${u.host}`;
+  } catch { return null; }
+}
+
 export const appRouter = router({
   system: systemRouter,
   // ─── تشخيص خفيف لمزود النموذج (لا يكشف الأسرار) ──────────────────────────
@@ -153,14 +169,17 @@ export const appRouter = router({
     save: protectedProcedure
       .input(z.object({
         provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
-        url: z.string().url("رابط غير صالح — يجب أن يبدأ بـ https://"),
-        username: z.string().min(1, "اسم المستخدم مطلوب"),
+        // نصلح الرابط لا نرفضه: من يكتب النطاق وحده لم يخطئ، والرفض هنا كان
+        // يظهر كأن الزر لا يعمل
+        url: z.string().trim().min(4, "أدخل رابط نظامك"),
+        username: z.string().trim().min(1, "اسم المستخدم مطلوب"),
         password: z.string().min(1, "كلمة المرور مطلوبة"),
         database: z.string().trim().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         requireMemberPermission(ctx.user, "manageErpSettings");
-        const cleanUrl = input.url.replace(/\/+$/, "");
+        const cleanUrl = normalizeErpUrl(input.url);
+        if (!cleanUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "رابط غير صالح — مثال: https://company.erpnext.com" });
         // اختبار الاتصال قبل الحفظ
         const test = await testConnectionByProvider(input.provider, cleanUrl, input.username, input.password, input.database);
         if (!test.ok) {
@@ -188,13 +207,15 @@ export const appRouter = router({
     test: protectedProcedure
       .input(z.object({
         provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
-        url: z.string().url(),
-        username: z.string().min(1),
+        url: z.string().trim().min(4),
+        username: z.string().trim().min(1),
         password: z.string().min(1),
         database: z.string().trim().optional(),
       }))
       .mutation(async ({ input }) => {
-        return testConnectionByProvider(input.provider, input.url, input.username, input.password, input.database);
+        const url = normalizeErpUrl(input.url);
+        if (!url) return { ok: false as const, error: "رابط غير صالح — مثال: https://company.erpnext.com" };
+        return testConnectionByProvider(input.provider, url, input.username, input.password, input.database);
       }),
     remove: protectedProcedure.mutation(async ({ ctx }) => {
       requireMemberPermission(ctx.user, "manageErpSettings");

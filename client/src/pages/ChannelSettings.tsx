@@ -12,8 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   MessageSquare, Send, Settings, CheckCircle2, XCircle,
-  Eye, EyeOff, Zap, Globe, Shield, Info, Server, Plug, Trash2, Save,
-} from "lucide-react";
+  Eye, EyeOff, Zap, Globe, Shield, Info, Server, Plug, Trash2, Save, AlertCircle} from "lucide-react";
 
 function FieldGroup({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   // كانت التسمية مجاورة للحقل بصرياً فقط بلا htmlFor، فقارئ الشاشة ومدير كلمات
@@ -42,20 +41,32 @@ function ErpConnectionCard() {
     if (erpConn) setErp(prev => ({ ...prev, provider: erpConn.provider, url: erpConn.url, username: erpConn.username, database: erpConn.database ?? "" }));
   }, [erpConn]);
 
+  // الخطأ يُعرض تحت النموذج لا في toast فقط: الإشعار العائم يختفي خلف القائمة
+  // على الشاشات الضيقة، فيبدو للمستخدم أن الزر لا يفعل شيئاً وهو مرفوض بسبب
+  // مذكور لم يره أحد.
+  const [erpMsg, setErpMsg] = useState<{ kind: "error" | "ok"; text: string } | null>(null);
+
   const erpSaveMutation = trpc.erpConnection.save.useMutation({
     onSuccess: (r) => {
-      toast.success(`تم الاتصال والحفظ بنجاح — مسجّل باسم: ${r.loggedInAs ?? erp.username}`);
+      const t = `تم الاتصال والحفظ بنجاح — مسجّل باسم: ${r.loggedInAs ?? erp.username}`;
+      setErpMsg({ kind: "ok", text: t });
+      toast.success(t);
       setErp(prev => ({ ...prev, password: "" }));
       utils.erpConnection.get.invalidate();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => { setErpMsg({ kind: "error", text: e.message }); toast.error(e.message); },
   });
   const erpTestMutation = trpc.erpConnection.test.useMutation({
     onSuccess: (r) => {
-      if (r.ok) toast.success(`الاتصال ناجح — مسجّل باسم: ${r.loggedInAs}`);
-      else toast.error(r.error ?? "فشل الاختبار");
+      if (r.ok) {
+        const t = `الاتصال ناجح — مسجّل باسم: ${r.loggedInAs}`;
+        setErpMsg({ kind: "ok", text: t }); toast.success(t);
+      } else {
+        const t = r.error ?? "فشل الاختبار";
+        setErpMsg({ kind: "error", text: t }); toast.error(t);
+      }
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => { setErpMsg({ kind: "error", text: e.message }); toast.error(e.message); },
   });
   const erpRemoveMutation = trpc.erpConnection.remove.useMutation({
     onSuccess: () => {
@@ -85,7 +96,7 @@ function ErpConnectionCard() {
         </div>
       </CardHeader>
       <CardContent className="px-5 pb-5 space-y-4">
-        <form onSubmit={e => { e.preventDefault(); erpSaveMutation.mutate(erp); }} className="space-y-4">
+        <form onSubmit={e => { e.preventDefault(); setErpMsg(null); erpSaveMutation.mutate(erp); }} className="space-y-4">
           <FieldGroup label="نوع النظام">
             <Select value={erp.provider} onValueChange={v => setErp(p => ({ ...p, provider: v as "erpnext" | "odoo" }))}>
               <SelectTrigger aria-label="نوع نظام ERP" className="text-xs"><SelectValue /></SelectTrigger>
@@ -122,7 +133,7 @@ function ErpConnectionCard() {
               {erpSaveMutation.isPending ? "جاري الاختبار والحفظ..." : "اختبار وحفظ الاتصال"}
             </Button>
             <Button type="button" variant="outline" size="sm" disabled={erpTestMutation.isPending || !erp.url || !erp.username || !erp.password || (erp.provider === "odoo" && !erp.database)}
-              onClick={() => erpTestMutation.mutate(erp)} className="gap-1.5">
+              onClick={() => { setErpMsg(null); erpTestMutation.mutate(erp); }} className="gap-1.5">
               <Plug className="w-3.5 h-3.5" />
               {erpTestMutation.isPending ? "جاري الاختبار..." : "اختبار فقط"}
             </Button>
@@ -135,6 +146,30 @@ function ErpConnectionCard() {
               </Button>
             )}
           </div>
+
+          {/* النتيجة تحت الأزرار مباشرة — حيث ينظر المستخدم بعد الضغط */}
+          {erpMsg && (
+            <div role="status" aria-live="polite"
+              className={`rounded-xl border p-3 text-sm leading-6 ${
+                erpMsg.kind === "error"
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-900"
+              }`}>
+              <div className="flex items-start gap-2">
+                {erpMsg.kind === "error"
+                  ? <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
+                  : <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />}
+                <div>
+                  <p>{erpMsg.text}</p>
+                  {erpMsg.kind === "error" && (
+                    <p className="text-xs mt-1 text-red-700/80">
+                      الحفظ لا يتم إلا بعد نجاح الاتصال — تأكد أن الرابط يبدأ بـ https:// وأن البيانات هي نفسها التي تدخل بها نظامك.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </form>
       </CardContent>
     </Card>
