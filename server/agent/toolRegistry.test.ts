@@ -18,6 +18,7 @@ const EXPECTED = [
   "create_supplier",
   "create_workflow",
   "delete_document",
+  "delete_with_dependencies",
   "get_accounts",
   "get_customers",
   "get_invoice_detail",

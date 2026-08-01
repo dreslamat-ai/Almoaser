@@ -626,6 +626,23 @@ export const TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "delete_with_dependencies",
+      description: "حذف سجل مع كل ما يمنع حذفه، بالترتيب الصحيح تلقائياً. استخدمها بدل delete_document حين يكون للسجل مستندات مرتبطة (عميل له إشعارات تسليم أو أوامر بيع). لا تبحث عن المرتبطات بنفسك — هذه الأداة تتبع سلسلة الارتباط من رسائل النظام نفسها. **تتطلب موافقة صريحة من المستخدم**: اعرض عليه أنك ستحذف السجل وكل المرتبط به نهائياً، وبعد موافقته استدعها بـ confirmed: true. الحذف لا يمكن التراجع عنه.",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", description: "نوع السجل الأصلي — Customer مثلاً" },
+          document_name: { type: "string", description: "اسم السجل" },
+          confirmed: { type: "boolean", description: "true بعد موافقة المستخدم الصريحة على الحذف النهائي" },
+        },
+        required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "delete_document",
       description: "حذف نهائي لأي مستند أو سجل: فاتورة، عميل، مورد، صنف، قيد، دفعة. المستند المعتمد يُلغى تلقائياً أولاً ثم يُحذف. تحذير: الحذف نهائي ولا يمكن التراجع عنه — اطلب تأكيد المستخدم دائماً قبل التنفيذ",
       parameters: {

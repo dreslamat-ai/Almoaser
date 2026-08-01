@@ -27,6 +27,7 @@ export const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = 
   update_document: "createInvoices",
   cancel_document: "manageJournalEntries",
   delete_document: "manageErpSettings",
+  delete_with_dependencies: "manageErpSettings",
   list_documents: "viewInvoices",
   get_settings: "viewInvoices",
   update_settings: "manageErpSettings",

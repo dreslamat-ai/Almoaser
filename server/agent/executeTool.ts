@@ -609,6 +609,54 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
       return { result: { doctype, count: rows.length, rows }, display: `${doctype}: ${rows.length} سجل` };
     }
 
+    case "delete_with_dependencies": {
+      // الحذف في Frappe يفشل حين يرتبط بالسجل مستند آخر، وذاك قد يرتبط به ثالث:
+      // عميل ← إشعار تسليم ← Repost Item Valuation. تركُ الوكيل يبحث عن هذه
+      // السلسلة بتخمين أسماء الحقول أفشلَه مراراً أمام العميل. المانع مذكور في
+      // رسالة الخطأ نفسها، فنتبعه هنا حتمياً بدل أن يُخمَّن.
+      const rootType = String(args.doctype ?? "").trim();
+      const rootName = String(args.document_name ?? "").trim();
+      if (!rootType || !rootName) return { result: { error: "نوع السجل واسمه مطلوبان" }, display: "" };
+      if (!args.confirmed) {
+        return { result: { ok: false, needs_confirmation: true,
+          message: `سيُحذف ${rootType} "${rootName}" وكل المستندات المرتبطة به نهائياً ولا يمكن التراجع. اعرض ذلك على المستخدم واطلب موافقته الصريحة ثم أعد الاستدعاء بـ confirmed: true` }, display: "" };
+      }
+
+      const deleted: Array<{ doctype: string; name: string }> = [];
+      // حدّان يمنعان الدوران بلا نهاية: عمق السلسلة، وعدد الجولات الكلي
+      const MAX_DEPTH = 10, MAX_TOTAL = 40;
+      for (let round = 0; round < MAX_TOTAL; round++) {
+        let target = { doctype: rootType, name: rootName };
+        let removedThisRound: { doctype: string; name: string } | null = null;
+
+        for (let depth = 0; depth < MAX_DEPTH; depth++) {
+          const r = await executeTool("delete_document",
+            { doctype: target.doctype, document_name: target.name }, toolCtx);
+          const res = r.result as { deleted?: boolean; blocked_by?: { doctype: string; name: string }; error?: string };
+          if (res?.deleted) { removedThisRound = target; deleted.push(target); break; }
+          if (!res?.blocked_by) {
+            return { result: {
+              error: res?.error ?? `تعذّر حذف ${target.doctype} "${target.name}"`,
+              deleted_so_far: deleted,
+              note: deleted.length ? "حُذف ما سبق ولا يمكن التراجع عنه" : undefined,
+            }, display: "" };
+          }
+          target = { doctype: res.blocked_by.doctype, name: res.blocked_by.name };
+        }
+        if (!removedThisRound) {
+          return { result: { error: `سلسلة الارتباط أعمق من ${MAX_DEPTH} مستويات — راجعها يدوياً`, deleted_so_far: deleted }, display: "" };
+        }
+        // اكتمل الهدف؟
+        if (removedThisRound.doctype === rootType && removedThisRound.name === rootName) {
+          return {
+            result: { deleted: true, name: rootName, doctype: rootType, also_deleted: deleted.slice(0, -1), total: deleted.length },
+            display: `__DOC_DELETED__${JSON.stringify({ doctype: rootType, name: rootName, cascade: deleted.length })}`,
+          };
+        }
+      }
+      return { result: { error: "تجاوز عدد العمليات الحدّ المسموح", deleted_so_far: deleted }, display: "" };
+    }
+
     case "delete_document": {
       const doctype = args.doctype as string;
       const docName = args.document_name as string;
