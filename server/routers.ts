@@ -879,25 +879,30 @@ export const appRouter = router({
 
         const plans = await getActivePlans();
         const { invokeNamedModel } = await import("./llmProvider");
-        const { buildSalesSystemPrompt, SALES_MODEL } = await import("./salesAgent");
-        try {
-          const res = await invokeNamedModel({
-            messages: [
-              { role: "system", content: buildSalesSystemPrompt(plans) },
-              ...input.messages,
-            ],
-            maxTokens: 700,
-          } as Parameters<typeof invokeNamedModel>[0], SALES_MODEL);
-          const raw = res?.choices?.[0]?.message?.content;
-          const reply = typeof raw === "string" ? raw.trim() : undefined;
-          if (typeof reply !== "string" || !reply.trim()) {
-            return { reply: "اعذرني، ما وصلني ردّ واضح. ممكن تعيد سؤالك؟" };
+        const { buildSalesSystemPrompt, SALES_MODELS, SALES_MAX_TOKENS, isUsableSalesReply, hasArabic } = await import("./salesAgent");
+        const system = buildSalesSystemPrompt(plans);
+        const userWroteArabic = input.messages.some(m => m.role === "user" && hasArabic(m.content));
+
+        // نمشي في السلسلة: المجاني أولاً، وأي فشل أو ردّ معطوب ينقلنا للتالي
+        let reply: string | undefined;
+        for (const model of SALES_MODELS) {
+          try {
+            const res = await invokeNamedModel({
+              messages: [{ role: "system", content: system }, ...input.messages],
+              maxTokens: SALES_MAX_TOKENS,
+            } as Parameters<typeof invokeNamedModel>[0], model);
+            const raw = res?.choices?.[0]?.message?.content;
+            const text = typeof raw === "string" ? raw.trim() : "";
+            if (text && isUsableSalesReply(text, userWroteArabic)) { reply = text; break; }
+            console.warn(`[sales.chat] ${model} أعطى رداً غير صالح — ننتقل للتالي`);
+          } catch (e) {
+            console.warn(`[sales.chat] ${model} فشل:`, e instanceof Error ? e.message.slice(0, 120) : e);
           }
-          return { reply };
-        } catch (e) {
-          console.warn("[sales.chat] فشل:", e instanceof Error ? e.message : e);
-          return { reply: "اعذرني، فيه عطل مؤقت عندي. جرّب بعد شوية أو سجّل من صفحة الاشتراك وفريقنا يتواصل معك." };
         }
+        if (!reply) {
+          return { reply: "اعذرني، فيه ضغط على الخدمة دلوقتي. جرّب بعد شوية أو سجّل من صفحة الاشتراك وفريقنا يتواصل معك." };
+        }
+        return { reply };
       }),
   }),
 

@@ -13,12 +13,47 @@ import { describePlanForSales } from "../shared/planFeatures";
 export { SALES_MAX_MESSAGES, SALES_MAX_CHARS } from "../shared/salesLimits";
 
 /**
- * موديل سريع غير استنتاجي لشات المبيعات.
- * الموديل الافتراضي للوكيل المحاسبي استنتاجي: ينفق عشرات الثواني في التفكير
- * قبل أن يبدأ الرد — قِيس 45 ثانية — وزائر الموقع لا ينتظر. هذا يردّ في نحو
- * خمس ثوانٍ وبتكلفة أقل، ولا يحتاج الشات إلى رؤية صور ولا إلى أدوات.
+ * سلسلة موديلات شات المبيعات، بالترتيب.
+ *
+ * المجاني أولاً لأن الشات مفتوح للعموم وتكلفته علينا. لكن المجاني على
+ * OpenRouter يُزدحم ويردّ 429، فلا يصلح وحده — آخر السلسلة موديل مدفوع رخيص
+ * يضمن ألا يقف الشات.
+ *
+ * الترتيب مبنيّ على قياس فعلي على نفس البرومبت وأسئلة عربية حقيقية:
+ * - ling-3.0-flash : 1.4–3.0s، أنظف عربية وأسرع رد
+ * - gemma-4-26b    : 4.9–10.5s، أدفأ أسلوباً وأكثر سؤالاً تأهيلياً
+ * - nemotron-super : 2.4–5.2s، جيد لكنه سرّب محرفاً صينياً في رد عربي
+ * - deepseek-flash : مدفوع ورخيص (~5.6s) — شبكة الأمان
+ *
+ * الموديل الاستنتاجي الافتراضي للوكيل المحاسبي مستبعد عمداً: قِيس 45 ثانية
+ * ورجع فارغاً تحت سقف 500 توكن لأنه أنفقها في التفكير.
  */
-export const SALES_MODEL = "deepseek/deepseek-v4-flash";
+export const SALES_MODELS = [
+  "inclusionai/ling-3.0-flash:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "deepseek/deepseek-v4-flash",
+] as const;
+
+/** السقف لازم يكفي لإتمام الرد: تحت 1000 توكن تُقطع الردود في منتصفها */
+export const SALES_MAX_TOKENS = 1000;
+
+/**
+ * ردّ مقبول أم لا. لا نحكم على المحتوى بل على ما يدل على عطل: فراغ، أو نص
+ * لاتيني بحت رداً على سؤال عربي (تسريب تفكير الموديل بالإنجليزية — لوحظ فعلاً
+ * في أحد المرشحين)، فننتقل للتالي بدل عرضه على الزائر.
+ */
+export function isUsableSalesReply(reply: string, userWroteArabic: boolean): boolean {
+  const t = reply.trim();
+  if (t.length < 2) return false;
+  if (!userWroteArabic) return true;
+  const arabic = (t.match(/[\u0600-\u06FF]/g) || []).length;
+  return arabic / t.length > 0.25;
+}
+
+export function hasArabic(text: string): boolean {
+  return /[\u0600-\u06FF]/.test(text);
+}
 
 /** حدّ معدّل بسيط في الذاكرة لكل عنوان — الحماية من الاستنزاف لا من الاحتيال */
 const hits = new Map<string, { count: number; resetAt: number }>();
