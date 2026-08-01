@@ -129,7 +129,7 @@ export default function ERPNextDashboard() {
             </Button>
             <Button size="sm" onClick={() => setLocation("/agent")} className="gap-1.5 h-8 text-xs">
               <Bot className="w-3.5 h-3.5" />
-              الوكيل الذكي
+              المحاسب الذكي
             </Button>
           </div>
         </div>
@@ -279,7 +279,7 @@ export default function ERPNextDashboard() {
                   <FileText className="w-9 h-9 text-muted-foreground/30" />
                   <p className="text-sm text-muted-foreground">لا توجد فواتير بعد</p>
                   <Button size="sm" variant="outline" onClick={() => setLocation("/agent")} className="gap-1.5 mt-1 text-xs">
-                    <Bot className="w-3.5 h-3.5" /> إنشاء فاتورة عبر الوكيل
+                    <Bot className="w-3.5 h-3.5" /> إنشاء فاتورة عبر المحاسب الذكي
                   </Button>
                 </div>
               ) : (
@@ -347,7 +347,7 @@ export default function ERPNextDashboard() {
         {/* Quick Actions */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { icon: Bot, label: "وكيل الذكاء الاصطناعي", desc: "محادثة وإنشاء فواتير", path: "/agent", bg: "bg-violet-50 hover:bg-violet-100", iconBg: "bg-violet-500", text: "text-violet-700" },
+            { icon: Bot, label: "المحاسب الذكي", desc: "محادثة وإنشاء فواتير", path: "/agent", bg: "bg-violet-50 hover:bg-violet-100", iconBg: "bg-violet-500", text: "text-violet-700" },
             { icon: FileText, label: "الفواتير", desc: "عرض وإدارة الفواتير", path: "/erp/invoices", bg: "bg-blue-50 hover:bg-blue-100", iconBg: "bg-blue-500", text: "text-blue-700" },
             { icon: ShoppingCart, label: "التقارير", desc: "مبيعات ومشتريات", path: "/erp/reports", bg: "bg-emerald-50 hover:bg-emerald-100", iconBg: "bg-emerald-500", text: "text-emerald-700" },
             { icon: Settings, label: "إعدادات القنوات", desc: "واتساب وتيليجرام", path: "/channels", bg: "bg-amber-50 hover:bg-amber-100", iconBg: "bg-amber-500", text: "text-amber-700" },

@@ -112,7 +112,7 @@ function GettingStartedCard({ hasErpConnection, hasConversation, isOwner }: {
   const [, navigate] = useLocation();
   const steps = [
     { done: hasErpConnection, label: "اربط نظام ERPNext أو Odoo الخاص بشركتك", path: "/channels", cta: "اربط الآن" },
-    { done: hasConversation, label: "جرّب محادثة مع الوكيل الذكي المحاسبي", path: "/agent", cta: "ابدأ محادثة" },
+    { done: hasConversation, label: "جرّب محادثة مع المحاسب الذكي", path: "/agent", cta: "ابدأ محادثة" },
     ...(isOwner ? [{ done: false, label: "ادعُ زملاءك للعمل معك على نفس الحساب (اختياري)", path: "/team", cta: "إدارة الفريق" }] : []),
   ];
   const remaining = steps.filter(s => !s.done);

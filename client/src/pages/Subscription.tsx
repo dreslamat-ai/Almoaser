@@ -180,7 +180,7 @@ export default function Subscription() {
                   <div className="h-2 rounded-full bg-gold transition-all" style={{ width: `${creditsPct}%` }} />
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mb-3">كل رسالة للوكيل = نقطة واحدة • كل مستند = 5 نقاط • يتجدد الرصيد شهرياً</p>
+              <p className="text-xs text-muted-foreground mb-3">كل رسالة للمحاسب الذكي = نقطة واحدة • كل مستند = 5 نقاط • يتجدد الرصيد شهرياً</p>
               <div className="flex flex-wrap gap-2">
                 {[500, 1000, 2000, 5000].map(c => (
                   <Button key={c} size="sm" variant="outline" className="border-gold/50 text-gold-ink hover:bg-gold/10 gap-1"

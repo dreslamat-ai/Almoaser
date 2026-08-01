@@ -87,7 +87,7 @@ function ErpConnectionCard() {
             </div>
             <div>
               <CardTitle className="text-sm font-semibold">اتصال نظام ERP الخاص بك</CardTitle>
-              <CardDescription className="text-xs">اربط الوكيل الذكي ولوحات البيانات بنظام ERPNext أو Odoo الخاص بشركتك</CardDescription>
+              <CardDescription className="text-xs">اربط المحاسب الذكي ولوحات البيانات بنظام ERPNext أو Odoo الخاص بشركتك</CardDescription>
             </div>
           </div>
           <Badge variant={erpConn ? "default" : "secondary"} className="text-xs">
@@ -249,11 +249,11 @@ export default function ChannelSettings() {
                   <Zap className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-foreground">تفعيل الوكيل الذكي</p>
+                  <p className="text-sm font-semibold text-foreground">تفعيل المحاسب الذكي</p>
                   <p className="text-xs text-muted-foreground">الرد التلقائي على الرسائل الواردة</p>
                 </div>
               </div>
-              <Switch checked={agentEnabled} onCheckedChange={setAgentEnabled} aria-label="تفعيل الوكيل الذكي" />
+              <Switch checked={agentEnabled} onCheckedChange={setAgentEnabled} aria-label="تفعيل المحاسب الذكي" />
             </div>
           </CardContent>
         </Card>

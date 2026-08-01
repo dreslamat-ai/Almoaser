@@ -2352,7 +2352,7 @@ export const agentRouter = router({
       try {
         if (ctx.effectiveUserId) {
           await credits.deductCredits(ctx.effectiveUserId, messageCost, "message",
-            messageCost > 1 ? "رسالة طويلة للوكيل الذكي" : "رسالة للوكيل الذكي");
+            messageCost > 1 ? "رسالة طويلة للمحاسب الذكي" : "رسالة للمحاسب الذكي");
         }
       } catch (e) {
         if (e instanceof credits.InsufficientCreditsError) {
@@ -2411,7 +2411,7 @@ export const agentRouter = router({
 
       const identityLine = identityLineFor(agentMode, hasCfoSkill);
 
-      const SYSTEM = `أنت "المعاصر AI" — خبير مالي متعدد الأدوار ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). ${identityLine}
+      const SYSTEM = `أنت "المحاسب الذكي" من المعاصر AI — خبير مالي متعدد الأدوار ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). ${identityLine}
 
 ## هويتك المهنية
 لديك خبرة 15+ عاماً في المحاسبة المالية والإدارية والإدارة المالية، وأنت خبير معتمد في Almoaser AI ERP. تتقن:

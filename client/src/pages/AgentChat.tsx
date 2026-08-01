@@ -1305,6 +1305,24 @@ export default function AgentChat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, chatMutation.isPending]);
 
+  // مراحل الانتظار: رسالة واحدة ثابتة طوال ثوانٍ تبدو كأن شيئاً لم يحدث، والمراحل
+  // تصف ما يجري فعلاً — تحليل الطلب، ثم فحص الصلاحيات، ثم التنفيذ. لا تُظهر
+  // مرحلة لم تبدأ: التوقيت تقريبي لكنه يتبع الترتيب الحقيقي للعمل.
+  const THINKING_STAGES = [
+    { at: 0, text: "يرجى الانتظار قليلاً — جارٍ تحليل طلبك" },
+    { at: 2500, text: "جارٍ مراجعة صلاحياتك على النظام" },
+    { at: 5000, text: "جارٍ تنفيذ طلبك على نظامك" },
+    { at: 12000, text: "الطلب أطول من المعتاد — ما زلنا نعمل عليه" },
+  ] as const;
+  const [thinkingStage, setThinkingStage] = useState(0);
+  useEffect(() => {
+    if (!chatMutation.isPending) { setThinkingStage(0); return; }
+    const timers = THINKING_STAGES.map((st, i) =>
+      st.at === 0 ? null : setTimeout(() => setThinkingStage(i), st.at),
+    ).filter(Boolean) as ReturnType<typeof setTimeout>[];
+    return () => timers.forEach(clearTimeout);
+  }, [chatMutation.isPending]);
+
   const downloadDocumentPdf = async (doctype: ErpDoctype, name: string) => {
     try {
       const result = await pdfMutation.mutateAsync({ doctype, name });
@@ -1366,14 +1384,14 @@ export default function AgentChat() {
           ts: Date.now(),
         }]);
         toast.error("انتهى رصيد النقاط", {
-          description: "اشحن رصيداً إضافياً لاستكمال المحادثة مع الوكيل الذكي",
+          description: "اشحن رصيداً إضافياً لاستكمال المحادثة مع المحاسب الذكي",
           duration: 10000,
           action: { label: "اشحن الآن", onClick: () => navigate("/subscription") },
         });
       } else {
         setMessages(prev => [...prev, {
           role: "assistant",
-          content: `⚠️ حدث خطأ: ${err instanceof Error ? err.message : "تعذّر الاتصال بالوكيل"}`,
+          content: `⚠️ حدث خطأ: ${err instanceof Error ? err.message : "تعذّر الاتصال بالمحاسب الذكي"}`,
           ts: Date.now(),
         }]);
       }
@@ -1671,11 +1689,26 @@ export default function AgentChat() {
                 <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
                   <Bot className="w-4 h-4 text-violet-600" />
                 </div>
-                <div className="bg-muted/60 border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    {pendingQuickReply ? `جاري التنفيذ: «${pendingQuickReply}»...` : "جارٍ التحويل، لحظات من فضلك..."}
-                  </span>
+                <div className="bg-muted/60 border border-border rounded-2xl rounded-tl-sm px-4 py-3 min-w-[15rem]">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-violet-600 shrink-0" />
+                    <span key={thinkingStage} className="text-sm text-foreground animate-fade-in-up">
+                      {pendingQuickReply
+                        ? `جارٍ تنفيذ: «${pendingQuickReply}»`
+                        : THINKING_STAGES[thinkingStage].text}
+                    </span>
+                  </div>
+                  {/* شريط المراحل: يوضّح أن العمل يتقدّم لا أنه واقف */}
+                  {!pendingQuickReply && (
+                    <div className="flex gap-1 mt-2.5" aria-hidden>
+                      {THINKING_STAGES.slice(0, 3).map((_, i) => (
+                        <span key={i}
+                          className={`h-1 rounded-full transition-all duration-500 ${
+                            i <= thinkingStage ? "bg-violet-500 w-8" : "bg-border w-4"
+                          }`} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1708,7 +1741,7 @@ export default function AgentChat() {
                 size="icon"
                 variant={recording ? "destructive" : "outline"}
                 className={`h-11 w-11 shrink-0 ${recording ? "animate-pulse" : ""}`}
-                title={recording ? "إيقاف التسجيل وإرسال" : "تحدث مع الوكيل بالصوت"}
+                title={recording ? "إيقاف التسجيل وإرسال" : "تحدث مع المحاسب الذكي بالصوت"}
               >
                 {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </Button>
@@ -1719,7 +1752,7 @@ export default function AgentChat() {
                 onChange={e => setInput(e.target.value.slice(0, MAX_MESSAGE_CHARS))}
                 maxLength={MAX_MESSAGE_CHARS}
                 onKeyDown={handleKey}
-                aria-label="اكتب رسالتك للوكيل الذكي" placeholder={recording ? "🎙️ جارٍ التسجيل... اضغط زر الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص..." : "اكتب أمرك أو تحدث بالصوت أو ارفع صورة فاتورة..."}
+                aria-label="اكتب رسالتك للمحاسب الذكي" placeholder={recording ? "🎙️ جارٍ التسجيل... اضغط زر الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص..." : "اكتب أمرك أو تحدث بالصوت أو ارفع صورة فاتورة..."}
                 className="flex-1 min-h-[44px] max-h-32 resize-none text-sm"
                 rows={1}
                 disabled={chatMutation.isPending || recording || transcribing}
@@ -1736,7 +1769,7 @@ export default function AgentChat() {
             </div>
             <p className="text-xs text-muted-foreground mt-1.5 text-center">
               <MessageSquare className="w-3 h-3 inline ml-1" />
-              Enter للإرسال · 🎙️ تحدث بالصوت · 📷 ارفع صورة فاتورة/سند — الوكيل يفهم وينفذ مباشرة على Almoaser AI ERP
+              Enter للإرسال · 🎙️ تحدث بالصوت · 📷 ارفع صورة فاتورة/سند — المحاسب الذكي يفهم وينفذ مباشرة على Almoaser AI ERP
             </p>
             {/* التكلفة تُعرض قبل الإرسال لا بعده — لا يُفاجأ العميل بخصم نقطتين */}
             {input.length > LONG_MESSAGE_CHARS && (

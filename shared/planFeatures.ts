@@ -24,7 +24,7 @@ export type PlanFeature = {
 export const PLAN_IDS = { basic: 1, pro: 2, enterprise: 3, expert: 4 } as const;
 
 export const PLAN_FEATURES: PlanFeature[] = [
-  { key: "agent_chat", label: "محادثة الوكيل المحاسبي", includedIn: [1, 2, 3], track: "accounting" },
+  { key: "agent_chat", label: "محادثة المحاسب الذكي", includedIn: [1, 2, 3], track: "accounting" },
   { key: "invoices", label: "إنشاء وترحيل فواتير المبيعات", includedIn: [1, 2, 3], track: "accounting" },
   { key: "purchase", label: "فواتير المشتريات", includedIn: [1, 2, 3], track: "accounting" },
   { key: "payments", label: "سندات القبض والصرف", includedIn: [2, 3], track: "accounting" },

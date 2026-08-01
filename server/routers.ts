@@ -299,7 +299,7 @@ export const appRouter = router({
           key: "erp" as const,
           done: erpConnected,
           title: "اربط نظامك المحاسبي",
-          detail: "حتى يعمل الوكيل الذكي على بياناتك الحقيقية بدل البيانات التجريبية.",
+          detail: "حتى يعمل المحاسب الذكي على بياناتك الحقيقية بدل البيانات التجريبية.",
           href: "/channels",
           cta: "اربط الآن",
           critical: true,
@@ -1635,7 +1635,7 @@ export const appRouter = router({
                 messaging_product: "whatsapp",
                 to: input.testNumber,
                 type: "text",
-                text: { body: "✅ اختبار ناجح من نظام Almoaser AI ERP! الوكيل الذكي جاهز للعمل." },
+                text: { body: "✅ اختبار ناجح من نظام Almoaser AI ERP! المحاسب الذكي جاهز للعمل." },
               }),
             }
           );
@@ -1663,7 +1663,7 @@ export const appRouter = router({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 chat_id: input.chatId,
-                text: "✅ اختبار ناجح من نظام Almoaser AI ERP! الوكيل الذكي جاهز للعمل.",
+                text: "✅ اختبار ناجح من نظام Almoaser AI ERP! المحاسب الذكي جاهز للعمل.",
               }),
             }
           );
