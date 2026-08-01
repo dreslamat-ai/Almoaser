@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractSignupAction, isUsableSalesReply, hasArabic } from "./salesAgent";
+import { extractSignupAction, isUsableSalesReply, hasArabic, buildSalesSystemPrompt, SALES_MODELS } from "./salesAgent";
 
 describe("extractSignupAction", () => {
   it("يفصل العلامة ويعيد رقم الباقة", () => {
@@ -76,5 +76,65 @@ describe("hasArabic", () => {
     expect(hasArabic("مرحبا")).toBe(true);
     expect(hasArabic("hello")).toBe(false);
     expect(hasArabic("hello مرحبا")).toBe(true);
+  });
+});
+
+// تسريب حقيقي شوهد في الإنتاج: "المستند الذي 记录的 البيع"
+describe("رفض تسريب اللغة الثالثة", () => {
+  it("يرفض حروفاً صينية داخل رد عربي سليم في الباقي", () => {
+    expect(isUsableSalesReply("الفاتورة هي المستند الذي 记录的 البيع في النظام", true)).toBe(false);
+  });
+
+  it("يرفضها في الرد الإنجليزي أيضاً — العيب ليس في لغة السائل", () => {
+    expect(isUsableSalesReply("The invoice is the document that 记录 the sale", false)).toBe(false);
+  });
+
+  it("يرفض اليابانية والكورية كذلك", () => {
+    expect(isUsableSalesReply("الفاتورة テスト في النظام", true)).toBe(false);
+    expect(isUsableSalesReply("الفاتورة 테스트 في النظام", true)).toBe(false);
+  });
+
+  // الرد السليم لا يُرفض: المصطلحات الإنجليزية مشروعة في سياقنا
+  it("يقبل رداً عربياً فيه مصطلحات إنجليزية", () => {
+    expect(isUsableSalesReply("نعم، ERPNext يدعم Sales Invoice بشكل كامل", true)).toBe(true);
+  });
+});
+
+describe("نطاق سارة في رسالة النظام", () => {
+  const prompt = buildSalesSystemPrompt([
+    { id: 1, nameAr: "الأساسية", price: 499, monthlyCredits: 300 } as never,
+  ]);
+
+  it("يسمّي ما خرج عن النطاق لا فئات مجرّدة", () => {
+    for (const t of ["النكت", "الطبخ", "الطب", "الرياضة"]) expect(prompt).toContain(t);
+  });
+
+  // نفس الالتفاف الذي استخدمه المحاسب الذكي فعلاً
+  it("يمنع إسقاط السؤال الخارجي على المحاسبة", () => {
+    expect(prompt).toContain("ولا تُسقطي السؤال على المحاسبة");
+  });
+
+  it("يمنع ذكر المنافسين بالاسم", () => {
+    expect(prompt).toContain("لا تتحدثي عن منافسين بالاسم");
+  });
+
+  it("يمنع اختراع معلومة عن ERPNext لإكمال الإجابة", () => {
+    expect(prompt).toContain("لا تخترعي معلومة عن ERPNext");
+  });
+
+  it("يمنع لغة ثالثة مع بقاء قاعدة مجاراة لهجة العميل", () => {
+    expect(prompt).toContain("لا تُدخلي حرفاً من لغة ثالثة");
+    expect(prompt).toContain("تحدّثي بلغة العميل ولهجته");
+  });
+});
+
+describe("سلسلة موديلات المبيعات", () => {
+  // أجاب "٣٥٠٠ ريال" عن سعر الباقة الاحترافية (٩٩٩) — سعر باقة الخبير
+  it("لا تعود بموديل أخطأ في نقل الأسعار", () => {
+    expect(SALES_MODELS).not.toContain("nvidia/nemotron-3-super-120b-a12b:free");
+  });
+
+  it("يبقى أكثر من مصدر: تعطّل واحد لا يُسكت سارة", () => {
+    expect(SALES_MODELS.length).toBeGreaterThanOrEqual(3);
   });
 });
