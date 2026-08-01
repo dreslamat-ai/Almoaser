@@ -1,8 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
-const agentSource = readFileSync(join(__dirname, "routers", "agent.ts"), "utf8");
+// بعد تفكيك الوكيل صار المصدر موزّعاً على server/agent/ والراوتر. هذه
+// التأكيدات تقرأ النص لا السلوك، فتُقرأ الوحدات كلها مجموعةً كي تبقى المقاصد
+// نفسها ولا تسقط بمجرّد انتقال الكود من ملف إلى آخر.
+const readAgentSource = () => {
+  const dir = join(__dirname, "agent");
+  const files = readdirSync(dir).filter(f => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+  return [
+    ...files.map(f => readFileSync(join(dir, f), "utf8")),
+    readFileSync(join(__dirname, "routers", "agent.ts"), "utf8"),
+  ].join("\n");
+};
+const agentSource = readAgentSource();
 
 describe("create_payment_entry — حل طريقة الدفع والأخطاء", () => {
   it("يحل mode_of_payment بمطابقة ذكية مع طرق الدفع الفعلية", () => {

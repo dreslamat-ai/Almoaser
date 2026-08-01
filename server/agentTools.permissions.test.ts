@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canUseTool, toolsForUser } from "./routers/agent";
+import { canUseTool, toolsForUser } from "./agent/toolPermissions";
 
 type U = { orgRole: "owner" | "member" | null; permissions: string | null };
 const owner: U = { orgRole: "owner", permissions: null };

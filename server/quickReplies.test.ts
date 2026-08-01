@@ -2,7 +2,7 @@
  * اختبارات استخراج أزرار الإجابات السريعة (Quick Replies) من رد الوكيل
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { extractQuickReplies } from "./routers/agent";
+import { extractQuickReplies } from "./agent/quickReplies";
 import * as dbHelpers from "./db";
 
 describe("extractQuickReplies", () => {

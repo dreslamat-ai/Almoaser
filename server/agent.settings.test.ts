@@ -1,19 +1,36 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 // يقرأ ملف الوكيل كنص للتحقق من أن أدوات الإعدادات تدعم أي DocType
 // وأن التعليمات النظامية تمنع الرفض الاستباقي للصلاحيات
-const agentSource = readFileSync(join(__dirname, "routers", "agent.ts"), "utf8");
+// بعد تفكيك الوكيل صار المصدر موزّعاً على server/agent/ والراوتر. هذه
+// التأكيدات تقرأ النص لا السلوك، فتُقرأ الوحدات كلها مجموعةً كي تبقى المقاصد
+// نفسها ولا تسقط بمجرّد انتقال الكود من ملف إلى آخر.
+const readAgentSource = () => {
+  const dir = join(__dirname, "agent");
+  const files = readdirSync(dir).filter(f => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+  return [
+    ...files.map(f => readFileSync(join(dir, f), "utf8")),
+    readFileSync(join(__dirname, "routers", "agent.ts"), "utf8"),
+  ].join("\n");
+};
+const agentSource = readAgentSource();
 
 describe("أدوات إعدادات الوكيل — صلاحيات كاملة", () => {
   it("settings_type لم يعد محصوراً بقائمة enum مغلقة", () => {
     // يجب ألا يوجد enum مغلق لأنواع الإعدادات في تعريف الأدوات
-    const toolsSection = agentSource.slice(
-      agentSource.indexOf('name: "get_settings"'),
-      agentSource.indexOf("// ─── Tool Executor")
-    );
-    expect(toolsSection).not.toContain("enum:");
+    // القياس السابق كان موضعياً (يقصّ من اسم الأداة إلى علامة قسم) فصار يقرأ
+    // أدوات أخرى لها enum مشروع بعد التفكيك. المقصود واحد: حقل settings_type
+    // نفسه لا يحصر الأنواع — فيُقاس على تعريف الحقل لا على ما حوله.
+    const defs = readFileSync(join(__dirname, "agent", "toolDefinitions.ts"), "utf8");
+    let seen = 0;
+    for (let i = defs.indexOf("settings_type: {"); i !== -1; i = defs.indexOf("settings_type: {", i + 1)) {
+      seen++;
+      const block = defs.slice(i, defs.indexOf("},", i));
+      expect(block, "settings_type يجب ألا يحصر الأنواع في قائمة مغلقة").not.toContain("enum:");
+    }
+    expect(seen, "لم يُعثر على تعريف settings_type أصلاً").toBeGreaterThan(0);
   });
 
   it("أداة update_settings تدعم Mode of Payment وربط الحسابات عبر الجدول الفرعي accounts", () => {
