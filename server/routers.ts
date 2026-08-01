@@ -867,6 +867,8 @@ export const appRouter = router({
           role: z.enum(["user", "assistant"]),
           content: z.string().min(1).max(SALES_MAX_CHARS),
         })).min(1).max(SALES_MAX_MESSAGES),
+        // معرّف العميل المحتمل من رسالة سابقة في نفس الجلسة
+        leadId: z.number().int().positive().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         // مفتوح للعموم وتكلفته علينا: الحدّ بالعنوان يمنع الاستنزاف
@@ -879,7 +881,7 @@ export const appRouter = router({
 
         const plans = await getActivePlans();
         const { invokeNamedModel } = await import("./llmProvider");
-        const { buildSalesSystemPrompt, SALES_MODELS, SALES_MAX_TOKENS, isUsableSalesReply, hasArabic } = await import("./salesAgent");
+        const { buildSalesSystemPrompt, SALES_MODELS, SALES_MAX_TOKENS, isUsableSalesReply, hasArabic, extractSignupAction } = await import("./salesAgent");
         const system = buildSalesSystemPrompt(plans);
         const userWroteArabic = input.messages.some(m => m.role === "user" && hasArabic(m.content));
 
@@ -900,9 +902,48 @@ export const appRouter = router({
           }
         }
         if (!reply) {
-          return { reply: "اعذرني، فيه ضغط على الخدمة دلوقتي. جرّب بعد شوية أو سجّل من صفحة الاشتراك وفريقنا يتواصل معك." };
+          return { reply: "اعذرني، فيه ضغط على الخدمة دلوقتي. جرّب بعد شوية أو سجّل من صفحة الاشتراك وفريقنا يتواصل معك.", planId: null, planName: null, leadId: input.leadId ?? null };
         }
-        return { reply };
+        // الزر يُبنى هنا لا في نص الموديل — الروابط التي يكتبها تصل مشوّهة
+        const { extractLeadInfo, upsertLead, updateLead, extractLeadFromConversation } = await import("./salesLeads");
+        const lead = extractLeadInfo(reply);
+        const action = extractSignupAction(lead.text);
+        const plan = action.planId ? plans.find(p => p.id === action.planId) : undefined;
+
+        // حفظ ما جمعته سارة — لا يُفشل الرد إن تعثّر
+        let leadId = input.leadId ?? null;
+        try {
+          const { name, phone, ...rest } = lead.patch;
+          if (name || phone || leadId == null) {
+            const id = await upsertLead({ name, phone, leadId });
+            if (id) leadId = id;
+          }
+          if (leadId && (Object.keys(rest).length || plan)) {
+            await updateLead(leadId, { ...rest, interestedPlanId: plan?.id ?? null });
+          }
+        } catch (e) {
+          console.warn("[sales.chat] تعذّر حفظ بيانات العميل المحتمل:", e instanceof Error ? e.message : e);
+        }
+
+        // استخلاص في الخلفية: لا ينتظره العميل، ويلتقط ما لم تُصدره سارة كعلامة
+        void (async () => {
+          try {
+            const found = await extractLeadFromConversation(input.messages);
+            if (!Object.keys(found).length) return;
+            const { name, phone, ...rest } = found;
+            const id = await upsertLead({ name, phone, leadId });
+            if (id) await updateLead(id, rest);
+          } catch (e) {
+            console.warn("[sales.chat] تعذّر استخلاص بيانات المحادثة:", e instanceof Error ? e.message : e);
+          }
+        })();
+
+        return {
+          reply: action.text,
+          planId: plan?.id ?? null,
+          planName: plan?.nameAr ?? null,
+          leadId,
+        };
       }),
   }),
 
@@ -983,6 +1024,19 @@ export const appRouter = router({
           details: `اطّلاع على محادثة #${input.conversationId} — ${res.title}`,
         });
         return res;
+      }),
+    leads: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { listLeads } = await import("./salesLeads");
+      return listLeads();
+    }),
+    setLeadStatus: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), status: z.enum(["new", "contacted", "converted", "declined"]) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { setLeadStatus } = await import("./salesLeads");
+        await setLeadStatus(input.id, input.status);
+        return { ok: true };
       }),
     appRequests: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

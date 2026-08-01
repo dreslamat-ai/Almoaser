@@ -264,6 +264,12 @@ export function AdminConsole() {
 
   const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
   const [openChatId, setOpenChatId] = useState<number | null>(null);
+  const { data: leads } = trpc.admin.leads.useQuery(undefined,
+    { enabled: isAuthenticated && user?.role === "admin" && tab === "leads" });
+  const setLeadStatusM = trpc.admin.setLeadStatus.useMutation({
+    onSuccess: () => { toast.success("تم التحديث"); utils.admin.leads.invalidate(); },
+    onError: e => toast.error(e.message),
+  });
   const { data: appReqs } = trpc.admin.appRequests.useQuery(undefined,
     { enabled: isAuthenticated && user?.role === "admin" && tab === "apps" });
   const setReqStatus = trpc.admin.setAppRequestStatus.useMutation({
@@ -370,7 +376,7 @@ export function AdminConsole() {
       {insights && <PlatformInsights data={insights} />}
 
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["apps", "طلبات التطبيقات"], ["coupons", "الكوبونات"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
+        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["leads", "عملاء محتملون"], ["apps", "طلبات التطبيقات"], ["coupons", "الكوبونات"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 [@media(pointer:coarse)]:min-h-11 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
             {l}
@@ -821,6 +827,53 @@ export function AdminConsole() {
             </div>
           </div>
         )}
+        {tab === "leads" && (
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="p-3 text-xs text-muted-foreground border-b border-gray-50">
+              يجمعها الشات أثناء الحديث لا كاستمارة قبله. البيانات الناقصة طبيعية — سارة تسأل ولا تلحّ ولا تخترع.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-right">
+                  <tr>
+                    <th className="p-3 font-medium">الاسم</th>
+                    <th className="p-3 font-medium">الجوال</th>
+                    <th className="p-3 font-medium">المدينة</th>
+                    <th className="p-3 font-medium">النشاط</th>
+                    <th className="p-3 font-medium">الموظفون</th>
+                    <th className="p-3 font-medium">التاريخ</th>
+                    <th className="p-3 font-medium">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(leads ?? []).map(l => (
+                    <tr key={l.id} className="border-t border-gray-50">
+                      <td className="p-3">{l.name ?? "—"}</td>
+                      <td className="p-3 font-mono text-xs" dir="ltr">{l.phone ?? "—"}</td>
+                      <td className="p-3">{l.city ?? "—"}</td>
+                      <td className="p-3 text-xs">{l.activity ?? "—"}</td>
+                      <td className="p-3">{l.employees ?? "—"}</td>
+                      <td className="p-3 text-xs text-muted-foreground">{new Date(l.createdAt).toLocaleDateString("ar-SA")}</td>
+                      <td className="p-3">
+                        <select className="border rounded-lg px-2 h-9 text-xs" value={l.status}
+                          onChange={e => setLeadStatusM.mutate({ id: l.id, status: e.target.value as "new" | "contacted" | "converted" | "declined" })}>
+                          <option value="new">جديد</option>
+                          <option value="contacted">تم التواصل</option>
+                          <option value="converted">تحوّل لعميل</option>
+                          <option value="declined">غير مهتم</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                  {leads && leads.length === 0 && (
+                    <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">لا يوجد عملاء محتملون بعد</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {tab === "apps" && (
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="p-3 text-xs text-muted-foreground border-b border-gray-50">

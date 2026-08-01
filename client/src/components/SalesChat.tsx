@@ -1,28 +1,49 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, ArrowLeft } from "lucide-react";
 import { SALES_MAX_CHARS } from "@shared/salesLimits";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; planId?: number | null; planName?: string | null };
 
 const GREETING: Msg = {
   role: "assistant",
   content: "أهلاً بك 👋 أنا سارة من المعاصر AI. تحب أشرح لك كيف تشتغل المنصة مع نظامك، ولا عندك سؤال معيّن؟",
 };
 
+// المحادثة تبقى بعد الانتقال لصفحة التسجيل: العميل يضغط الزر فتُفقد الحالة
+// بالتنقّل، فيعود ويجد الشات فارغاً وكأن أحداً لم يكلّمه. sessionStorage يكفي —
+// نريدها للجلسة لا للأبد.
+const STORE_KEY = "sales_chat_v1";
+
+function loadStored(): { messages: Msg[]; open: boolean; leadId: number | null } | null {
+  try {
+    const raw = sessionStorage.getItem(STORE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { messages?: Msg[]; open?: boolean; leadId?: number | null };
+    return Array.isArray(v.messages) && v.messages.length ? { messages: v.messages, open: !!v.open, leadId: v.leadId ?? null } : null;
+  } catch { return null; }
+}
+
 export default function SalesChat() {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Msg[]>([GREETING]);
+  const stored = typeof window !== "undefined" ? loadStored() : null;
+  // يُفتح تلقائياً عند العودة من التسجيل ليكمل الحديث لا ليبدأ من جديد
+  const [open, setOpen] = useState(stored?.open ?? false);
+  const [messages, setMessages] = useState<Msg[]>(stored?.messages ?? [GREETING]);
   const [input, setInput] = useState("");
+  const [leadId, setLeadId] = useState<number | null>(stored?.leadId ?? null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const chat = trpc.sales.chat.useMutation({
-    onSuccess: r => setMessages(m => [...m, { role: "assistant", content: r.reply }]),
+    onSuccess: r => { if (r.leadId) setLeadId(r.leadId); setMessages(m => [...m, { role: "assistant", content: r.reply, planId: r.planId, planName: r.planName }]); },
     onError: e => setMessages(m => [...m, { role: "assistant", content: e.message }]),
   });
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, open]);
+
+  useEffect(() => {
+    try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open, leadId })); } catch { /* الحفظ ليس جوهرياً */ }
+  }, [messages, open, leadId]);
 
   const send = () => {
     const text = input.trim();
@@ -31,7 +52,12 @@ export default function SalesChat() {
     const next = [...messages, { role: "user" as const, content: text }];
     setMessages(next);
     setInput("");
-    chat.mutate({ messages: next.filter(m => m.content !== GREETING.content).slice(-12) });
+    // نرسل الدور والنص فقط — الزر حالة عرض لا جزء من المحادثة
+    chat.mutate({
+      messages: next.filter(m => m.content !== GREETING.content).slice(-12)
+        .map(m => ({ role: m.role, content: m.content })),
+      ...(leadId ? { leadId } : {}),
+    });
   };
 
   return (
@@ -67,6 +93,16 @@ export default function SalesChat() {
                 <div className={`inline-block max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap leading-6 ${
                   m.role === "user" ? "bg-navy text-white" : "bg-white border border-border text-foreground"
                 }`}>{m.content}</div>
+                {m.planId != null && (
+                  <div className="mt-2">
+                    <a href={`/signup?plan=${m.planId}`}
+                      onClick={() => { try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open: true, leadId })); } catch { /* لا شيء */ } }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-navy text-white font-bold text-sm px-4 h-11 shadow-sm hover:bg-navy-dark transition-colors">
+                      ابدأ التسجيل{m.planName ? ` — ${m.planName}` : ""}
+                      <ArrowLeft className="w-4 h-4" />
+                    </a>
+                  </div>
+                )}
               </div>
             ))}
             {chat.isPending && (

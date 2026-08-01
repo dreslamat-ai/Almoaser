@@ -265,6 +265,31 @@ export type AgentMessage = typeof agentMessages.$inferSelect;
 
 // ─── نظام الإشعارات المخصصة ──────────────────────────────────────────────────
 // إشعارات المستخدم داخل الموقع (مركز الإشعارات — جرس + عدّاد غير المقروء)
+// ─── عملاء محتملون من شات المبيعات ───────────────────────────────────────────
+// الشات مفتوح بلا بوابة عمداً: الزائر الذي يسأل عن السعر يهرب من استمارة قبل
+// الكلام، فنخسر المحادثة والبيانات معاً — كما أن إرسال رسائل تحقّق لزائر مجهول
+// باب استنزاف مكلف. سارة تجمع البيانات حين يظهر الاهتمام، وقتها يعطيها العميل
+// بيانات صحيحة لأنه يريد شيئاً. التحقق بالرسالة يبقى في مكانه الطبيعي: التسجيل.
+// الرقم بصيغة E.164 موحّدة كي لا يظهر العميل الواحد مرتين.
+export const salesLeads = mysqlTable("sales_leads", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 160 }).notNull(),
+  phone: varchar("phone", { length: 20 }).unique(),
+  phoneVerifiedAt: timestamp("phoneVerifiedAt"),
+  // تُستكمل أثناء المحادثة
+  city: varchar("city", { length: 120 }),
+  activity: varchar("activity", { length: 255 }),
+  employees: int("employees"),
+  interestedPlanId: int("interestedPlanId"),
+  // نص المحادثة الأخير للسياق عند المتابعة البشرية
+  notes: text("notes"),
+  status: mysqlEnum("status", ["new", "contacted", "converted", "declined"]).default("new").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SalesLead = typeof salesLeads.$inferSelect;
+
 // ─── كتالوج التطبيقات التي بناها الوكيل ──────────────────────────────────────
 // شغل الوكيل أصل يُعاد بيعه لا مهمة تنتهي: تطبيق بُني لعميل يصلح لغيره. ولأن
 // النسخة اللاحقة تُبنى فوق سابقة، نحفظ نسبها والفرق بينهما — بلا ذلك لا يُعرف
