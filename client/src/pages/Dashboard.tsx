@@ -10,7 +10,7 @@ import FloatingChatButton from "@/components/FloatingChatButton";
 import { AdminConsole } from "./AdminPanel";
 import AccountSetupCard from "@/components/AccountSetupCard";
 import { useState } from "react";
-import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu, Users, ShieldCheck } from "lucide-react";
+import { BookOpen, FileText, DollarSign, BarChart3, Settings, LogOut, CheckCircle2, Clock, AlertCircle, TrendingUp, Bot, MessageCircle, Database, Menu, Users, ShieldCheck, ClipboardList } from "lucide-react";
 
 function SidebarContent({ active, onNavigate }: { active: string; onNavigate?: () => void }) {
   const { user, logout } = useAuth();
@@ -21,6 +21,7 @@ function SidebarContent({ active, onNavigate }: { active: string; onNavigate?: (
     { path: "/tasks", label: "المهام", icon: <CheckCircle2 className="w-5 h-5" /> },
     { path: "/invoices", label: "الفواتير", icon: <FileText className="w-5 h-5" /> },
     { path: "/subscription", label: "الاشتراك", icon: <DollarSign className="w-5 h-5" /> },
+    { path: "/reports", label: "التقارير", icon: <ClipboardList className="w-5 h-5" /> },
     { path: "/erp", label: "نظام ERP", icon: <Database className="w-5 h-5" /> },
     ...(user?.orgRole === "owner" ? [{ path: "/team", label: "الفريق", icon: <Users className="w-5 h-5" /> }] : []),
     // لوحة المالك لم تعد بنداً مستقلاً — أصبحت هي محتوى "الرئيسية" للمسؤول

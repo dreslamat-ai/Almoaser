@@ -858,6 +858,39 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── تقارير الخبير ───────────────────────────────────────────────────────────
+  // المراجعة للعميل نفسه: هو من يقرّ ما أُعدّ له، لا المنصة.
+  reports: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { listReportsForUser } = await import("./reports");
+      return listReportsForUser(ctx.effectiveUserId ?? ctx.user.id);
+    }),
+    get: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const { getReport } = await import("./reports");
+        const r = await getReport(input.id);
+        const ownerId = ctx.effectiveUserId ?? ctx.user.id;
+        // الأدمن يقرأ أي تقرير؛ غيره تقاريره هو فقط
+        if (!r || (r.userId !== ownerId && ctx.user.role !== "admin")) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "التقرير غير موجود" });
+        }
+        return r;
+      }),
+    review: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        approve: z.boolean(),
+        note: z.string().trim().max(2000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { reviewReport } = await import("./reports");
+        const ok = await reviewReport({ ...input, userId: ctx.effectiveUserId ?? ctx.user.id });
+        if (!ok) throw new TRPCError({ code: "FORBIDDEN", message: "لا يمكنك مراجعة هذا التقرير" });
+        return { ok: true };
+      }),
+  }),
+
   admin: router({
     // ─── الاطّلاع على محادثات العملاء (لمالك المنصة) ──────────────────────────
     // محادثات العملاء تحمل بياناتهم المالية، فكل فتح لمحادثة يُسجَّل في سجل
@@ -887,6 +920,11 @@ export const appRouter = router({
         });
         return res;
       }),
+    allReports: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { listAllReports } = await import("./reports");
+      return listAllReports();
+    }),
     registrations: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       return getAllRegistrationRequests();

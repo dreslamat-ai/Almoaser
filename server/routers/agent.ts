@@ -598,6 +598,23 @@ const TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "save_report",
+      description: "حفظ تقرير رسمي في حساب العميل (تقييم نظام، بنود استلام، مراجعة عقد، سياسات، تصميم دورة عمل). استدعها بعد أن تكتب التقرير كاملاً في المحادثة — الحفظ يجعله مستنداً يُفتح لاحقاً ويُراجع، ويُشعر إدارة المنصة. التقرير يُحفظ بانتظار مراجعة العميل",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["system_assessment", "handover_terms", "contract_review", "policies", "workflow_design", "other"], description: "نوع التقرير" },
+          title: { type: "string", description: "عنوان واضح يميّزه لاحقاً" },
+          content: { type: "string", description: "نص التقرير كاملاً بصيغة Markdown، بأقسامه الثلاثة: فُحص / لم يُفحص / يحتاج قراراً بشرياً" },
+        },
+        required: ["kind", "title", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "get_workflow_options",
       description: "قراءة الحالات والإجراءات والأدوار المتاحة في نظام العميل لبناء دورة عمل. **استدعها دائماً قبل create_workflow** — أسماء الحالات والإجراءات روابط لسجلات قائمة، واختراع اسم غير موجود يُفشل الإنشاء",
       parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
@@ -1105,7 +1122,8 @@ async function inspectTaxSetup(): Promise<TaxSetupOk | TaxSetupGap> {
   };
 }
 
-async function executeTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown; display: string }> {
+type ToolCtx = { userId: number; conversationId?: number };
+async function executeTool(name: string, args: Record<string, unknown>, toolCtx?: ToolCtx): Promise<{ result: unknown; display: string }> {
   switch (name) {
     case "get_invoices": {
       const limit = (args.limit as number) ?? 10;
@@ -1684,6 +1702,41 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
       };
     }
+    case "save_report": {
+      const kind = String(args.kind ?? "other");
+      const title = String(args.title ?? "").trim();
+      const content = String(args.content ?? "").trim();
+      if (!title || content.length < 50) {
+        return { result: { ok: false, error: "العنوان مطلوب، ونص التقرير يجب أن يكون مكتملاً لا سطراً واحداً" }, display: "" };
+      }
+      const { createReport, REPORT_KIND_LABELS } = await import("../reports");
+      const ownerId = toolCtx?.userId;
+      // بلا سياق مستخدم لا يُعرف صاحب التقرير — الحفظ في حساب خاطئ أسوأ من عدمه
+      if (!ownerId) return { result: { ok: false, error: "تعذّر تحديد حساب العميل لحفظ التقرير" }, display: "" };
+      const id = await createReport({
+        userId: ownerId, conversationId: toolCtx?.conversationId ?? null,
+        kind: kind as Parameters<typeof createReport>[0]["kind"], title, content,
+      });
+      if (!id) return { result: { ok: false, error: "تعذّر حفظ التقرير" }, display: "" };
+      // إشعار إدارة المنصة — لا يُفشل الحفظ إن تعذّر
+      try {
+        const { notifyAdmins } = await import("../notifications");
+        await notifyAdmins({
+          type: "report_created",
+          title: `تقرير جديد: ${title}`,
+          body: `${REPORT_KIND_LABELS[kind as keyof typeof REPORT_KIND_LABELS] ?? "تقرير"} — بانتظار مراجعة العميل`,
+          link: "/dashboard",
+        });
+      } catch (e) {
+        console.warn("[save_report] تعذّر إشعار الإدارة:", e instanceof Error ? e.message : e);
+      }
+      return {
+        result: { ok: true, report_id: id, status: "pending_review",
+          note: "حُفظ التقرير في حساب العميل بانتظار مراجعته. أبلغ العميل أنه يستطيع مراجعته وإقراره من صفحة التقارير" },
+        display: `__REPORT_SAVED__${JSON.stringify({ id, kind, title })}`,
+      };
+    }
+
     case "get_workflow_options": {
       const q = (o: unknown) => encodeURIComponent(JSON.stringify(o));
       const [st, ac, ro] = await Promise.all([
@@ -2247,7 +2300,7 @@ ${modeRulesFor(agentMode)}`;
                 })()
               : activeConfig.provider === "odoo" && activeConfig.database
                 ? await executeOdooTool(tc.function.name, args, activeConfig as ErpConfig & { database: string })
-                : await executeTool(tc.function.name, args);
+                : await executeTool(tc.function.name, args, { userId: ctx.effectiveUserId ?? ctx.user.id, conversationId });
             toolResult = JSON.stringify(result);
             displayData = display;
             // ─── خصم 5 نقاط لكل مستند ERP يُنشأ بنجاح (فاتورة/دفعة/قيد) — من رصيد المنظمة المشترك ───

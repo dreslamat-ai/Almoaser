@@ -262,6 +262,34 @@ export type AgentMessage = typeof agentMessages.$inferSelect;
 
 // ─── نظام الإشعارات المخصصة ──────────────────────────────────────────────────
 // إشعارات المستخدم داخل الموقع (مركز الإشعارات — جرس + عدّاد غير المقروء)
+// ─── تقارير الوكيل الخبير ─────────────────────────────────────────────────────
+// التقارير كانت تعيش داخل المحادثات كرسائل عادية: لا عنوان ولا نوع ولا طريقة
+// لفتح تقرير قديم دون التنقيب في شات. هنا تصير مستنداً له كيان مستقل.
+// حقول المراجعة موجودة منذ البداية ليخدم الجدولُ لاحقاً طلبات موافقة العميل
+// على ما ينفّذه الوكيل المبرمج، بدل جدول ثانٍ يكرّر نفس الشكل.
+export const agentReports = mysqlTable("agent_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  // صاحب التقرير: العميل الذي أُعدّ له (مالك الحساب)
+  userId: int("userId").notNull().references(() => users.id),
+  // المحادثة التي وُلد منها، إن وُجدت — للرجوع إلى السياق
+  conversationId: int("conversationId"),
+  kind: mysqlEnum("kind", [
+    "system_assessment", "handover_terms", "contract_review",
+    "policies", "workflow_design", "other",
+  ]).default("other").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  // نص التقرير بصيغة Markdown
+  content: text("content").notNull(),
+  status: mysqlEnum("status", ["draft", "pending_review", "approved", "rejected"])
+    .default("draft").notNull(),
+  reviewedAt: timestamp("reviewedAt"),
+  reviewNote: text("reviewNote"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AgentReport = typeof agentReports.$inferSelect;
+
 export const notifications = mysqlTable("notifications", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull().references(() => users.id),

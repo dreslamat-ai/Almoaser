@@ -1038,6 +1038,23 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       );
     } catch { return null; }
   }
+  if (display.startsWith("__REPORT_SAVED__")) {
+    try {
+      const d = JSON.parse(display.replace("__REPORT_SAVED__", "")) as { id: number; kind: string; title: string };
+      return (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+          <div className="flex items-center gap-2 font-bold text-sky-900">
+            <FileText className="w-4 h-4 shrink-0" /> حُفظ التقرير: {d.title}
+          </div>
+          <p className="text-sky-800 mt-1 text-xs">
+            محفوظ في حسابك بانتظار مراجعتك — تقدر تقرّه أو ترفضه من صفحة التقارير.
+          </p>
+          <a href="/reports" className="inline-block mt-2 text-xs font-medium text-sky-700 underline">فتح التقارير</a>
+        </div>
+      );
+    } catch { return null; }
+  }
+
   if (display.startsWith("__WORKFLOW_CREATED__")) {
     try {
       const d = JSON.parse(display.replace("__WORKFLOW_CREATED__", "")) as {

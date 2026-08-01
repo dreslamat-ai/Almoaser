@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Invoices from "./pages/Invoices";
 import Subscription from "./pages/Subscription";
+import Reports from "./pages/Reports";
 import ERPNextDashboard from "./pages/ERPNextDashboard";
 import AgentChat from "./pages/AgentChat";
 import ChannelSettings from "./pages/ChannelSettings";
@@ -69,6 +70,7 @@ function Router() {
       <Route path="/tasks" component={Tasks} />
       <Route path="/invoices" component={Invoices} />
       <Route path="/subscription" component={Subscription} />
+      <Route path="/reports" component={Reports} />
       <Route path="/payment/callback" component={PaymentCallback} />
       <Route path="/verify-email" component={VerifyEmail} />
       {/* دُمجت لوحة المالك في "الرئيسية" — نُبقي المسار حياً للروابط والمفضّلة القديمة */}

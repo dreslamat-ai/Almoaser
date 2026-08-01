@@ -264,6 +264,8 @@ export function AdminConsole() {
 
   const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
   const [openChatId, setOpenChatId] = useState<number | null>(null);
+  const { data: allReports } = trpc.admin.allReports.useQuery(undefined,
+    { enabled: isAuthenticated && user?.role === "admin" && tab === "reports" });
   const { data: customerChats } = trpc.admin.customerConversations.useQuery(undefined,
     { enabled: isAuthenticated && user?.role === "admin" && tab === "chats" });
   // الرسائل تُجلب عند الفتح فقط — كل جلب يُسجَّل في سجل التدقيق
@@ -351,7 +353,7 @@ export function AdminConsole() {
       {insights && <PlatformInsights data={insights} />}
 
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
+        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 [@media(pointer:coarse)]:min-h-11 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
             {l}
@@ -802,6 +804,53 @@ export function AdminConsole() {
             </div>
           </div>
         )}
+        {tab === "reports" && (
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-right">
+                  <tr>
+                    <th className="p-3 font-medium">التقرير</th>
+                    <th className="p-3 font-medium">النوع</th>
+                    <th className="p-3 font-medium">العميل</th>
+                    <th className="p-3 font-medium">الحالة</th>
+                    <th className="p-3 font-medium">التاريخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(allReports ?? []).map(r => {
+                    const kinds: Record<string, string> = {
+                      system_assessment: "تقييم نظام", handover_terms: "بنود استلام",
+                      contract_review: "مراجعة عقد", policies: "سياسات", workflow_design: "دورة عمل", other: "تقرير",
+                    };
+                    const st: Record<string, string> = {
+                      pending_review: "بانتظار مراجعة العميل", approved: "مُقَر",
+                      rejected: "مرفوض", draft: "مسوّدة",
+                    };
+                    return (
+                      <tr key={r.id} className="border-t border-gray-50">
+                        <td className="p-3">{r.title}</td>
+                        <td className="p-3 text-xs">{kinds[r.kind] ?? "تقرير"}</td>
+                        <td className="p-3">
+                          <div>{r.orgName ?? r.ownerName ?? "—"}</div>
+                          <div className="text-xs text-muted-foreground">{r.ownerEmail}</div>
+                        </td>
+                        <td className="p-3 text-xs">{st[r.status] ?? r.status}</td>
+                        <td className="p-3 text-xs text-muted-foreground">
+                          {new Date(r.createdAt).toLocaleString("ar-SA")}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {allReports && allReports.length === 0 && (
+                    <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">لا توجد تقارير بعد</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {tab === "chats" && (
           <div className="space-y-3">
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
