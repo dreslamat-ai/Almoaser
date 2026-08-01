@@ -127,6 +127,45 @@ export async function getDefaultCompany(): Promise<string> {
 }
 
 // ترجمة أخطاء ERPNext الشائعة إلى رسائل عربية مفهومة
+/**
+ * يستخرج الرسالة البشرية من خطأ Frappe.
+ *
+ * الخطأ يصل غلافاً على غلاف: JSON فيه _server_messages وهو نصٌّ يحوي JSON آخر،
+ * والرسالة داخله مهرَّبة بـ\uXXXX وفيها وسوم HTML لروابط النظام. تسليمه كما هو
+ * — وقد حدث — يضع أمام محاسبٍ سطراً من الشيفرة بدل سبب مفهوم.
+ */
+export function frappeHumanMessage(raw: string): string {
+  const candidates: string[] = [];
+
+  // الجسم كائن JSON مسبوق أحياناً بـ"ERPNext DELETE error 417: " — نقتطع من أول قوس
+  const brace = raw.indexOf("{");
+  if (brace >= 0) {
+    try {
+      const body = JSON.parse(raw.slice(brace)) as { _server_messages?: string; exception?: string; message?: string };
+      // _server_messages نصٌّ يحوي مصفوفة نصوص، كلٌّ منها JSON فيه message
+      if (typeof body._server_messages === "string") {
+        for (const entry of JSON.parse(body._server_messages) as string[]) {
+          try {
+            const m = (JSON.parse(entry) as { message?: string }).message;
+            if (m) candidates.push(m);
+          } catch { candidates.push(entry); }
+        }
+      }
+      if (body.exception) candidates.push(body.exception.replace(/^[\w.]*(?:Error|Exception):\s*/, ""));
+      if (body.message) candidates.push(body.message);
+    } catch { /* ليس JSON كاملاً — نكمل بالمصادر النصّية */ }
+  }
+
+  const text = candidates.map(c => c.trim()).find(c => c.length > 0);
+  if (!text) return "";
+
+  return text
+    .replace(/<a[^>]*>(.*?)<\/a>/gi, "$1")   // الرابط يُستبدل بنصّه لا يُحذف معه
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function translateErpError(raw: string): string {
   if (/LinkValidationError|Could not find/i.test(raw)) {
     const m = raw.match(/Could not find ([^:]+): ([^"\\,}]+)/i);
@@ -143,9 +182,32 @@ export function translateErpError(raw: string): string {
   }
   if (/DuplicateEntryError|already exists/i.test(raw)) return "السجل موجود مسبقاً — استخدم الموجود بدلاً من إنشاء نسخة مكررة";
   if (/MandatoryError|is mandatory/i.test(raw)) return "حقل إلزامي ناقص: " + raw.slice(0, 200);
-  if (/PermissionError|not permitted/i.test(raw)) return "صلاحيات غير كافية لتنفيذ هذه العملية في ERPNext";
-  if (/ValidationError/i.test(raw)) return "خطأ تحقق من ERPNext: " + raw.slice(0, 200);
-  return raw.slice(0, 300);
+  if (/PermissionError|not permitted/i.test(raw)) {
+    const f = frappeHumanMessage(raw);
+    return f ? `صلاحيات غير كافية في نظامك: ${f}` : "صلاحيات غير كافية لتنفيذ هذه العملية في نظامك";
+  }
+  // الارتباط يمنع الحذف، ورسالة Frappe تسمّي المستند المانع — وهو ما يحتاجه
+  // المستخدم ليعرف ماذا يفعل، لا رمز الاستثناء
+  if (/LinkExistsError/i.test(raw)) {
+    const f = frappeHumanMessage(raw);
+    return f
+      ? `${f} — احذف المستند المرتبط أو ألغه أولاً ثم أعد المحاولة`
+      : "لا يمكن الحذف لوجود مستند مرتبط — ابحث عن المرتبطات وألغها أولاً";
+  }
+  if (/DoesNotExistError|not found/i.test(raw)) {
+    const f = frappeHumanMessage(raw);
+    return f ? `غير موجود: ${f}` : "السجل المطلوب غير موجود في النظام";
+  }
+  if (/ValidationError/i.test(raw)) {
+    const f = frappeHumanMessage(raw);
+    return f ? `رفض النظام العملية: ${f}` : "رفض النظام العملية لعدم استيفاء شرط تحقق";
+  }
+  // آخر مهرب: نصٌّ بشري إن وُجد، وإلا وصفٌ مختصر — لا JSON خام مهما كان
+  const human = frappeHumanMessage(raw);
+  if (human) return human.slice(0, 300);
+  return raw.startsWith("{") || raw.includes('"exc_type"')
+    ? "رفض نظام ERP العملية بخطأ لم يُرفق له سبب مقروء"
+    : raw.slice(0, 300);
 }
 
 // مستندات الإعدادات الفردية (Single DocTypes) في Frappe/ERPNext: ليس لها جدول سجلات،

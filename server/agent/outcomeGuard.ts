@@ -49,6 +49,44 @@ export function claimsSuccess(text: string): boolean {
   return SUCCESS_CLAIM.test(text);
 }
 
+/**
+ * اسم الأداة كما يفهمه محاسب لا كما نسمّيه في الكود.
+ *
+ * الملخّص يُقرأ من عميل، وسطرٌ فيه delete_document يجعله يبحث عن معنى بدل أن
+ * يقرأ نتيجة. ما ليس في الجدول يُعرض بصيغة عامة لا بمعرّفه البرمجي.
+ */
+const TOOL_LABELS: Record<string, string> = {
+  get_invoices: "عرض الفواتير", get_invoice_detail: "قراءة تفاصيل فاتورة",
+  get_customers: "عرض العملاء", get_items: "عرض الأصناف", get_suppliers: "عرض الموردين",
+  get_accounts: "عرض شجرة الحسابات", get_payments: "عرض الدفعات",
+  get_journal_entries: "عرض القيود", get_sales_report: "تقرير المبيعات",
+  get_settings: "قراءة الإعدادات", list_documents: "البحث في المستندات",
+  print_document: "طباعة مستند", check_tax_setup: "فحص الإعداد الضريبي",
+  create_invoice: "إنشاء فاتورة مبيعات", create_purchase_invoice: "إنشاء فاتورة مشتريات",
+  create_payment_entry: "تسجيل دفعة", create_journal_entry: "إنشاء قيد يومية",
+  create_customer: "إنشاء عميل", create_item: "إنشاء صنف", create_supplier: "إنشاء مورّد",
+  update_customer: "تعديل عميل", update_document: "تعديل مستند", update_settings: "تعديل الإعدادات",
+  submit_invoice: "اعتماد فاتورة", submit_document: "اعتماد مستند",
+  cancel_document: "إلغاء مستند", delete_document: "حذف مستند",
+  setup_tax_settings: "ضبط الإعداد الضريبي", create_custom_field: "إضافة حقل مخصص",
+  create_print_format: "إنشاء نموذج طباعة", create_workflow: "إنشاء دورة عمل",
+  platform_activate_subscription: "تفعيل اشتراك", platform_grant_credits: "منح نقاط",
+  platform_extend_subscription: "تمديد اشتراك", platform_create_coupon: "إنشاء كوبون",
+  platform_set_coupon_active: "تغيير حالة كوبون", platform_set_user_active: "تغيير حالة حساب",
+  platform_set_lead_status: "تحديث عميل محتمل",
+};
+
+export function labelFor(toolName: string): string {
+  return TOOL_LABELS[toolName] ?? "عملية على النظام";
+}
+
+/** يقصّ الرسالة الطويلة: العميل يحتاج السبب لا سجلّ الخادم */
+function briefError(e?: string): string {
+  const t = (e ?? "").trim();
+  if (!t) return "فشل بلا سبب معلن";
+  return t.length > 220 ? t.slice(0, 217) + "…" : t;
+}
+
 export type Verdict =
   | { ok: true }
   | { ok: false; reason: string; replacement: string };
@@ -72,7 +110,7 @@ export function verifyReply(reply: string, outcomes: ToolOutcome[]): Verdict {
   if (succeeded.length > 0 && failed.length === 0) return { ok: true };
 
   if (failed.length > 0) {
-    const lines = failed.map(f => `• ${f.name}: ${f.error ?? "فشل بلا سبب معلن"}`).join("\n");
+    const lines = failed.map(f => `• ${labelFor(f.name)}: ${briefError(f.error)}`).join("\n");
     return {
       ok: false,
       reason: `ادّعاء نجاح مع فشل ${failed.length} أداة`,
@@ -102,14 +140,17 @@ export function summarizeOutcomes(outcomes: ToolOutcome[]): string {
 
   if (!bad.length) {
     return `تمّت ${ok.length === 1 ? "العملية" : `${ok.length} عمليات`} على نظامك:\n`
-      + ok.map(o => `• ${o.name}`).join("\n");
+      + ok.map(o => `• ${labelFor(o.name)}`).join("\n");
   }
   if (!ok.length) {
     return `⚠️ **لم يكتمل التنفيذ.**\n`
-      + bad.map(o => `• ${o.name}: ${o.error ?? "فشل بلا سبب معلن"}`).join("\n");
+      + bad.map(o => `• ${labelFor(o.name)}: ${briefError(o.error)}`).join("\n");
   }
-  return `تمّ جزء من الطلب دون بقيته:\n\n**نجح:**\n`
-    + ok.map(o => `• ${o.name}`).join("\n")
-    + `\n\n**لم ينجح:**\n`
-    + bad.map(o => `• ${o.name}: ${o.error ?? "فشل بلا سبب معلن"}`).join("\n");
+  // عمليات القراءة لا تُعرض في الملخّص: نجاح "عرض العملاء" ليس إنجازاً يُبلَّغ
+  // به، وذكرُه يدفن السطر الوحيد المهم — ما لم ينجح.
+  const okWrites = ok.filter(o => isMutating(o.name));
+  return (okWrites.length ? `تمّ جزء من الطلب دون بقيته:\n\n**نجح:**\n`
+      + okWrites.map(o => `• ${labelFor(o.name)}`).join("\n") + `\n\n**لم ينجح:**\n`
+      : `⚠️ **لم يكتمل التنفيذ.**\n\n`)
+    + bad.map(o => `• ${labelFor(o.name)}: ${briefError(o.error)}`).join("\n");
 }
