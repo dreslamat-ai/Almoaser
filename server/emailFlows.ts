@@ -7,6 +7,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { getDb } from "./db";
 import { users, emailVerificationTokens } from "../drizzle/schema";
 import { sendEmail, renderEmail, renderRows, appBaseUrl, isEmailConfigured } from "./email";
+import { getSellerIdentity } from "./sellerIdentity";
 
 const TOKEN_TTL_HOURS = 24;
 
@@ -138,6 +139,9 @@ export async function emailPaymentReceipt(userId: number, input: {
   billing?: "monthly" | "yearly" | null;
   credits?: number | null;
   amount: number;
+  /** الضريبة داخل amount — تُعرض منفصلة كما تُلزم الفاتورة الضريبية */
+  vatAmount?: number | null;
+  discountAmount?: number | null;
   currency?: string;
   paidAt?: Date;
   periodEnd?: string | null;
@@ -166,21 +170,45 @@ export async function emailPaymentReceipt(userId: number, input: {
   if (input.periodEnd) detailRows.push({ label: "الاشتراك ساري حتى", value: input.periodEnd });
   if (input.invoiceId) detailRows.push({ label: "رقم الفاتورة", value: input.invoiceId });
   detailRows.push({ label: "تاريخ الدفع", value: paidAt });
-  detailRows.push({ label: "المبلغ المدفوع", value: `${input.amount.toLocaleString("en-US")} ${currency}`, bold: true });
+
+  // الفاتورة الضريبية تلزم بعرض الضريبة منفصلة عن الصافي لا مبلغاً واحداً
+  const vat = Number(input.vatAmount ?? 0);
+  const discount = Number(input.discountAmount ?? 0);
+  const net = Math.round((input.amount - vat) * 100) / 100;
+  const money = (n: number) => `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  if (discount > 0) detailRows.push({ label: "الخصم", value: `− ${money(discount)}` });
+  if (vat > 0) {
+    detailRows.push({ label: "الإجمالي قبل الضريبة", value: money(net) });
+    detailRows.push({ label: "ضريبة القيمة المضافة 15%", value: money(vat) });
+  }
+  detailRows.push({ label: "الإجمالي المدفوع", value: money(input.amount), bold: true });
+
+  // بيانات البائع: بدونها الإيصال ليس فاتورة ضريبية معتمدة
+  const sellerState = getSellerIdentity();
+  if (sellerState.configured) {
+    const s = sellerState.seller;
+    detailRows.push({ label: "المورّد", value: s.legalName });
+    detailRows.push({ label: "الرقم الضريبي للمورّد", value: s.vatNumber });
+    detailRows.push({ label: "عنوان المورّد", value: s.address });
+  } else {
+    console.warn("[emailPaymentReceipt] بيانات البائع ناقصة — الإيصال ليس فاتورة ضريبية:", sellerState.missing.join("، "));
+  }
 
   await sendEmail({
     to,
-    subject: isTopup ? `إيصال شراء نقاط — ${input.amount} ${currency}` : `إيصال دفع الاشتراك — ${input.amount} ${currency}`,
+    subject: isTopup ? `فاتورة شراء نقاط — ${input.amount} ${currency}` : `فاتورة الاشتراك — ${input.amount} ${currency}`,
     html: renderEmail({
-      badge: "إيصال دفع",
+      badge: vat > 0 && sellerState.configured ? "فاتورة ضريبية مبسّطة" : "إيصال دفع",
       tone: "success",
       preview: `تم استلام ${input.amount.toLocaleString("en-US")} ${currency} بنجاح`,
-      heading: "تم استلام دفعتك بنجاح",
+      heading: vat > 0 && sellerState.configured ? "فاتورة ضريبية — تم استلام دفعتك" : "تم استلام دفعتك بنجاح",
       intro: "شكراً لك. هذه تفاصيل عمليتك، ويمكنك دائماً مراجعة سجل المدفوعات من حسابك.",
       bodyHtml: renderRows(detailRows),
       ctaLabel: "عرض سجل المدفوعات",
       ctaUrl: `${appBaseUrl()}/subscription`,
-      footerNote: "الأسعار لا تشمل ضريبة القيمة المضافة إلا إن ذُكر خلاف ذلك.",
+      footerNote: sellerState.configured
+        ? "هذه فاتورة ضريبية صادرة إلكترونياً ولا تحتاج توقيعاً. الضريبة موضحة أعلاه."
+        : "الأسعار لا تشمل ضريبة القيمة المضافة إلا إن ذُكر خلاف ذلك.",
     }),
   });
 }

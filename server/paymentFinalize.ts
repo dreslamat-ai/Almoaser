@@ -80,6 +80,9 @@ export async function finalizePaymentByReference(status: PaymentStatusResult): P
       billing: payment.billing,
       credits: payment.credits,
       amount: Number(payment.amount),
+      // بدونهما يظهر الإجمالي وحده فلا تكون فاتورة ضريبية
+      vatAmount: payment.vatAmount == null ? null : Number(payment.vatAmount),
+      discountAmount: payment.discountAmount == null ? null : Number(payment.discountAmount),
       paidAt: new Date(),
       periodEnd,
     }))
