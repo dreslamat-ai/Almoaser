@@ -10,6 +10,46 @@ import { serveStatic, setupVite } from "./vite";
 import { startScheduledJobs } from "../scheduler";
 import { registerMyFatoorahWebhook } from "../myfatoorahWebhook";
 
+/**
+ * إنهاء لطيف: نتوقف عن قبول الجديد ونمهل الجاري أن يكتمل.
+ *
+ * العملية واحدة بوضع fork، فإعادة التشغيل تقتلها وتقتل معها كل طلب في الطريق.
+ * رسالة الوكيل تستغرق ثوانٍ (قياس الإنتاج: ١.٢ إلى ٢١ ثانية)، فالنشر أثناء
+ * محادثة كان يقطع الاتصال ويظهر للعميل خطأ شبكة — وقد رأيناه فعلاً. والأسوأ
+ * أن النقاط تُخصم في أول المعالجة: الطلب المقطوع يُحاسَب عليه بلا رد.
+ *
+ * pm2 restart يرسل SIGINT وpm2 stop يرسل SIGTERM — تُلتقط الإشارتان.
+ *
+ * **ملاحظة تشغيلية:** المهلة الفعلية يحدّدها kill_timeout في pm2 (افتراضه
+ * ١٦٠٠ مللي ثانية) لا هذا الرقم. ما لم يُرفع هناك، تُقتل العملية قبل أن يكتمل
+ * الطلب الطويل مهما انتظرنا هنا. انظر ecosystem.config.cjs.
+ */
+function installGracefulShutdown(server: import("http").Server): void {
+  const GRACE_MS = 25_000;
+  let closing = false;
+
+  const shutdown = (signal: string) => {
+    if (closing) return;
+    closing = true;
+    console.log(`[shutdown] ${signal} — توقف قبول الطلبات، في انتظار الجاري`);
+
+    // مهلة قصوى: طلب معلّق إلى الأبد يجب ألّا يمنع النشر
+    const forced = setTimeout(() => {
+      console.warn("[shutdown] انتهت المهلة — إنهاء قسري");
+      process.exit(0);
+    }, GRACE_MS);
+    forced.unref();
+
+    server.close(() => {
+      console.log("[shutdown] اكتملت الطلبات الجارية");
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+}
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -64,6 +104,7 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+  installGracefulShutdown(server);
   startScheduledJobs();
 }
 
