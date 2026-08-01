@@ -75,6 +75,39 @@ export async function getErpConfigForUser(userId: number): Promise<ErpConfig> {
   };
 }
 
+/**
+ * سبب الفشل كما ذكره الخادم لا كما نخمّنه.
+ *
+ * فرابي يشرح الرفض في جسم الرد ("Incorrect password"، "User disabled")، وكنّا
+ * نعرض رمز 401 وحده — والعميل يرى رقماً لا يقول له إن كلمة المرور خطأ أم أن
+ * الحساب موقوف أم أن الرابط يشير لنظام آخر. الفروق هذه تغيّر ما يفعله تالياً.
+ */
+export async function explainErpFailure(res: Response): Promise<string> {
+  const raw = await res.text().catch(() => "");
+  let serverSaid = "";
+  try {
+    const j = JSON.parse(raw) as { message?: string; exc_type?: string };
+    serverSaid = (j.message ?? j.exc_type ?? "").trim();
+  } catch {
+    // صفحة HTML بدل JSON تعني أن الرابط لا يشير إلى ERPNext أصلاً
+    if (/<html/i.test(raw)) return "الرابط لا يشير إلى نظام ERPNext — تأكد أنه رابط النظام لا رابط موقع آخر";
+  }
+  const said = serverSaid.toLowerCase();
+  if (said.includes("incorrect password") || said.includes("invalid login")) {
+    return "كلمة المرور غير صحيحة لهذا المستخدم";
+  }
+  if (said.includes("not exist") || said.includes("disabled")) {
+    return "المستخدم غير موجود على النظام أو حسابه موقوف";
+  }
+  if (res.status === 401 && !serverSaid) {
+    return "رُفض تسجيل الدخول (401) — الغالب أن كلمة المرور خطأ، أو أن الحساب يطلب تحققاً ثنائياً يمنع الدخول عبر API";
+  }
+  if (res.status === 403) return "الخادم منع الطلب (403) — قد يكون الدخول عبر API مقيَّداً لهذا المستخدم";
+  if (res.status === 417 || res.status === 429) return "محاولات كثيرة متتالية — انتظر دقائق ثم أعد المحاولة";
+  if (res.status >= 500) return `النظام نفسه يرد بخطأ (${res.status}) — المشكلة على خادم ERPNext لا في بياناتك`;
+  return serverSaid ? `رفض الخادم الطلب (${res.status}): ${serverSaid}` : `فشل تسجيل الدخول (${res.status})`;
+}
+
 // ─── كاش الجلسات لكل اتصال ────────────────────────────────────────────────────
 const sessionCache = new Map<string, { sid: string; expiry: number }>();
 
@@ -92,7 +125,7 @@ export async function getErpSession(config: ErpConfig): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ usr: config.username, pwd: config.password }),
   });
-  if (!res.ok) throw new Error(`فشل تسجيل الدخول إلى ERPNext (${res.status}) — تحقق من بيانات الاتصال في الإعدادات`);
+  if (!res.ok) throw new Error(`تعذّر الدخول إلى ERPNext: ${await explainErpFailure(res)}`);
   const cookie = res.headers.get("set-cookie") ?? "";
   const m = cookie.match(/sid=([^;]+)/);
   if (!m || m[1] === "Guest") throw new Error("بيانات اعتماد ERPNext غير صحيحة — تحقق من اسم المستخدم وكلمة المرور");
@@ -113,9 +146,10 @@ export async function testErpConnection(url: string, username: string, password:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ usr: username, pwd: password }),
     });
-    if (!res.ok) return { ok: false, error: `فشل تسجيل الدخول (${res.status}) — تحقق من الرابط وبيانات الاعتماد` };
+    if (!res.ok) return { ok: false, error: await explainErpFailure(res) };
     const cookie = res.headers.get("set-cookie") ?? "";
     const m = cookie.match(/sid=([^;]+)/);
+    // sid=Guest يعني أن الخادم قبل الطلب بـ200 لكنه لم يسجّل الدخول فعلاً
     if (!m || m[1] === "Guest") return { ok: false, error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
     const body = (await res.json().catch(() => ({}))) as { full_name?: string };
     return { ok: true, loggedInAs: body.full_name ?? username };
