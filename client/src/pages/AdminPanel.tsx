@@ -263,6 +263,13 @@ export function AdminConsole() {
   const insights = insightsQuery.data;
 
   const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
+  const [openChatId, setOpenChatId] = useState<number | null>(null);
+  const { data: customerChats } = trpc.admin.customerConversations.useQuery(undefined,
+    { enabled: isAuthenticated && user?.role === "admin" && tab === "chats" });
+  // الرسائل تُجلب عند الفتح فقط — كل جلب يُسجَّل في سجل التدقيق
+  const { data: openChat } = trpc.admin.customerConversationMessages.useQuery(
+    { conversationId: openChatId ?? 0 },
+    { enabled: isAuthenticated && user?.role === "admin" && openChatId != null });
   const { data: revenueSummary } = trpc.admin.revenueSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", ...liveQueryOptions });
   const { data: llmCostSummary } = trpc.admin.llmCostSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", ...liveQueryOptions });
 
@@ -344,7 +351,7 @@ export function AdminConsole() {
       {insights && <PlatformInsights data={insights} />}
 
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
+        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 [@media(pointer:coarse)]:min-h-11 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
             {l}
@@ -795,6 +802,82 @@ export function AdminConsole() {
             </div>
           </div>
         )}
+        {tab === "chats" && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              محادثات العملاء تحتوي بياناتهم المالية. كل فتح لمحادثة يُسجَّل باسمك في سجل التدقيق.
+            </div>
+            {!openChatId && (
+              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-right">
+                      <tr>
+                        <th className="p-3 font-medium">المحادثة</th>
+                        <th className="p-3 font-medium">العميل</th>
+                        <th className="p-3 font-medium">رسائل</th>
+                        <th className="p-3 font-medium">آخر نشاط</th>
+                        <th className="p-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(customerChats ?? []).map(c => (
+                        <tr key={c.id} className="border-t border-gray-50">
+                          <td className="p-3">{c.title}</td>
+                          <td className="p-3">
+                            <div>{c.orgName ?? c.ownerName ?? "—"}</div>
+                            <div className="text-xs text-muted-foreground">{c.ownerEmail}</div>
+                          </td>
+                          <td className="p-3">{c.messageCount}</td>
+                          <td className="p-3 text-xs text-muted-foreground">
+                            {new Date(c.updatedAt).toLocaleString("ar-SA")}
+                          </td>
+                          <td className="p-3">
+                            <Button size="sm" variant="outline" className="text-xs"
+                              onClick={() => setOpenChatId(c.id)}>عرض</Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {customerChats && customerChats.length === 0 && (
+                        <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">لا توجد محادثات بعد</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {openChatId && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-4">
+                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="font-bold text-navy truncate">{openChat?.title ?? "..."}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {openChat?.owner.orgName ?? openChat?.owner.name} · {openChat?.owner.email}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" className="text-xs shrink-0"
+                    onClick={() => setOpenChatId(null)}>رجوع للقائمة</Button>
+                </div>
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                  {(openChat?.messages ?? []).map(m => (
+                    <div key={m.id} className={m.role === "user" ? "text-right" : "text-right"}>
+                      <div className={`inline-block max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                        m.role === "user" ? "bg-navy text-white" : "bg-gray-100 text-foreground"
+                      }`}>{m.content}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {new Date(m.createdAt).toLocaleString("ar-SA")}
+                      </div>
+                    </div>
+                  ))}
+                  {openChat && openChat.messages.length === 0 && (
+                    <p className="text-center text-muted-foreground py-6">لا رسائل في هذه المحادثة</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === "audit" && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[750px]">

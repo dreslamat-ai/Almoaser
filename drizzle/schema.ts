@@ -300,6 +300,8 @@ export const adminActionLog = mysqlTable("admin_action_log", {
   action: mysqlEnum("action", [
     "activate_subscription", "set_subscription_status", "grant_credits",
     "extend_days", "set_user_role", "set_user_active",
+    // اطّلاع مالك المنصة على محادثة عميل — قراءة لا تعديل، لكنها تمسّ بيانات مالية
+    "view_customer_conversation",
   ]).notNull(),
   targetUserId: int("targetUserId").notNull(),
   targetUserEmail: varchar("targetUserEmail", { length: 320 }),

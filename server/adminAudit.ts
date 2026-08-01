@@ -5,7 +5,10 @@ import { adminActionLog } from "../drizzle/schema";
 
 export type AdminActionType =
   | "activate_subscription" | "set_subscription_status" | "grant_credits"
-  | "extend_days" | "set_user_role" | "set_user_active";
+  | "extend_days" | "set_user_role" | "set_user_active"
+  // قراءة محادثة عميل: ليست تعديلاً، لكنها اطّلاع على بيانات مالية خاصة —
+  // تُسجَّل حتى يبقى لكل اطّلاع أثر يمكن مراجعته.
+  | "view_customer_conversation";
 
 /** يسجّل إجراءً إدارياً حساساً — لا يوقف تنفيذ الإجراء نفسه عند فشل التسجيل. */
 export async function logAdminAction(params: {

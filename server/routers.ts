@@ -859,6 +859,34 @@ export const appRouter = router({
   }),
 
   admin: router({
+    // ─── الاطّلاع على محادثات العملاء (لمالك المنصة) ──────────────────────────
+    // محادثات العملاء تحمل بياناتهم المالية، فكل فتح لمحادثة يُسجَّل في سجل
+    // التدقيق باسم من فتحها — الاطّلاع بلا أثر لا يمكن مراجعته لاحقاً.
+    customerConversations: protectedProcedure
+      .input(z.object({ userId: z.number().int().positive().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { listConversationsForAdmin } = await import("./adminConversations");
+        return listConversationsForAdmin(input?.userId);
+      }),
+    customerConversationMessages: protectedProcedure
+      .input(z.object({ conversationId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { readConversationForAdmin } = await import("./adminConversations");
+        const res = await readConversationForAdmin(input.conversationId);
+        if (!res) throw new TRPCError({ code: "NOT_FOUND", message: "المحادثة غير موجودة" });
+        const { logAdminAction } = await import("./adminAudit");
+        await logAdminAction({
+          adminId: ctx.user.id,
+          adminName: ctx.user.name ?? undefined,
+          action: "view_customer_conversation",
+          targetUserId: res.owner.id,
+          targetUserEmail: res.owner.email ?? undefined,
+          details: `اطّلاع على محادثة #${input.conversationId} — ${res.title}`,
+        });
+        return res;
+      }),
     registrations: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       return getAllRegistrationRequests();
