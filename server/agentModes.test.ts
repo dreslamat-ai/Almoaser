@@ -209,3 +209,12 @@ describe("SCOPE_RULES — حدّ الموضوع واللغة", () => {
     expect(modeRulesFor("accounting")).toContain(GOVERNANCE_RULES);
   });
 });
+
+// شوهد فعلاً: قال "تفضل الأزرار الجاهزة" ولم يصدر السطر، فبحث المستخدم عن أزرار لا وجود لها
+describe("تعليمات الأزرار السريعة", () => {
+  it("تمنع الحديث عن أزرار بدل إصدارها", async () => {
+    const src = await import("fs").then(fs => fs.readFileSync("server/routers/agent.ts", "utf8"));
+    expect(src).toContain("لا تتحدث عن الأزرار ولا تعد بها");
+    expect(src).toContain("بعد عرض قائمة بما تستطيع فعله");
+  });
+});

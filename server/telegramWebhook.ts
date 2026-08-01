@@ -13,6 +13,7 @@
 
 import type { Express, Request, Response } from "express";
 import { sendTelegram, tg } from "./telegram";
+import { extractQuickReplies } from "./agent/quickReplies";
 
 type TgMessage = {
   message_id: number;
@@ -67,7 +68,8 @@ export function agentReplyToTelegram(reply: string): string {
     .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
     .replace(/(^|\s)\*([^*\n]+)\*/g, "$1<i>$2</i>")
     .replace(/`([^`\n]+)`/g, "<code>$1</code>")
-    // سطر الأزرار السريعة للواجهة لا لتيليجرام
+    // السطر يُزال هنا أيضاً احتياطاً: المستخرِج يتولاه عادةً، لكن ردّاً وصل من
+    // مسار آخر يجب ألّا يكشف تعليمات الواجهة للمستخدم
     .replace(/\[QUICK_REPLIES:[^\]]*\]/g, "")
     .trim();
 }
@@ -159,10 +161,16 @@ async function handleOwnerMessage(chatId: number, text: string): Promise<void> {
     thread.history.push({ role: "assistant", content: r.reply });
     threads.set(chatId, thread);
 
+    // نفس مستخرِج الواجهة: الخيارات التي تظهر كأزرار على الشاشة تظهر أزراراً هنا
+    const { text: body, quickReplies } = extractQuickReplies(r.reply);
+    const parts = chunkForTelegram(agentReplyToTelegram(body));
+
     // نتيجة الإرسال تُفحص: فشلٌ صامت هنا يعني أن العميل نفّذ عملية على نظامه
     // ولم يصله تأكيدها — وهو أسوأ من فشل معلن، لأنه سيعيد الطلب ظانّاً أنه لم يتم.
-    for (const part of chunkForTelegram(agentReplyToTelegram(r.reply))) {
-      const sent = await sendTelegram(part);
+    for (let i = 0; i < parts.length; i++) {
+      // الأزرار مع الجزء الأخير وحده: لو رافقت كل جزء لتكرّرت اللوحة
+      const isLast = i === parts.length - 1;
+      const sent = await sendTelegram(parts[i], isLast ? { quickReplies } : {});
       if (!sent.ok) {
         console.error("[telegram] تعذّر تسليم رد الوكيل:", sent.error);
         break;

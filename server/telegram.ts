@@ -42,10 +42,32 @@ function explain(status: number, description?: string): string {
   return description ? `رفض تيليجرام الطلب (${status}): ${description}` : `فشل الإرسال (${status})`;
 }
 
+/**
+ * لوحة أزرار من خيارات الوكيل.
+ *
+ * ReplyKeyboard لا InlineKeyboard: الضغط على الأول يرسل النص كرسالة عادية —
+ * وهو بالضبط ما يفعله الزر في الموقع. الثاني يرسل callback يحتاج مساراً آخر
+ * ومعالجةً أخرى، فيصير للزر سلوكان مختلفان حسب القناة.
+ */
+function keyboardFor(options: string[]): Record<string, unknown> {
+  if (!options.length) {
+    // إزالة صريحة: بلا هذا تبقى أزرار السؤال السابق معروضة تحت ردٍّ لا علاقة
+    // له بها، فيضغط صاحبها إجابةً عن سؤال انتهى.
+    return { remove_keyboard: true };
+  }
+  return {
+    // صفٌّ لكل خيار: النصوص العربية تطول، وصفّان في سطر يقصّان الكلام
+    keyboard: options.map(o => [{ text: o }]),
+    resize_keyboard: true,
+    one_time_keyboard: true,
+    input_field_placeholder: "أو اكتب طلبك…",
+  };
+}
+
 /** إرسال رسالة. HTML لا Markdown: الأخير يكسر عند أي شرطة سفلية في اسم عميل. */
 export async function sendTelegram(
   text: string,
-  opts: { disablePreview?: boolean } = {},
+  opts: { disablePreview?: boolean; quickReplies?: string[] } = {},
 ): Promise<TelegramResult> {
   const c = creds();
   if (!c) return { ok: false, error: "تيليجرام غير مضبوط (TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID)" };
@@ -58,6 +80,7 @@ export async function sendTelegram(
         text,
         parse_mode: "HTML",
         link_preview_options: { is_disabled: opts.disablePreview ?? true },
+        ...(opts.quickReplies ? { reply_markup: keyboardFor(opts.quickReplies) } : {}),
       }),
     });
     if (!res.ok) {

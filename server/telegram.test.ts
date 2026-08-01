@@ -99,3 +99,35 @@ describe("discoverChatId", () => {
     }
   });
 });
+
+describe("أزرار الردود السريعة", () => {
+  const configure = () => { process.env.TELEGRAM_BOT_TOKEN = "1:x"; process.env.TELEGRAM_CHAT_ID = "9"; };
+  const bodyOf = (spy: ReturnType<typeof vi.fn>) => JSON.parse((spy.mock.calls[0][1] as { body: string }).body);
+
+  it("يبني صفاً لكل خيار — النص العربي يطول ويُقصّ في صفّين", async () => {
+    configure();
+    const spy = vi.fn(async () => reply(200, { ok: true }));
+    globalThis.fetch = spy as never;
+    await sendTelegram("اعتمدها؟", { quickReplies: ["نعم، اعتمدها", "لا، اتركها مسودة"] });
+    const m = bodyOf(spy).reply_markup;
+    expect(m.keyboard).toEqual([[{ text: "نعم، اعتمدها" }], [{ text: "لا، اتركها مسودة" }]]);
+    expect(m.resize_keyboard).toBe(true);
+  });
+
+  // أزرار سؤال انتهى تبقى معروضة تحت ردّ لا علاقة له بها فيُضغط عليها خطأً
+  it("يزيل اللوحة صراحةً حين لا خيارات", async () => {
+    configure();
+    const spy = vi.fn(async () => reply(200, { ok: true }));
+    globalThis.fetch = spy as never;
+    await sendTelegram("تم التنفيذ.", { quickReplies: [] });
+    expect(bodyOf(spy).reply_markup).toEqual({ remove_keyboard: true });
+  });
+
+  it("لا يمسّ اللوحة إن لم تُذكر الخيارات أصلاً", async () => {
+    configure();
+    const spy = vi.fn(async () => reply(200, { ok: true }));
+    globalThis.fetch = spy as never;
+    await sendTelegram("إشعار");
+    expect(bodyOf(spy).reply_markup).toBeUndefined();
+  });
+});
