@@ -219,6 +219,11 @@ export function translateErpError(raw: string): string {
   // آخر مهرب: نصٌّ بشري إن وُجد، وإلا وصفٌ مختصر — لا JSON خام مهما كان
   const human = frappeHumanMessage(raw);
   if (human) return human.slice(0, 300);
+  // الحالة وحدها حين يرد ERPNext بجسم فارغ — أوضح من عرض "{}"
+  const status = raw.match(/error (\d{3})/)?.[1];
+  if (status === "404") return "السجل غير موجود في النظام";
+  if (status === "403") return "رفض النظام الوصول لهذا المسار";
+  if (status === "417") return "رفض النظام العملية — راجع البيانات المرسلة";
   return raw.startsWith("{") || raw.includes('"exc_type"')
     ? "رفض نظام ERP العملية بخطأ لم يُرفق له سبب مقروء"
     : raw.slice(0, 300);

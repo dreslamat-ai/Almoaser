@@ -4,7 +4,7 @@
 // واحدة لا يمرّ بملف يحمل معه منطق الطلب والاشتراكات والنقاط.
 import { erpGET, erpPOST, erpPUT, erpDELETE, erpBaseUrl, cancelDoc, currentErpConfig, getSession } from "./erpClient";
 import {
-  normalizeArabic, isSimilar, findSimilarCustomers, findSimilarItems, findSimilarSuppliers,
+  normalizeArabic, isSimilar, findSimilarCustomers, findSimilarItems, findSimilarSuppliers, translateErpError,
   submitDoc, getDefaultCompany, SINGLE_DOCTYPES, resolveCompanyInfo, postDocWithCostCenterRetry,
   checkTaxIdForCompanyCountry, inspectTaxSetup, fetchCustomerAddress, fetchCustomerAddressName,
 } from "./erpHelpers";
@@ -630,9 +630,21 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
         let removedThisRound: { doctype: string; name: string } | null = null;
 
         for (let depth = 0; depth < MAX_DEPTH; depth++) {
-          const r = await executeTool("delete_document",
-            { doctype: target.doctype, document_name: target.name }, toolCtx);
-          const res = r.result as { deleted?: boolean; blocked_by?: { doctype: string; name: string }; error?: string };
+          // الخطأ غير المرتبط (سجل غير موجود، رفض صلاحية) يُرمى من delete_document.
+          // تركُه يصعد يُسقط الأداة كلها ويُخفي ما حُذف قبله — وهو ما لا يجوز
+          // في عملية إتلاف: المستخدم يجب أن يعرف أين توقّفت بالضبط.
+          let res: { deleted?: boolean; blocked_by?: { doctype: string; name: string }; error?: string };
+          try {
+            const r = await executeTool("delete_document",
+              { doctype: target.doctype, document_name: target.name }, toolCtx);
+            res = r.result as typeof res;
+          } catch (err) {
+            return { result: {
+              error: `تعذّر حذف ${target.doctype} "${target.name}": ${translateErpError(err instanceof Error ? err.message : String(err))}`,
+              deleted_so_far: deleted,
+              note: deleted.length ? "حُذف ما سبق ولا يمكن التراجع عنه" : undefined,
+            }, display: "" };
+          }
           if (res?.deleted) { removedThisRound = target; deleted.push(target); break; }
           if (!res?.blocked_by) {
             return { result: {
