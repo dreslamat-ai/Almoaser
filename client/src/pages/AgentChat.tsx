@@ -1487,7 +1487,8 @@ export default function AgentChat() {
           <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end shrink-0">
             <NotificationBell />
             {creditsInfo && (() => {
-              const low = creditsInfo.monthlyCredits > 0 && creditsInfo.balance / creditsInfo.monthlyCredits <= 0.15;
+              // الرصيد المفتوح لا "ينخفض" — تحذير الانخفاض لا معنى له معه
+              const low = !creditsInfo.unlimited && creditsInfo.monthlyCredits > 0 && creditsInfo.balance / creditsInfo.monthlyCredits <= 0.15;
               return (
                 <button
                   onClick={() => navigate("/subscription")}
@@ -1497,7 +1498,9 @@ export default function AgentChat() {
                   }`}
                 >
                   <Coins className="w-3.5 h-3.5" />
-                  {creditsInfo.balance} <span className="opacity-60">/ {creditsInfo.monthlyCredits}</span>
+                  {creditsInfo.unlimited
+                    ? <span>غير محدود</span>
+                    : <>{creditsInfo.balance} <span className="opacity-60">/ {creditsInfo.monthlyCredits}</span></>}
                 </button>
               );
             })()}

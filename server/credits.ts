@@ -90,6 +90,7 @@ export async function getCreditsBalance(userId: number) {
   if (!sub) return undefined;
   return {
     balance: sub.creditsBalance,
+    unlimited: sub.unlimitedCredits,
     monthlyCredits: sub.plan.monthlyCredits,
     cycleStart: sub.creditsCycleStart,
     planNameAr: sub.plan.nameAr,
@@ -118,6 +119,22 @@ export async function deductCredits(
   if (!db) throw new Error("Database not available");
   const sub = await ensureCreditsCycle(userId);
   if (!sub) throw new Error("لا يوجد اشتراك نشط");
+
+  // رصيد مفتوح: لا يُخصم ولا يمنع، لكن الحركة تُسجَّل كاملة — العدّاد وتقارير
+  // الاستهلاك تُبنى من credit_transactions لا من الرصيد، فتبقى دقيقة تماماً.
+  // لا نُنقص الرصيد هنا لئلا يصير سالباً ويُقرأ كخطأ في كل شاشة تعرضه.
+  if (sub.unlimitedCredits) {
+    await logTransaction({
+      userId,
+      subscriptionId: sub.id,
+      type,
+      amount: -cost,
+      balanceAfter: sub.creditsBalance,
+      note,
+    });
+    return sub.creditsBalance;
+  }
+
   if (sub.creditsBalance < cost) {
     throw new InsufficientCreditsError(sub.creditsBalance, cost);
   }

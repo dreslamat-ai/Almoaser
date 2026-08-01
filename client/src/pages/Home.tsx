@@ -745,7 +745,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
             </div>
             <h2 className="text-4xl font-bold text-white mb-6">ابدأ رحلتك مع <span className="text-gold">Almoaser AI</span> اليوم</h2>
             <p className="text-white/70 text-lg leading-relaxed mb-8">
-              احجز استشارتك المجانية الآن مع أحد خبرائنا المحاسبيين، وسنساعدك على اختيار الباقة المناسبة لعملك.
+              سجّل بياناتك ونتواصل معك لنساعدك على اختيار الباقة المناسبة لعملك — أو ابدأ التجربة المجانية مباشرة الآن.
             </p>
             <div className="space-y-4">
               {[
@@ -780,7 +780,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                   أهلاً وسهلاً، <span className="text-gold">{submittedName}</span>! 🎉
                 </h3>
                 <p className="text-gray-600 text-sm leading-relaxed mb-6 max-w-xs">
-                  تم استلام طلبك بنجاح. سيتواصل معك فريق <strong>Almoaser AI</strong> خلال <strong>24 ساعة</strong> لتحديد موعد الاستشارة المجانية.
+                  تم استلام بياناتك بنجاح. سيتواصل معك فريق <strong>Almoaser AI</strong> خلال <strong>24 ساعة</strong>.
                 </p>
                 {/* بطاقات الخطوات التالية */}
                 <div className="w-full space-y-3 mb-5">
@@ -817,7 +817,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
             ) : (
               /* ─── النموذج ─── */
               <>
-                <h3 className="text-xl font-bold text-navy mb-6">طلب استشارة مجانية</h3>
+                <h3 className="text-xl font-bold text-navy mb-6">سجّل لنتواصل معك</h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -931,7 +931,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                     {submitMutation.isPending ? (
                       <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />جاري الإرسال...</span>
                     ) : (
-                      <span className="flex items-center gap-2"><ArrowLeft className="w-4 h-4" />إرسال الطلب</span>
+                      <span className="flex items-center gap-2"><ArrowLeft className="w-4 h-4" />سجّل لنتواصل معك</span>
                     )}
                   </Button>
                 </form>
@@ -1045,12 +1045,6 @@ function ComplianceSection() {
     "يُفرَّق بين الفاتورة المبسّطة للأفراد والفاتورة الضريبية للمنشآت، فلا تُطلب بيانات مشترٍ في غير موضعها.",
     "الضريبة تُحتسب على المبلغ بعد الخصم لا قبله، وتُفصل عن الإيراد في الحسابات لأنها أمانة تُورَّد لا دخل.",
   ];
-  const notClaimed = [
-    "لسنا معتمدين من هيئة الزكاة والضريبة والجمارك ولا نزعم ذلك.",
-    "لا نتحقق من تسجيل رقم ضريبي لدى الهيئة — لا توجد واجهة رسمية لذلك، وفحصنا للصيغة فقط. وأي جهة تعدك بغير هذا فراجع ما تقوله.",
-    "الربط التقني مع منصة فاتورة (المرحلة الثانية) يتم من نظام ERP الخاص بك، لا من عندنا.",
-    "المسؤولية الضريبية تبقى على المكلَّف. دورنا أن نمنع المستند الناقص قبل صدوره، لا أن نحلّ محلّ محاسبك أو مراجعك.",
-  ];
   return (
     <section className="py-20 bg-gray-50">
       <div className="container">
@@ -1063,9 +1057,9 @@ function ComplianceSection() {
             الفاتورة الخاطئة تُكتشف عند الفحص لا عند إصدارها. النظام يوقفها عند الإنشاء ويطلب الناقص.
           </p>
         </div>
-        <div className="grid lg:grid-cols-2 gap-6 max-w-5xl mx-auto">
-          <div className="rounded-2xl border-2 border-emerald-200 bg-white p-6">
-            <div className="flex items-center gap-2 mb-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="rounded-2xl border-2 border-emerald-200 bg-white p-6 md:p-8">
+            <div className="flex items-center gap-2 mb-5">
               <ShieldCheck className="w-6 h-6 text-emerald-600" />
               <h3 className="font-bold text-navy">ما يفرضه النظام</h3>
             </div>
@@ -1077,23 +1071,6 @@ function ComplianceSection() {
                 </li>
               ))}
             </ul>
-          </div>
-          <div className="rounded-2xl border-2 border-gray-200 bg-white p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertCircle className="w-6 h-6 text-gray-500" />
-              <h3 className="font-bold text-navy">ما لا ندّعيه</h3>
-            </div>
-            <ul className="space-y-3">
-              {notClaimed.map((t, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm leading-7">
-                  <XCircle className="w-4 h-4 text-gray-400 shrink-0 mt-1.5" aria-hidden />
-                  <span className="text-muted-foreground">{t}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-gray-100 leading-6">
-              نكتب هذا لأن من يبيع لك انضباطاً يجب أن يكون منضبطاً في وصف نفسه أولاً.
-            </p>
           </div>
         </div>
       </div>

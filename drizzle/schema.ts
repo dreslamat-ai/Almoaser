@@ -101,6 +101,9 @@ export const subscriptions = mysqlTable("subscriptions", {
   creditsBalance: int("creditsBalance").default(0).notNull(),
   // بداية الدورة الشهرية الحالية للنقاط (تُجدَّد كل 30 يوماً)
   creditsCycleStart: timestamp("creditsCycleStart"),
+  // رصيد مفتوح: لا يُخصم ولا يمنع، لكن الاستهلاك يُسجَّل كاملاً — للحسابات
+  // الداخلية التي نريد قياس استخدامها دون أن يوقفها حدّ.
+  unlimitedCredits: boolean("unlimitedCredits").default(false).notNull(),
   companyName: varchar("companyName", { length: 255 }),
   companyType: varchar("companyType", { length: 100 }),
   phone: varchar("phone", { length: 20 }),

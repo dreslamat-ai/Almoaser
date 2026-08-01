@@ -162,12 +162,24 @@ export default function Subscription() {
                 </button>
               </div>
               <div className="flex items-baseline gap-2 mb-2">
-                <span className="text-3xl font-bold text-navy">{creditsInfo?.balance ?? 0}</span>
-                <span className="text-muted-foreground text-sm">/ {creditsInfo?.monthlyCredits ?? 0} نقطة شهرياً</span>
+                {/* الرصيد المفتوح لا يُعرض كرقم: الرقم ثابت لا ينقص فيبدو معطّلاً */}
+                {creditsInfo?.unlimited ? (
+                  <>
+                    <span className="text-3xl font-bold text-navy">غير محدود</span>
+                    <span className="text-muted-foreground text-sm">· الاستهلاك مسجَّل بالكامل</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-3xl font-bold text-navy">{creditsInfo?.balance ?? 0}</span>
+                    <span className="text-muted-foreground text-sm">/ {creditsInfo?.monthlyCredits ?? 0} نقطة شهرياً</span>
+                  </>
+                )}
               </div>
-              <div className="w-full h-2 rounded-full bg-gray-100 mb-3">
-                <div className="h-2 rounded-full bg-gold transition-all" style={{ width: `${creditsPct}%` }} />
-              </div>
+              {!creditsInfo?.unlimited && (
+                <div className="w-full h-2 rounded-full bg-gray-100 mb-3">
+                  <div className="h-2 rounded-full bg-gold transition-all" style={{ width: `${creditsPct}%` }} />
+                </div>
+              )}
               <p className="text-xs text-muted-foreground mb-3">كل رسالة للوكيل = نقطة واحدة • كل مستند = 5 نقاط • يتجدد الرصيد شهرياً</p>
               <div className="flex flex-wrap gap-2">
                 {[500, 1000, 2000, 5000].map(c => (
