@@ -222,6 +222,15 @@ function HeroSection() {
                 <ArrowLeft className="w-5 h-5 mr-2" />
               </Button>
             )}
+            {/* العائد لا يبحث عن "ابدأ مجاناً" — يبحث عن الدخول. وجوده هنا يوفّر
+                عليه التمرير لأعلى الصفحة في كل زيارة. */}
+            {!isAuthenticated && (
+              <Button size="lg" variant="outline"
+                className="border-white/40 text-white bg-transparent hover:bg-white/15 text-base px-8 py-4 h-auto"
+                onClick={() => navigate("/login")}>
+                تسجيل الدخول
+              </Button>
+            )}
             <Button size="lg" variant="outline"
               className="border-white/30 text-white bg-white/10 hover:bg-white/20 text-base px-8 py-4 h-auto"
               onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
