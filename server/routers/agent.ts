@@ -69,6 +69,31 @@ export function canUseTool(user: Pick<User, "orgRole" | "permissions">, toolName
  * هذا تضييق لا توسيع: requireToolPermission يظل هو الحارس عند التنفيذ، وما
  * يُحجب هنا كان سيُرفض هناك على أي حال.
  */
+/**
+ * يضيّق الأدوات بصلاحيات المستخدم في نظامه هو (ERPNext فقط).
+ *
+ * Odoo نموذج صلاحياته مختلف تماماً (ir.model.access) فيُترك على السلوك السابق
+ * بدل تخمين ترجمة غير مختبَرة. وأي تعثّر — شبكة، مهلة، رد غير متوقع — يعيد
+ * القائمة كما هي: هذه طبقة إرشادية، وERPNext يفرض صلاحياته عند التنفيذ سواء
+ * نجحت القراءة أم لا، فمنعُ عميل من أدواته بسبب تعثّر شبكة خسارة بلا مقابل.
+ */
+async function narrowToolsByErpPermissions<T extends { function: { name: string } }>(
+  tools: T[],
+): Promise<T[]> {
+  try {
+    const cfg = currentErpConfig();
+    if (cfg.provider !== "erpnext" || !cfg.url || !cfg.username) return tools;
+    const { fetchErpCapabilities, erpAllowsTool } = await import("../erpPermissions");
+    const sid = await getErpSession(cfg);
+    const caps = await fetchErpCapabilities({ url: cfg.url, username: cfg.username, cookie: `sid=${sid}` });
+    if (!caps || caps.unrestricted) return tools;
+    return tools.filter(t => erpAllowsTool(caps, t.function.name));
+  } catch (e) {
+    console.warn("[agent] تعذّر تضييق الأدوات بصلاحيات ERP:", e instanceof Error ? e.message : e);
+    return tools;
+  }
+}
+
 export function toolsForUser<T extends { function: { name: string } }>(
   tools: T[],
   user: Pick<User, "orgRole" | "permissions">,
@@ -1966,13 +1991,18 @@ ${buildExpertSkillsSection(hasCfoSkill)}
         })),
       ];
 
-      // لا نعرض على النموذج أدوات سيُرفض تنفيذها لهذا المستخدم أصلاً
-      const availableTools = toolsForUser(TOOLS, ctx.user);
+      // لا نعرض على النموذج أدوات سيُرفض تنفيذها لهذا المستخدم أصلاً — لا بصلاحيات
+      // المنصة ولا بصلاحياته في نظامه هو. تُحسب داخل سياق ERP أدناه.
+      let availableTools = toolsForUser(TOOLS, ctx.user);
 
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
 
       // تشغيل كامل حلقة الوكيل ضمن سياق اتصال ERPNext الخاص بالمستخدم الحالي
       return runWithErpConfig(ctx.user.id, async () => {
+      // ─── تضييق إضافي بصلاحيات المستخدم في نظامه هو ───────────────────────
+      // مصدر الحقيقة لما يستطيعه العميل هو ERP الخاص به، لا جدولنا. الفشل هنا
+      // يعود للتضييق السابق ولا يحجب شيئاً: النظام نفسه هو الحاجز عند التنفيذ.
+      availableTools = await narrowToolsByErpPermissions(availableTools);
       for (let iter = 0; iter < 8; iter++) {
         let response;
         try {
