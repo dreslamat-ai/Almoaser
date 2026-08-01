@@ -1074,9 +1074,12 @@ function DeliverablesSection() {
             <div key={d.key} className="rounded-2xl border border-border bg-gray-50/60 p-5 flex flex-col hover:border-gold/40 transition-colors">
               <h3 className="font-bold text-navy mb-1">{d.label}</h3>
               <p className="text-sm text-muted-foreground leading-6 flex-1">{d.scope}</p>
-              <div className="mt-4 pt-3 border-t border-gray-200 flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-navy">{d.priceSar.toLocaleString("ar-SA")}</span>
-                <span className="text-sm text-muted-foreground">ريال</span>
+              {/* السعر لا يُعلن هنا: نطاق المخرَج يختلف بحجم النظام وحالته،
+                  ورقمٌ ثابت على الصفحة إمّا أن يخيف من هو أصغر من النطاق أو
+                  يُقيّدنا مع من هو أكبر منه. يُحدَّد بعد فهم الحالة. */}
+              <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
+                <span className="text-sm font-medium text-navy">السعر حسب نطاق عملك</span>
+                <span className="text-xs text-gold-ink font-medium">اطلب عرضاً</span>
               </div>
             </div>
           ))}

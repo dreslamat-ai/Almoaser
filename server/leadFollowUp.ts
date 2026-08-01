@@ -1,0 +1,117 @@
+// ─── متابعة العملاء المحتملين ────────────────────────────────────────────────
+//
+// خمسة سجلات في القاعدة كلها بحالة "جديد" منذ أيام. الجمع بلا متابعة يساوي
+// عدمه: من كتب اسمه ومدينته ونشاطه أبدى نيّة، وتركُه أسبوعاً يجعله يشتري من
+// غيرنا أو ينسى.
+//
+// التذكير بالبريد مؤقت حتى يُربط تيليجرام — الوجهة تتغيّر والمنطق لا.
+
+import { getDb } from "./db";
+import { salesLeads } from "../drizzle/schema";
+import { and, eq, lt, isNull, or, gte, desc } from "drizzle-orm";
+import { sendEmail } from "./email";
+
+/** لا يُذكَّر بعميل قبل مرور هذه المدة: التذكير الفوري ضجيج لا متابعة. */
+const STALE_HOURS = 20;
+/** بعدها يسقط من التذكير اليومي — من لم يُتابَع شهراً لا يعالجه تذكير يومي. */
+const GIVE_UP_DAYS = 30;
+
+export type PendingLead = {
+  id: number;
+  name: string;
+  phone: string | null;
+  city: string | null;
+  activity: string | null;
+  employees: number | null;
+  createdAt: Date;
+  hoursWaiting: number;
+};
+
+/**
+ * من ينتظر متابعة بشرية الآن.
+ *
+ * "جديد" فقط: من وُسم بأنه تُوُوصِل معه أو رفض أو تحوّل خرج من الطابور — وإلا
+ * صار التذكير يعيد نفسه على من عولج فعلاً، وهذا ما يجعل الناس تتجاهل التذكير.
+ */
+export async function pendingLeads(now = new Date()): Promise<PendingLead[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const staleBefore = new Date(now.getTime() - STALE_HOURS * 3600_000);
+  const giveUpBefore = new Date(now.getTime() - GIVE_UP_DAYS * 86400_000);
+
+  const rows = await db.select().from(salesLeads)
+    .where(and(
+      eq(salesLeads.status, "new"),
+      lt(salesLeads.createdAt, staleBefore),
+      gte(salesLeads.createdAt, giveUpBefore),
+    ))
+    .orderBy(desc(salesLeads.createdAt))
+    .limit(50);
+
+  return rows.map(r => ({
+    id: r.id, name: r.name, phone: r.phone, city: r.city,
+    activity: r.activity, employees: r.employees, createdAt: r.createdAt,
+    hoursWaiting: Math.floor((now.getTime() - r.createdAt.getTime()) / 3600_000),
+  }));
+}
+
+/** الأحدث أولاً في العرض، لكن الترتيب بالأهمية: من ترك جواله أقرب للشراء. */
+function rank(l: PendingLead): number {
+  return (l.phone ? 100 : 0) + (l.activity ? 10 : 0) + (l.city ? 5 : 0) + (l.employees ? 5 : 0);
+}
+
+export function buildDigestHtml(leads: PendingLead[]): string {
+  const sorted = [...leads].sort((a, b) => rank(b) - rank(a) || b.hoursWaiting - a.hoursWaiting);
+  const row = (l: PendingLead) => `
+    <tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee"><strong>${esc(l.name)}</strong></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;direction:ltr;text-align:right">${l.phone ? esc(l.phone) : "<span style='color:#999'>لا جوال</span>"}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee">${esc(l.city ?? "—")}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee">${esc(l.activity ?? "—")}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;white-space:nowrap">${toArabicDigits(String(l.hoursWaiting))} ساعة</td>
+    </tr>`;
+  return `
+  <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;direction:rtl;text-align:right;color:#22335a">
+    <h2 style="margin:0 0 6px">عملاء محتملون ينتظرون متابعة</h2>
+    <p style="margin:0 0 16px;color:#666">${toArabicDigits(String(sorted.length))} سجلاً لم يُتابَع بعد. من ترك جواله في الأعلى — هو الأقرب للشراء.</p>
+    <table style="border-collapse:collapse;width:100%;font-size:14px">
+      <thead><tr style="background:#f6f7fa">
+        <th style="padding:10px 12px;text-align:right">الاسم</th>
+        <th style="padding:10px 12px;text-align:right">الجوال</th>
+        <th style="padding:10px 12px;text-align:right">المدينة</th>
+        <th style="padding:10px 12px;text-align:right">النشاط</th>
+        <th style="padding:10px 12px;text-align:right">منتظر</th>
+      </tr></thead>
+      <tbody>${sorted.map(row).join("")}</tbody>
+    </table>
+    <p style="margin:18px 0 0;font-size:13px;color:#666">
+      وسمُ العميل بأنه تُوُوصِل معه يوقف تذكيره — من لوحة التحكم ← العملاء المحتملون.
+    </p>
+  </div>`;
+}
+
+const esc = (s: string) => s.replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]!));
+const toArabicDigits = (s: string) => s.replace(/[0-9]/g, d => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
+
+/**
+ * تذكير يومي واحد لا رسالة لكل عميل.
+ *
+ * الرسالة لكل سجل تُغرق البريد فتُصفَّى تلقائياً وتُقرأ كلها أو لا شيء منها.
+ * الملخّص الواحد يُقرأ.
+ */
+export async function sendLeadDigest(): Promise<{ sent: boolean; count: number; reason?: string }> {
+  const to = process.env.LEADS_DIGEST_EMAIL?.trim() || process.env.ADMIN_EMAIL?.trim();
+  if (!to) return { sent: false, count: 0, reason: "لا عنوان بريد مضبوط (LEADS_DIGEST_EMAIL)" };
+
+  const leads = await pendingLeads();
+  if (!leads.length) return { sent: false, count: 0, reason: "لا سجلات تنتظر" };
+
+  const r = await sendEmail({
+    to,
+    subject: `${toArabicDigits(String(leads.length))} عميل محتمل ينتظر متابعة — المعاصر AI`,
+    html: buildDigestHtml(leads),
+  });
+  return { sent: r.ok, count: leads.length, reason: r.error };
+}
+
+export { STALE_HOURS, GIVE_UP_DAYS };

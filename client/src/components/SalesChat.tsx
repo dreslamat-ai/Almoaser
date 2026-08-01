@@ -11,18 +11,48 @@ const GREETING: Msg = {
   content: "أهلاً بك 👋 أنا سارة من المعاصر AI. تحب أشرح لك كيف تشتغل المنصة مع نظامك، ولا عندك سؤال معيّن؟",
 };
 
-// المحادثة تبقى بعد الانتقال لصفحة التسجيل: العميل يضغط الزر فتُفقد الحالة
-// بالتنقّل، فيعود ويجد الشات فارغاً وكأن أحداً لم يكلّمه. sessionStorage يكفي —
-// نريدها للجلسة لا للأبد.
+// المحادثة تبقى بعد إغلاق المتصفح لا بعد التنقّل فقط.
+//
+// كانت في sessionStorage فتموت مع التبويب: من يفكّر ليلة ويعود صباحاً يجد
+// الشات فارغاً ويبدأ من الصفر — ومعه يضيع معرّف سجله، فيُنشأ له سجل ثانٍ في
+// قائمة العملاء المحتملين (وهو مصدر التكرار الذي عالجناه من الطرف الآخر).
+//
+// localStorage بمهلة: قرار الشراء يمتدّ أياماً لا دقائق، لكن محادثة عمرها شهر
+// لم تعد سياقاً — إعادتها تربك أكثر مما تفيد.
 const STORE_KEY = "sales_chat_v1";
+const STORE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
-function loadStored(): { messages: Msg[]; open: boolean; leadId: number | null; activePlan: { id: number; name: string | null } | null } | null {
+type StoredChat = {
+  messages: Msg[];
+  open: boolean;
+  leadId: number | null;
+  activePlan: { id: number; name: string | null } | null;
+  savedAt?: number;
+};
+
+function loadStored(): StoredChat | null {
   try {
-    const raw = sessionStorage.getItem(STORE_KEY);
+    // الترحيل من التخزين القديم مرة واحدة: من كان في جلسة مفتوحة وقت النشر
+    // لا يفقد حديثه لأننا غيّرنا مكان الحفظ
+    const raw = localStorage.getItem(STORE_KEY) ?? sessionStorage.getItem(STORE_KEY);
     if (!raw) return null;
-    const v = JSON.parse(raw) as { messages?: Msg[]; open?: boolean; leadId?: number | null; activePlan?: { id: number; name: string | null } | null };
-    return Array.isArray(v.messages) && v.messages.length ? { messages: v.messages, open: !!v.open, leadId: v.leadId ?? null, activePlan: v.activePlan ?? null } : null;
+    const v = JSON.parse(raw) as Partial<StoredChat>;
+    if (!Array.isArray(v.messages) || !v.messages.length) return null;
+    if (v.savedAt && Date.now() - v.savedAt > STORE_TTL_MS) {
+      localStorage.removeItem(STORE_KEY);
+      return null;
+    }
+    return {
+      messages: v.messages, open: !!v.open,
+      leadId: v.leadId ?? null, activePlan: v.activePlan ?? null,
+    };
   } catch { return null; }
+}
+
+function saveStored(v: Omit<StoredChat, "savedAt">): void {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ ...v, savedAt: Date.now() }));
+  } catch { /* الحفظ ليس جوهرياً — الوضع الخاص يمنع التخزين */ }
 }
 
 export default function SalesChat() {
@@ -69,7 +99,7 @@ export default function SalesChat() {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, open, keyboardInset]);
 
   useEffect(() => {
-    try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open, leadId, activePlan })); } catch { /* الحفظ ليس جوهرياً */ }
+    saveStored({ messages, open, leadId, activePlan });
   }, [messages, open, leadId, activePlan]);
 
   const send = () => {
@@ -141,7 +171,7 @@ export default function SalesChat() {
                 {plan && (
                   <div className="mt-2">
                     <a href={`/signup?plan=${plan.id}`}
-                      onClick={() => { try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open: true, leadId, activePlan })); } catch { /* لا شيء */ } }}
+                      onClick={() => { saveStored({ messages, open: true, leadId, activePlan }); }}
                       className="inline-flex items-center gap-2 rounded-xl bg-navy text-white font-bold text-sm px-4 h-11 shadow-sm hover:bg-navy-dark transition-colors">
                       ابدأ التسجيل{plan.name ? ` — ${plan.name}` : ""}
                       <ArrowLeft className="w-4 h-4" />

@@ -138,3 +138,37 @@ describe("سلسلة موديلات المبيعات", () => {
     expect(SALES_MODELS.length).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe("مهارات البيع في رسالة سارة", () => {
+  const prompt = buildSalesSystemPrompt([
+    { id: 1, nameAr: "الأساسية", price: 499, monthlyCredits: 300 } as never,
+  ]);
+
+  it("تفهم قبل أن تعرض", () => {
+    expect(prompt).toContain("افهمي قبل أن تعرضي");
+  });
+
+  it("ترشّح باقة واحدة لا قائمة — الاختيار يؤجّل القرار", () => {
+    expect(prompt).toContain("رشّحي باقة واحدة بعينها");
+  });
+
+  it("لكل اعتراض شائع مسار مكتوب", () => {
+    for (const o of ["غالي", "هفكر", "بيغلط"]) expect(prompt).toContain(o);
+  });
+
+  // الإلحاح المفتعل يُكتشف، والمنتج كله مبنيّ على عدم ادّعاء ما لا نملكه
+  it("تمنع الإلحاح الكاذب صراحةً", () => {
+    expect(prompt).toContain("لا تصنعي إلحاحاً كاذباً");
+    expect(prompt).toContain("ولا خصم لم يُعتمَد");
+  });
+
+  it("تطلب القرار مرة واحدة لا تكرّره", () => {
+    expect(prompt).toContain("ولا تكرّري الطلب");
+  });
+
+  // أسعار المخرجات لم تعد معلنة على الصفحة، فلا يصح أن تقولها هي
+  it("لا تذكر سعر مخرَج بعد إخفاء الأسعار من الموقع", () => {
+    expect(prompt).toContain("لا تذكري سعراً لأي مخرَج");
+    expect(prompt).not.toMatch(/4500|3000|3500 ريال · /);
+  });
+});
