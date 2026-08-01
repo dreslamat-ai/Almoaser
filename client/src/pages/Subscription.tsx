@@ -341,6 +341,7 @@ export default function Subscription() {
         <div className="grid md:grid-cols-3 gap-6">
           {plans?.map((plan, i) => {
             const features: string[] = plan.features ? JSON.parse(plan.features) : [];
+            const isExpertPlan = plan.mode === "expert";
             const isCurrent = subscription?.planId === plan.id;
             const isPopular = i === 1;
             const monthly = Number(plan.price);
@@ -391,6 +392,19 @@ export default function Subscription() {
                     variant={isPopular ? "default" : "outline"}>
                     {switchBillingMutation.isPending ? "جاري التحديث..." : "تغيير دورة الفوترة"}
                   </Button>
+                ) : isExpertPlan ? (
+                  /* باقة الخبير خدمة موازية لا مستوى أعلى، ولا يحمل النظام أكثر
+                     من اشتراك للمستخدم — فزر "ترقية" هنا كان سيستبدل باقته
+                     المحاسبية لا يضيف إليها. حتى يدعم النظام اشتراكين، الطلب
+                     يمرّ عبر الفريق. */
+                  <div className="space-y-2">
+                    <Button asChild className="w-full bg-navy text-white hover:bg-navy-dark">
+                      <a href="/#contact">أضِف باقة الخبير</a>
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground text-center leading-5">
+                      خدمة موازية تُضاف إلى باقتك الحالية ولا تحلّ محلّها — سجّل ونتواصل معك.
+                    </p>
+                  </div>
                 ) : subscription ? (
                   <Button onClick={() => handleSwitchPlan(plan.id)} disabled={switchPlanMutation.isPending}
                     className={`w-full ${isPopular ? "bg-navy-gradient text-white" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
@@ -399,7 +413,7 @@ export default function Subscription() {
                       ? "جاري التحويل للدفع..."
                       : currentPlan && monthly < Number(currentPlan.price)
                         ? "تخفيض إلى هذه الباقة"
-                        : "ترقية إلى هذه الباقة"}
+                        : "الانتقال إلى هذه الباقة"}
                   </Button>
                 ) : (
                   <Button onClick={() => createMutation.mutate({ planId: plan.id, billing })} disabled={createMutation.isPending}

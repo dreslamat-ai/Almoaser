@@ -13,6 +13,7 @@ import {
   ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle, ShieldCheck, Lock, AlertCircle} from "lucide-react";
 import { planCapacityLabel } from "@shared/planDisplay";
 import { featuresForCard } from "@shared/planFeatures";
+import { DELIVERABLES } from "@shared/deliverables";
 import SalesChat from "@/components/SalesChat";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
@@ -1046,6 +1047,42 @@ function WhyUsSection() {
 // قسم حسّاس قانونياً: ادّعاء التزام أوسع من الواقع أخطر من عدم ذكره. لذلك يذكر
 // ما يفعله النظام فعلاً — وهو منع المستند غير المستوفي قبل صدوره — ويصرّح صراحةً
 // بما لا يفعله ولا يدّعيه. الشفافية هنا ميزة بيع أمام محاسب ومراجع، لا اعتذار.
+// ─── مخرجات باقة الخبير وأسعارها ──────────────────────────────────────────────
+// تُعرض تحت الأسعار: العميل الذي يقرأ باقة الخبير يسأل مباشرة "وبكام التقييم؟".
+// من نفس مصدر أسعار سارة، فلا يختلف ما يُقرأ عمّا يُقال.
+function DeliverablesSection() {
+  return (
+    <section className="py-20 bg-white">
+      <div className="container">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <p className="text-sm font-semibold text-gold-ink uppercase tracking-wider mb-2">مخرجات الخبير</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-navy">
+            تدفع مقابل ما <span className="text-gold-ink">تستلمه</span>
+          </h2>
+          <p className="text-muted-foreground mt-4">
+            أسعار ثابتة لكل مخرَج، تُطلب فوق الاشتراك. لا تسعير بالساعة — تستلم عملاً محدداً بسعر تعرفه مقدماً.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+          {DELIVERABLES.map(d => (
+            <div key={d.key} className="rounded-2xl border border-border bg-gray-50/60 p-5 flex flex-col hover:border-gold/40 transition-colors">
+              <h3 className="font-bold text-navy mb-1">{d.label}</h3>
+              <p className="text-sm text-muted-foreground leading-6 flex-1">{d.scope}</p>
+              <div className="mt-4 pt-3 border-t border-gray-200 flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-navy">{d.priceSar.toLocaleString("ar-SA")}</span>
+                <span className="text-sm text-muted-foreground">ريال</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-center text-xs text-muted-foreground mt-8">
+          الأسعار لا تشمل ضريبة القيمة المضافة (15%). المخرجات تُطلب من داخل حسابك بعد الاشتراك في باقة الخبير.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function ComplianceSection() {
   const enforced = [
     "لا تُصدَر فاتورة ضريبية لمنشأة قبل اكتمال الرقم الضريبي وعنوان المشتري — وهما مما تُلزم به الفاتورة الضريبية.",
@@ -1100,6 +1137,7 @@ export default function Home() {
       <WhyUsSection />
       <ComplianceSection />
       <PricingSection onSelectPlan={setSelectedPlanId} />
+      <DeliverablesSection />
       <ContactSection initialPlanId={selectedPlanId} />
       <Footer />
       {/* شات المبيعات — للزوار قبل التسجيل */}
