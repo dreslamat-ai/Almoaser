@@ -39,6 +39,11 @@ const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = {
   update_settings: "manageErpSettings",
   check_tax_setup: "viewInvoices",
   setup_tax_settings: "manageErpSettings",
+  // دورات العمل: قراءتها كقراءة، وإنشاؤها تغييرُ إعداداتٍ لا حركة محاسبية.
+  // بلا تسجيلها هنا تصبح متاحة للجميع افتراضياً — وهو ما لا يصح لإنشائها.
+  get_workflow_options: "viewInvoices",
+  get_workflows: "viewInvoices",
+  create_workflow: "manageErpSettings",
 };
 
 function requireToolPermission(user: User, toolName: string): void {
@@ -586,6 +591,73 @@ const TOOLS = [
           document_name: { type: "string", description: "رقم المستند مثل ACC-SINV-2026-00001 أو ACC-PAY-2026-00001" },
         },
         required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_workflow_options",
+      description: "قراءة الحالات والإجراءات والأدوار المتاحة في نظام العميل لبناء دورة عمل. **استدعها دائماً قبل create_workflow** — أسماء الحالات والإجراءات روابط لسجلات قائمة، واختراع اسم غير موجود يُفشل الإنشاء",
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_workflows",
+      description: "عرض دورات العمل (Workflows) المعرّفة في نظام العميل، اختيارياً لنوع مستند بعينه. استخدمها عند تقييم النظام أو قبل اقتراح دورة جديدة",
+      parameters: {
+        type: "object",
+        properties: { document_type: { type: "string", description: "نوع المستند مثل Sales Invoice — اتركه فارغاً لعرض الكل" } },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_workflow",
+      description: "إنشاء دورة عمل (Workflow) لنوع مستند: حالات وانتقالات وأدوار الموافقة. إعداد نظام لا حركة محاسبية. **لا تستدعِها قبل عرض التصميم على العميل والحصول على موافقته الصريحة** — ترفض التنفيذ إن لم تُمرّر confirmed: true",
+      parameters: {
+        type: "object",
+        properties: {
+          workflow_name: { type: "string", description: "اسم دورة العمل" },
+          document_type: { type: "string", description: "نوع المستند مثل Sales Invoice" },
+          states: {
+            type: "array",
+            description: "الحالات بالترتيب",
+            items: {
+              type: "object",
+              properties: {
+                state: { type: "string", description: "اسم الحالة" },
+                allow_edit: { type: "string", description: "الدور الذي يملك التعديل في هذه الحالة" },
+                doc_status: { type: "string", enum: ["0", "1", "2"], description: "0 مسودة، 1 مُرحّل، 2 ملغى" },
+              },
+              required: ["state", "allow_edit", "doc_status"],
+              additionalProperties: false,
+            },
+          },
+          transitions: {
+            type: "array",
+            description: "الانتقالات بين الحالات",
+            items: {
+              type: "object",
+              properties: {
+                state: { type: "string", description: "الحالة الحالية" },
+                action: { type: "string", description: "اسم الإجراء" },
+                next_state: { type: "string", description: "الحالة التالية" },
+                allowed: { type: "string", description: "الدور المسموح له بالإجراء" },
+              },
+              required: ["state", "action", "next_state", "allowed"],
+              additionalProperties: false,
+            },
+          },
+          confirmed: { type: "boolean", description: "true فقط بعد موافقة العميل الصريحة على التصميم" },
+        },
+        required: ["workflow_name", "document_type", "states", "transitions", "confirmed"],
         additionalProperties: false,
       },
     },
@@ -1612,6 +1684,81 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
       };
     }
+    case "get_workflow_options": {
+      const q = (o: unknown) => encodeURIComponent(JSON.stringify(o));
+      const [st, ac, ro] = await Promise.all([
+        erpGET(`/api/resource/Workflow State?fields=${q(["name"])}&limit_page_length=0`),
+        erpGET(`/api/resource/Workflow Action Master?fields=${q(["name"])}&limit_page_length=0`),
+        erpGET(`/api/resource/Role?fields=${q(["name"])}&limit_page_length=0`),
+      ]);
+      const names = (r: unknown) => ((r as { data?: { name: string }[] })?.data ?? []).map(x => x.name);
+      return {
+        result: { states: names(st), actions: names(ac), roles: names(ro),
+          note: "أسماء الحالات والإجراءات غير الموجودة تُنشأ تلقائياً عند create_workflow، أما الأدوار فلا — استخدم دوراً من هذه القائمة" },
+        display: "",
+      };
+    }
+
+    case "get_workflows": {
+      const q = (o: unknown) => encodeURIComponent(JSON.stringify(o));
+      const dt = (args.document_type as string | undefined)?.trim();
+      const filters = dt ? `&filters=${q([["document_type", "=", dt]])}` : "";
+      const res = await erpGET(`/api/resource/Workflow?fields=${q(["name", "document_type", "is_active", "workflow_state_field"])}${filters}&limit_page_length=0`);
+      const list = ((res as { data?: unknown[] })?.data ?? []);
+      return { result: { count: list.length, workflows: list }, display: "" };
+    }
+
+    case "create_workflow": {
+      if (!args.confirmed) {
+        return { result: { ok: false, needs_confirmation: true,
+          message: "اعرض تصميم دورة العمل على العميل (الحالات والانتقالات والأدوار) واحصل على موافقته الصريحة، ثم أعد الاستدعاء بـ confirmed: true" }, display: "" };
+      }
+      const name = String(args.workflow_name ?? "").trim();
+      const docType = String(args.document_type ?? "").trim();
+      const states = (args.states ?? []) as Array<{ state: string; allow_edit: string; doc_status: string }>;
+      const transitions = (args.transitions ?? []) as Array<{ state: string; action: string; next_state: string; allowed: string }>;
+      if (!name || !docType || !states.length || !transitions.length) {
+        return { result: { ok: false, error: "الاسم ونوع المستند وحالة واحدة وانتقال واحد على الأقل مطلوبة" }, display: "" };
+      }
+
+      const q = (o: unknown) => encodeURIComponent(JSON.stringify(o));
+      const existing = await erpGET(`/api/resource/Workflow?filters=${q([["document_type", "=", docType]])}&fields=${q(["name"])}&limit_page_length=1`);
+      if (((existing as { data?: unknown[] })?.data ?? []).length) {
+        return { result: { ok: false, error: `يوجد بالفعل دورة عمل لنوع المستند ${docType} — راجعها بـ get_workflows قبل إنشاء أخرى` }, display: "" };
+      }
+
+      // الحالات والإجراءات روابط لسجلات قائمة: اسم غير موجود يُفشل الحفظ كله.
+      // ننشئها أولاً — إنشاء تسمية إعدادٍ لا حركة، وهو داخل نطاق الخبير.
+      const ensure = async (doctype: string, values: string[], extra: Record<string, unknown> = {}) => {
+        const present = new Set(((await erpGET(`/api/resource/${encodeURIComponent(doctype)}?fields=${q(["name"])}&limit_page_length=0`)) as { data?: { name: string }[] })?.data?.map(x => x.name) ?? []);
+        const created: string[] = [];
+        for (const v of Array.from(new Set(values)).filter(v => v && !present.has(v))) {
+          await erpPOST(`/api/resource/${encodeURIComponent(doctype)}`, { [doctype === "Workflow State" ? "workflow_state_name" : "workflow_action_name"]: v, ...extra });
+          created.push(v);
+        }
+        return created;
+      };
+      const newStates = await ensure("Workflow State", [...states.map(s => s.state), ...transitions.flatMap(t => [t.state, t.next_state])]);
+      const newActions = await ensure("Workflow Action Master", transitions.map(t => t.action));
+
+      const created = await erpPOST("/api/resource/Workflow", {
+        workflow_name: name,
+        document_type: docType,
+        // الحقل القياسي الذي يخزّن فيه Frappe حالة المستند
+        workflow_state_field: "workflow_state",
+        is_active: 1,
+        states: states.map(s => ({ state: s.state, allow_edit: s.allow_edit, doc_status: String(s.doc_status ?? "0") })),
+        transitions: transitions.map(t => ({ state: t.state, action: t.action, next_state: t.next_state, allowed: t.allowed })),
+      });
+      const wfName = (created as { data?: { name?: string } })?.data?.name ?? name;
+      return {
+        result: { ok: true, workflow: wfName, document_type: docType,
+          states_created: newStates, actions_created: newActions,
+          note: "دورة العمل مفعّلة. المستندات الجديدة من هذا النوع ستتبعها؛ المستندات القائمة لا تتأثر بأثر رجعي" },
+        display: `__WORKFLOW_CREATED__${JSON.stringify({ name: wfName, document_type: docType, states: states.map(s => s.state), transitions: transitions.length })}`,
+      };
+    }
+
     case "check_tax_setup": {
       const setup = await inspectTaxSetup();
       if (setup.ok) {

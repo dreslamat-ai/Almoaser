@@ -65,6 +65,16 @@ describe("toolsForMode — وضع الخبير", () => {
     }
   });
 
+  // create_workflow يبدأ بـ create_ لكنه إعداد لا حركة محاسبية — وهو جوهر
+  // باقة الخبير. لا يُضاف للمحجوب بحجة البادئة.
+  it("يُبقي أدوات دورات العمل — بما فيها إنشاؤها", () => {
+    const withWf = [...ALL, tool("get_workflow_options"), tool("get_workflows"), tool("create_workflow")];
+    const names = toolsForMode(withWf, "expert").map(t => t.function.name);
+    expect(names).toContain("get_workflow_options");
+    expect(names).toContain("get_workflows");
+    expect(names).toContain("create_workflow");
+  });
+
   it("يبقى للخبير عدد معتبر من الأدوات", () => {
     const kept = toolsForMode(ALL, "expert");
     expect(kept.length).toBeGreaterThan(10);

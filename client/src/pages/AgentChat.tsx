@@ -1038,6 +1038,30 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       );
     } catch { return null; }
   }
+  if (display.startsWith("__WORKFLOW_CREATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__WORKFLOW_CREATED__", "")) as {
+        name: string; document_type: string; states: string[]; transitions: number;
+      };
+      return (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <div className="flex items-center gap-2 font-bold text-emerald-900">
+            <CheckCircle2 className="w-4 h-4 shrink-0" /> أُنشئت دورة العمل: {d.name}
+          </div>
+          <p className="text-emerald-800 mt-1 text-xs">
+            على مستندات <span className="font-medium">{d.document_type}</span> · {d.states.length} حالات · {d.transitions} انتقال
+          </p>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {d.states.map(st => (
+              <span key={st} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-900">{st}</span>
+            ))}
+          </div>
+          <p className="text-[11px] text-emerald-700 mt-2">تسري على المستندات الجديدة — القائمة لا تتأثر بأثر رجعي.</p>
+        </div>
+      );
+    } catch { return null; }
+  }
+
   if (display.startsWith("__SETTINGS_UPDATED__")) {
     try {
       const d = JSON.parse(display.replace("__SETTINGS_UPDATED__", "")) as { settings_type: string; name: string; changed: string[] };
