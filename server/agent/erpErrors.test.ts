@@ -70,3 +70,19 @@ describe("لا تُنسب أخطاء الاستعلام للصلاحيات", () 
     expect(t).toContain("حذفه");
   });
 });
+
+// السبب الحقيقي وراء فشل إلغاء إشعار تسليم 2023 — قيد محاسبي لا عطل
+describe("إقفال الفترة", () => {
+  const CLOSED = String.raw`ERPNext POST error 417: {"exc_type":"ValidationError","exception":"frappe.exceptions.ValidationError: Due to period closing, you cannot repost item valuation before 2023-12-31"}`;
+
+  it("يشرحه كقيد محاسبي ويذكر التاريخ", () => {
+    const t = translateErpError(CLOSED);
+    expect(t).toContain("الفترة المحاسبية مقفلة");
+    expect(t).toContain("2023-12-31");
+    expect(t).toContain("ليس خطأً في النظام");
+  });
+
+  it("يوجّه للقرار الصحيح لا لإعادة المحاولة", () => {
+    expect(translateErpError(CLOSED)).toContain("قيد إقفال الفترة");
+  });
+});

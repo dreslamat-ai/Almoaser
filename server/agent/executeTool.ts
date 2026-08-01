@@ -10,6 +10,39 @@ import {
 } from "./erpHelpers";
 
 /** سياق التنفيذ: من يطلب، وفي أي محادثة */
+/** المستندات التي تُحدث أثراً محاسبياً — إتلافها يُسقط قيداً من الدفاتر */
+const FINANCIAL_DOCTYPES = new Set([
+  "Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry",
+  "POS Invoice", "Stock Entry", "Stock Reconciliation",
+]);
+
+/**
+ * بيانات المستند المالي للتحذير: الرقم والمبلغ والتاريخ.
+ *
+ * غير المعتمد (docstatus=0) لا يُحدث أثراً محاسبياً، فلا يستوجب حاجزاً ثانياً —
+ * والتشدّد فيه يعلّم المستخدم تجاوز التحذيرات، فيتجاوز المهمّ معها.
+ */
+async function financialSummary(doctype: string, name: string): Promise<
+  { doctype: string; name: string; amount?: number; currency?: string; date?: string } | null
+> {
+  try {
+    const r = await erpGET(`/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`) as {
+      data?: { docstatus?: number; grand_total?: number; paid_amount?: number; total_debit?: number; currency?: string; posting_date?: string };
+    };
+    const d = r?.data;
+    if (!d || d.docstatus !== 1) return null;   // المسودة تُحذف بلا حاجز إضافي
+    return {
+      doctype, name,
+      amount: d.grand_total ?? d.paid_amount ?? d.total_debit,
+      currency: d.currency,
+      date: d.posting_date,
+    };
+  } catch {
+    // تعذّرت القراءة: نحتاط ونطلب التأكيد بدل أن نمضي في الإتلاف
+    return { doctype, name };
+  }
+}
+
 export type ToolCtx = { userId: number; conversationId?: number };
 import { executeOdooTool } from "../odooTools";
 import { storagePut, storageGetSignedUrl } from "../storage";
@@ -636,6 +669,25 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
           // الخطأ غير المرتبط (سجل غير موجود، رفض صلاحية) يُرمى من delete_document.
           // تركُه يصعد يُسقط الأداة كلها ويُخفي ما حُذف قبله — وهو ما لا يجوز
           // في عملية إتلاف: المستخدم يجب أن يعرف أين توقّفت بالضبط.
+          // حاجز المستندات المالية: تجربة حقيقية حذفت فاتورة معتمدة وسند قبض
+          // ضمن حذف "عميل تجريبي". الموافقة العامة على الحذف المتسلسل ليست
+          // موافقة على إسقاط قيد من الدفاتر — هذه تُطلب على حدة وبالرقم والمبلغ.
+          if (FINANCIAL_DOCTYPES.has(target.doctype) && !args.confirmed_financial) {
+            const info = await financialSummary(target.doctype, target.name);
+            if (info) {
+              return { result: {
+                ok: false,
+                needs_financial_confirmation: true,
+                document: info,
+                deleted_so_far: deleted,
+                message: `توقّفت: الحذف يستلزم إتلاف مستند مالي معتمد — ${info.doctype} رقم ${info.name}`
+                  + (info.amount != null ? ` بمبلغ ${info.amount} ${info.currency ?? ""}` : "")
+                  + (info.date ? ` بتاريخ ${info.date}` : "")
+                  + `. إلغاؤه وحذفه يُسقط أثره من الحسابات ولا يمكن التراجع عنه. اعرض هذه التفاصيل على المستخدم بالرقم والمبلغ، واسأله موافقةً منفصلة على إتلاف المستند المالي، ثم أعد الاستدعاء بـ confirmed_financial: true.`,
+              }, display: "" };
+            }
+          }
+
           let res: { deleted?: boolean; blocked_by?: { doctype: string; name: string }; error?: string };
           try {
             const r = await executeTool("delete_document",
@@ -685,13 +737,25 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
       // يُعتمدان أيضاً، وقصرُ الفحص على المستندات المالية كان يجعل الحذف يفشل
       // عندها برسالة عامة. والملغى أصلاً (docstatus=2) يُحذف مباشرة بلا إلغاء.
       let wasCancelled = false;
+      let currentStatus: number | undefined;
       try {
         const cur = await erpGET(path) as { data?: { docstatus?: number } };
-        if (cur?.data?.docstatus === 1) {
+        currentStatus = cur?.data?.docstatus;
+      } catch { /* غير موجود — سيفشل الحذف برسالة واضحة */ }
+
+      if (currentStatus === 1) {
+        try {
           await cancelDoc(doctype, docName);
           wasCancelled = true;
+        } catch (e) {
+          // كان يُبتلع بصمت فيمضي الحذف ليفشل بـ"يجب الإلغاء أولاً" — رسالةٌ
+          // تصف العَرَض وتخفي السبب. سبب تعذّر الإلغاء هو ما يحتاجه المستخدم.
+          return { result: {
+            error: `تعذّر إلغاء ${doctype} "${docName}" قبل حذفه: ${translateErpError(e instanceof Error ? e.message : String(e))}`,
+            hint: "الإلغاء شرط الحذف لأي مستند معتمد — عالج سبب تعذّره أولاً",
+          }, display: "" };
         }
-      } catch { /* المستند غير موجود — سيفشل الحذف برسالة واضحة */ }
+      }
 
       try {
         await erpDELETE(path);

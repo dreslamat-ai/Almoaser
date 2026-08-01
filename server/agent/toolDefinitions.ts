@@ -634,6 +634,7 @@ export const TOOLS = [
           doctype: { type: "string", description: "نوع السجل الأصلي — Customer مثلاً" },
           document_name: { type: "string", description: "اسم السجل" },
           confirmed: { type: "boolean", description: "true بعد موافقة المستخدم الصريحة على الحذف النهائي" },
+          confirmed_financial: { type: "boolean", description: "true بعد موافقة منفصلة على إتلاف مستند مالي معتمد — تُطلب فقط حين تتوقف الأداة وتذكر رقم المستند ومبلغه" },
         },
         required: ["doctype", "document_name"],
         additionalProperties: false,
