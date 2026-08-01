@@ -119,7 +119,9 @@ const CANVAS = "#eef1f6";
 const FONT = "'IBM Plex Sans Arabic','Segoe UI',Tahoma,Arial,sans-serif";
 
 function logoUrl(): string {
-  return `${appBaseUrl()}/icons/icon-192x192.png`;
+  // شعار العلامة لا أيقونة التطبيق: الفاتورة الضريبية مستند رسمي يصل للعميل
+  // ويُحفظ لديه، وأيقونة مربّعة صغيرة تظهر عليه كأنها زرّ لا ترويسة شركة.
+  return `${appBaseUrl()}/brand/horizon-logo.png`;
 }
 
 /** يمنع Gmail من قصّ الرسالة الطويلة ويخفي نص المعاينة */
@@ -176,9 +178,8 @@ ${preheader(opts.preview ?? intro ?? heading)}
     <tr><td style="padding:22px 28px 6px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
         <td align="right" style="vertical-align:middle;">
-          <img src="${logoUrl()}" width="40" height="40" alt="المعاصر"
-               style="display:inline-block;vertical-align:middle;width:40px;height:40px;border:0;border-radius:9px;" />
-          <span style="display:inline-block;vertical-align:middle;padding-right:10px;font-family:${FONT};font-size:16px;font-weight:bold;color:${NAVY};">المعاصر</span>
+          <img src="${logoUrl()}" width="132" height="66" alt="Horizon"
+               style="display:inline-block;vertical-align:middle;width:132px;height:auto;border:0;" />
         </td>
         <td align="left" style="vertical-align:middle;font-family:${FONT};font-size:11px;color:${MUTED};letter-spacing:.4px;">
           Almoaser AI ERP
