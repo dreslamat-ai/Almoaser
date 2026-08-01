@@ -62,6 +62,15 @@ export function cacheKey(url: string, username: string) {
 /** للاختبارات ولإبطال التخزين عند تغيّر الاتصال */
 export function clearErpPermissionsCache() { cache.clear(); }
 
+/**
+ * ما هو مخزَّن الآن، بلا أي شبكة. يعيد null إن لم يُجلب بعد.
+ * تُستخدم في مسار الرسالة حتى لا يضيف التضييق ولا مللي ثانية إليه.
+ */
+export function cachedErpCapabilities(url: string, username: string): ErpCapabilities | null {
+  const hit = cache.get(cacheKey(url, username));
+  return hit && hit.expiry > Date.now() ? hit.caps : null;
+}
+
 export async function fetchErpCapabilities(params: {
   url: string; username: string; cookie: string;
 }): Promise<ErpCapabilities | null> {

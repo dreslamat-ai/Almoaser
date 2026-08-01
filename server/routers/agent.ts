@@ -80,19 +80,26 @@ export function canUseTool(user: Pick<User, "orgRole" | "permissions">, toolName
 async function narrowToolsByErpPermissions<T extends { function: { name: string } }>(
   tools: T[],
 ): Promise<T[]> {
-  // معطَّل افتراضياً. يضيف تسجيل دخول واستدعاءين لنظام العميل أمام كل رسالة،
-  // وقد ظهر عطل "Load failed" في الدردشة بعد تفعيله ولم يُثبت أنه سببه ولا أنه
-  // بريء منه. وفائدته اليوم صفر — كل مستخدمي المنصة مديرو نظام في أنظمتهم —
-  // فلا معنى لتحمّل شكٍّ في المسار الأهم مقابل لا شيء.
-  // للتشغيل عند التحقيق: ERP_PERMISSION_NARROWING=true
-  if (process.env.ERP_PERMISSION_NARROWING !== "true") return tools;
+  // النسخة الأولى كانت تُسجّل الدخول وتستدعي نظام العميل مرتين **داخل** مسار
+  // الرسالة، فأضافت زمناً قبل أن يبدأ النموذج أصلاً. الآن: نقرأ المخزَّن فقط
+  // (بلا شبكة)، ونحدّثه في الخلفية بلا انتظار. أول رسالة تمرّ بلا تضييق — وهذا
+  // مقبول لأن الطبقة إرشادية وERPNext هو الحاجز الحقيقي عند التنفيذ.
   try {
     const cfg = currentErpConfig();
     if (cfg.provider !== "erpnext" || !cfg.url || !cfg.username) return tools;
-    const { fetchErpCapabilities, erpAllowsTool } = await import("../erpPermissions");
-    const sid = await getErpSession(cfg);
-    const caps = await fetchErpCapabilities({ url: cfg.url, username: cfg.username, cookie: `sid=${sid}` });
-    if (!caps || caps.unrestricted) return tools;
+    const { cachedErpCapabilities, fetchErpCapabilities, erpAllowsTool } = await import("../erpPermissions");
+    const caps = cachedErpCapabilities(cfg.url, cfg.username);
+    if (!caps) {
+      // تحديث غير محجوب: لا ينتظره هذا الطلب، وتستفيد منه الرسائل التالية
+      void (async () => {
+        try {
+          const sid = await getErpSession(cfg);
+          await fetchErpCapabilities({ url: cfg.url, username: cfg.username, cookie: `sid=${sid}` });
+        } catch { /* الطبقة إرشادية — الفشل هنا لا يعني شيئاً للمستخدم */ }
+      })();
+      return tools;
+    }
+    if (caps.unrestricted) return tools;
     return tools.filter(t => erpAllowsTool(caps, t.function.name));
   } catch (e) {
     console.warn("[agent] تعذّر تضييق الأدوات بصلاحيات ERP:", e instanceof Error ? e.message : e);
