@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { toArabicDigits, digitsOnly } from "@shared/digits";
 import { TOPUP_MIN_CREDITS, CREDITS_PER_SAR, topupPriceSAR, formatSAR } from "@shared/credits";
 import { withVat } from "@shared/tax";
+import { planCapacityLabel } from "@shared/planDisplay";
 
 export default function Subscription() {
   const { isAuthenticated, loading } = useAuth();
@@ -324,7 +325,7 @@ export default function Subscription() {
                   </div>
                 )}
                 <div className="flex items-center gap-2 mb-4 text-[11px] font-medium">
-                  <span className="px-2 py-0.5 rounded-full bg-navy/5 text-navy">{plan.maxDocuments ?? 30} مستنداً/شهر</span>
+                  <span className="px-2 py-0.5 rounded-full bg-navy/5 text-navy">{planCapacityLabel(plan)}</span>
                   <span className="px-2 py-0.5 rounded-full bg-gold/10 text-gold-ink">{plan.monthlyCredits ?? 150} نقطة/شهر</span>
                 </div>
                 <ul className="space-y-2 mb-6">

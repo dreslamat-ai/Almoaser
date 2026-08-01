@@ -11,6 +11,7 @@ import {
   Loader2, UserPlus, Eye, EyeOff, Globe, ArrowLeft, ArrowRight,
   CheckCircle2, Sparkles, Gift,
 } from "lucide-react";
+import { planCapacityDetail } from "@shared/planDisplay";
 
 export default function Signup() {
   const [, navigate] = useLocation();
@@ -245,7 +246,7 @@ export default function Signup() {
                   <div className="flex-1">
                     <p className="font-bold text-foreground">{plan.nameAr}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {plan.maxDocuments ?? 30} مستنداً · {plan.monthlyCredits ?? 150} نقطة شهرياً
+                      {planCapacityDetail(plan)}
                     </p>
                   </div>
                   <div className="text-left shrink-0">

@@ -12,6 +12,7 @@ import {
   BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
   ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles
 } from "lucide-react";
+import { planCapacityLabel } from "@shared/planDisplay";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
 type ChatMessage = { from: "user" | "agent"; text: string; delay: number; type?: "text" | "pdf"; pdfName?: string; pdfSize?: string };
@@ -564,7 +565,7 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
                     </div>
                   )}
                   <div className="flex items-center gap-2 mb-6 text-xs font-medium">
-                    <span className="px-2 py-1 rounded-full bg-navy/5 text-navy">{plan.maxDocuments ?? 30} مستنداً / شهر</span>
+                    <span className="px-2 py-1 rounded-full bg-navy/5 text-navy">{planCapacityLabel(plan)}</span>
                     <span className="px-2 py-1 rounded-full bg-gold/10 text-gold-ink">{plan.monthlyCredits ?? 150} نقطة / شهر</span>
                   </div>
                   <ul className="space-y-3 mb-8">
