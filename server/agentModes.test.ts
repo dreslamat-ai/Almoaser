@@ -244,3 +244,26 @@ describe("SYSTEM_REACH_RULES — مدى الأدوات في نظام العمي�
     expect(modeRulesFor("expert")).toContain(SYSTEM_REACH_RULES);
   });
 });
+
+// النظام يعمل بمستخدم System Manager ومع ذلك رُفض الحذف — والسبب تكامل مرجعي
+// لا صلاحيات: إشعار تسليم بحالة docstatus=2 (ملغى) ما زال يمسك الرابط
+describe("قواعد الحذف والتكامل المرجعي", () => {
+  it("تفصل LinkExistsError عن رفض الصلاحية", () => {
+    expect(SYSTEM_REACH_RULES).toContain("LinkExistsError ليس رفض صلاحية");
+  });
+
+  it("تنصّ على أن الملغى ما زال يمسك الرابط", () => {
+    expect(SYSTEM_REACH_RULES).toContain("docstatus=2");
+    expect(SYSTEM_REACH_RULES).toContain("الإلغاء وحده لا يفكّ الارتباط");
+  });
+
+  it("تحدّد ترتيب الحذف من المرتبط إلى الأصل", () => {
+    expect(SYSTEM_REACH_RULES).toContain("إشعارات التسليم ← أوامر البيع");
+  });
+
+  // قيل "لا توجد مستندات مرتبطة" وكان هناك واحد — الفحص قبل الوعد
+  it("تلزم بالفحص قبل الوعد بحذف مباشر", () => {
+    expect(SYSTEM_REACH_RULES).toContain("افحص قبل أن تَعِد");
+    expect(SYSTEM_REACH_RULES).toContain("بلا ترشيح على الحالة");
+  });
+});

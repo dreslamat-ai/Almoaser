@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { chunkForTelegram, agentReplyToTelegram } from "./telegramWebhook";
+import { readFileSync } from "fs";
 
 describe("chunkForTelegram", () => {
   it("يترك الرد القصير كما هو", () => {
@@ -44,5 +45,13 @@ describe("agentReplyToTelegram", () => {
 
   it("يترك النص العادي سليماً", () => {
     expect(agentReplyToTelegram("لديك ٣ فواتير غير مدفوعة")).toBe("لديك ٣ فواتير غير مدفوعة");
+  });
+});
+
+// كانت الأزرار تُستخرج من نصّ الرد بعد أن نزعها agent.chat — فترجع فارغة دائماً
+describe("مصدر الأزرار في تيليجرام", () => {
+  it("لا يعتمد على وجود العلامة في النص", () => {
+    const src = readFileSync(new URL("./telegramWebhook.ts", import.meta.url), "utf8");
+    expect(src).toContain("r.quickReplies?.length");
   });
 });

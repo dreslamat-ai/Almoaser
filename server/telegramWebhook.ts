@@ -168,15 +168,20 @@ async function handleOwnerMessage(chatId: number, text: string): Promise<void> {
     const r = await caller.agent.chat({
       messages: history,
       conversationId: thread.conversationId,
-    } as never) as { reply: string; conversationId?: number };
+    } as never) as { reply: string; conversationId?: number; quickReplies?: string[] };
 
     // الوكيل يحفظ الرسالتين في القاعدة، فلا نكرّرهما هنا — نحتفظ بالمعرّف فقط
     thread.conversationId = r.conversationId ?? thread.conversationId;
     threads.set(chatId, thread);
 
-    // نفس مستخرِج الواجهة: الخيارات التي تظهر كأزرار على الشاشة تظهر أزراراً هنا
-    const { text: body, quickReplies } = extractQuickReplies(r.reply);
-    const parts = chunkForTelegram(agentReplyToTelegram(body));
+    // الخيارات تُؤخذ من حقلها في الرد لا تُستخرج من نصّه: agent.chat ينزع سطر
+    // العلامة قبل أن يعيد `reply`، فمحاولة استخراجه بعدها ترجع فارغة دائماً —
+    // وهو سبب غياب الأزرار عن تيليجرام بينما كانت تظهر في الموقع.
+    // ويبقى الاستخراج احتياطاً لردٍّ وصل من مسار لا ينزعه.
+    const quickReplies = r.quickReplies?.length
+      ? r.quickReplies
+      : extractQuickReplies(r.reply).quickReplies;
+    const parts = chunkForTelegram(agentReplyToTelegram(r.reply));
 
     // نتيجة الإرسال تُفحص: فشلٌ صامت هنا يعني أن العميل نفّذ عملية على نظامه
     // ولم يصله تأكيدها — وهو أسوأ من فشل معلن، لأنه سيعيد الطلب ظانّاً أنه لم يتم.
