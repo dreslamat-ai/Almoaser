@@ -70,7 +70,9 @@ if (!lines.some(l => l.includes("إشعارات تيليجرام"))) {
 }
 upsert("TELEGRAM_BOT_TOKEN", token);
 upsert("TELEGRAM_CHAT_ID", chat.id);
-writeFileSync(ENV, lines.join("\n"));
+// سطر جديد في النهاية: بدونه يلتصق أول متغيّر يُضاف لاحقاً بآخر قيمة موجودة،
+// فيصير TELEGRAM_CHAT_ID=119770400NEXT_VAR=... — وهذا وقع فعلاً.
+writeFileSync(ENV, lines.join("\n").replace(/\n*$/, "\n"));
 // الصلاحيات محاولة لا شرط: الملف يملكه almoaser-ai ومن يشغّل السكربت قد يكون
 // عضو المجموعة فقط — يكتب ولا يملك chmod. فشلٌ هنا لا يبطل ضبطاً تمّ فعلاً.
 try { chmodSync(ENV, 0o660); } catch { /* الوضع الصحيح مضبوط أصلاً */ }

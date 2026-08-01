@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startScheduledJobs } from "../scheduler";
 import { registerMyFatoorahWebhook } from "../myfatoorahWebhook";
+import { registerTelegramWebhook } from "../telegramWebhook";
 
 /**
  * إنهاء لطيف: نتوقف عن قبول الجديد ونمهل الجاري أن يكتمل.
@@ -79,6 +80,7 @@ async function startServer() {
   // Webhook إشعار الدفع من MyFatoorah — يُنهي تفعيل الاشتراك/الشحن تلقائياً حتى
   // لو لم يعد العميل لصفحة الكولباك بعد الدفع
   registerMyFatoorahWebhook(app);
+  registerTelegramWebhook(app);
   // tRPC API
   app.use(
     "/api/trpc",

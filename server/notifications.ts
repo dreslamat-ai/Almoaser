@@ -164,6 +164,16 @@ export async function notifyAdmins(input: {
       notifyUser({ userId: a.id, ...input }).catch(() => 0),
     ),
   );
+
+  // ونسخة على تيليجرام: إشعار الإدارة يُقصد به التصرّف الآن — تسجيل عميل جديد،
+  // دفعة، عطل مزوّد. إن انتظر قراءة البريد فقد وقته. لا يوقف الفشلُ هنا شيئاً:
+  // الإشعار محفوظ في القاعدة على أي حال.
+  void import("./telegram").then(async m => {
+    if (!m.isTelegramConfigured()) return;
+    const body = input.body ? `\n${m.tg(input.body)}` : "";
+    const link = input.link ? `\n\nhttps://erpsys.cloud${input.link}` : "";
+    await m.sendTelegram(`<b>${m.tg(input.title)}</b>${body}${link}`);
+  }).catch(() => {});
 }
 
 // إشعار اقتراب انتهاء التجربة — يُستدعى عند جلب الاشتراك، مع منع التكرار اليومي
