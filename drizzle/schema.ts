@@ -108,6 +108,9 @@ export const subscriptions = mysqlTable("subscriptions", {
   companyType: varchar("companyType", { length: 100 }),
   phone: varchar("phone", { length: 20 }),
   vatNumber: varchar("vatNumber", { length: 50 }),
+  // العنوان الوطني ورقم السجل — تُقرأ من شهادة التسجيل الضريبي وتلزم الفاتورة
+  companyAddress: varchar("companyAddress", { length: 400 }),
+  crNumber: varchar("crNumber", { length: 30 }),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

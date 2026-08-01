@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import PhoneVerification from "@/components/PhoneVerification";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -17,7 +17,42 @@ export default function AccountSettings() {
   const { data: erpConn } = trpc.erpConnection.get.useQuery(undefined, { enabled: isAuthenticated });
 
   const [profile, setProfile] = useState({ name: "", email: "" });
-  const [company, setCompany] = useState({ companyName: "", companyType: "", phone: "", vatNumber: "" });
+  const [company, setCompany] = useState({ companyName: "", companyType: "", phone: "", vatNumber: "", companyAddress: "", crNumber: "" });
+  const [certNote, setCertNote] = useState<string | null>(null);
+  const certInputRef = useRef<HTMLInputElement | null>(null);
+
+  // القراءة تملأ الحقول ولا تحفظ: العميل يراجع ثم يضغط حفظ. كتابة قراءة آلية
+  // بلا مراجعة أسوأ من إدخال يدوي — الخطأ يمرّ بثقة.
+  const readCert = trpc.profile.readVatCertificate.useMutation({
+    onSuccess: r => {
+      setCompany(c => ({
+        ...c,
+        companyName: r.data.taxpayerName || c.companyName,
+        vatNumber: r.data.vatNumber || c.vatNumber,
+        companyAddress: r.data.address || c.companyAddress,
+        crNumber: r.data.crNumber || c.crNumber,
+      }));
+      const parts: string[] = [];
+      if (r.warning) parts.push(r.warning);
+      if (r.missing.length) parts.push(`لم يُقرأ: ${r.missing.join("، ")}`);
+      setCertNote(parts.length ? parts.join(" · ") : "تمت القراءة — راجع البيانات ثم احفظ.");
+      if (!parts.length) toast.success("قُرئت الشهادة — راجع البيانات واحفظ");
+      else toast.warning("قُرئت الشهادة مع ملاحظات — راجعها");
+    },
+    onError: e => { setCertNote(e.message); toast.error(e.message); },
+  });
+
+  const onCertFile = async (file: File) => {
+    setCertNote(null);
+    const buf = await file.arrayBuffer();
+    // على دفعات: تمرير ملف كامل إلى fromCharCode يتجاوز حدّ وسائط الاستدعاء
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 8192) {
+      bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 8192)));
+    }
+    readCert.mutate({ fileBase64: btoa(bin), mimeType: file.type || "application/pdf" });
+  };
 
   useEffect(() => {
     if (user) setProfile({ name: user.name ?? "", email: user.email ?? "" });
@@ -30,6 +65,8 @@ export default function AccountSettings() {
         companyType: subscription.companyType ?? "",
         phone: subscription.phone ?? "",
         vatNumber: subscription.vatNumber ?? "",
+        companyAddress: subscription.companyAddress ?? "",
+        crNumber: subscription.crNumber ?? "",
       });
     }
   }, [subscription]);
@@ -98,6 +135,24 @@ export default function AccountSettings() {
           {!subscription ? (
             <p className="text-sm text-muted-foreground py-4">لا يوجد اشتراك بعد — اشترك في باقة أولاً لإدارة بيانات شركتك.</p>
           ) : (
+            <>
+            {/* رفع الشهادة قبل الحقول: من يملكها يوفّر كتابة أربعة حقول */}
+            <div className="mb-5 rounded-xl border-2 border-dashed border-gold/40 bg-gold/5 p-4">
+              <p className="text-sm font-medium text-navy mb-1">عندك شهادة التسجيل الضريبي؟</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                ارفعها (PDF أو صورة) ونقرأ منها الاسم والرقم الضريبي والعنوان والسجل التجاري.
+                <span className="font-medium"> راجع ما يظهر قبل الحفظ</span> — القراءة الآلية قد تخطئ في كلمة، والبيانات تظهر على فواتيرك.
+              </p>
+              <input ref={certInputRef} type="file" accept="application/pdf,image/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) void onCertFile(f); e.target.value = ""; }} />
+              <Button type="button" variant="outline" size="sm" disabled={readCert.isPending}
+                className="border-gold text-gold-ink hover:bg-gold/10 gap-2"
+                onClick={() => certInputRef.current?.click()}>
+                {readCert.isPending ? "جاري القراءة — تستغرق نحو نصف دقيقة..." : "ارفع الشهادة"}
+              </Button>
+              {certNote && <p className="text-xs text-muted-foreground mt-2 leading-6">{certNote}</p>}
+            </div>
+
             <form onSubmit={e => { e.preventDefault(); companyMutation.mutate(company); }} className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
@@ -114,7 +169,15 @@ export default function AccountSettings() {
                 </div>
                 <div>
                   <Label htmlFor="co-vat" className="text-navy font-medium">الرقم الضريبي</Label>
-                  <Input value={company.vatNumber} onChange={e => setCompany(c => ({ ...c, vatNumber: e.target.value }))} id="co-vat" placeholder="3xxxxxxxxxxxxxx" className="mt-1" dir="ltr" />
+                  <Input value={company.vatNumber} onChange={e => setCompany(c => ({ ...c, vatNumber: e.target.value }))} id="co-vat" placeholder="3xxxxxxxxx00003" className="mt-1" dir="ltr" />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="co-address" className="text-navy font-medium">العنوان الوطني</Label>
+                  <Input value={company.companyAddress} onChange={e => setCompany(c => ({ ...c, companyAddress: e.target.value }))} id="co-address" placeholder="المدينة، الحي، الرمز البريدي" className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="co-cr" className="text-navy font-medium">السجل التجاري</Label>
+                  <Input value={company.crNumber} onChange={e => setCompany(c => ({ ...c, crNumber: e.target.value }))} id="co-cr" placeholder="10xxxxxxxx" className="mt-1" dir="ltr" />
                 </div>
               </div>
               <Button type="submit" disabled={companyMutation.isPending} className="bg-navy-gradient text-white">
@@ -122,6 +185,7 @@ export default function AccountSettings() {
                 {companyMutation.isPending ? "جاري الحفظ..." : "حفظ بيانات الشركة"}
               </Button>
             </form>
+            </>
           )}
         </div>
 

@@ -844,12 +844,82 @@ export const appRouter = router({
         await updateUserProfile(ctx.user.id, input);
         return { success: true };
       }),
+    // ─── قراءة شهادة التسجيل الضريبي وتعبئة بيانات الشركة منها ───────────────
+    // العميل يرفع الشهادة الصادرة من الهيئة بدل أن يكتب أربعة حقول يدوياً —
+    // والكتابة اليدوية هي مصدر الأخطاء التي تظهر لاحقاً على كل فاتورة.
+    readVatCertificate: protectedProcedure
+      .input(z.object({
+        fileBase64: z.string().min(100),
+        mimeType: z.string().max(100),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const buf = Buffer.from(input.fileBase64, "base64");
+        if (buf.length > 10 * 1024 * 1024) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "الملف كبير جداً — الحد الأقصى 10 ميجابايت" });
+        }
+        const {
+          pdfFirstPageToPng, VAT_CERT_SYSTEM_PROMPT, VAT_CERT_SCHEMA,
+          crossCheckCertificate, missingRequiredFields,
+        } = await import("./vatCertificate");
+
+        let png: Buffer;
+        try {
+          png = input.mimeType.includes("pdf") ? await pdfFirstPageToPng(buf) : buf;
+        } catch (e) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "تعذّر فتح الملف" });
+        }
+
+        const { storagePut, storageGetSignedUrl } = await import("./storage");
+        const { key } = await storagePut(`docs/vatcert-${ctx.user.id}-${Date.now()}.png`, png, "image/png");
+        const url = await storageGetSignedUrl(key);
+
+        const { invokeAgentLLM } = await import("./llmProvider");
+        let parsed: Record<string, string>;
+        try {
+          const res = await invokeAgentLLM({
+            messages: [
+              { role: "system", content: VAT_CERT_SYSTEM_PROMPT },
+              { role: "user", content: [
+                { type: "text", text: "استخرج بيانات هذه الشهادة." },
+                { type: "image_url", image_url: { url, detail: "high" } },
+              ] },
+            ],
+            response_format: { type: "json_schema", json_schema: { name: "vat_certificate", strict: true, schema: VAT_CERT_SCHEMA } },
+            maxTokens: 800,
+          } as Parameters<typeof invokeAgentLLM>[0]);
+          const raw = res?.choices?.[0]?.message?.content;
+          parsed = typeof raw === "string" ? JSON.parse(raw) : {};
+        } catch (e) {
+          console.warn("[readVatCertificate] فشلت القراءة:", e instanceof Error ? e.message : e);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "تعذّرت قراءة الشهادة — تأكد من وضوح الملف وحاول مرة أخرى" });
+        }
+
+        const data = {
+          taxpayerName: parsed.taxpayer_name ?? "",
+          vatNumber: (parsed.vat_number ?? "").replace(/\D/g, ""),
+          tin: (parsed.tin ?? "").replace(/\D/g, ""),
+          address: parsed.address ?? "",
+          crNumber: (parsed.cr_number ?? "").replace(/\D/g, ""),
+          registrationDate: parsed.registration_date ?? "",
+          taxPeriod: parsed.tax_period ?? "",
+        };
+
+        // تُعاد للمراجعة لا تُحفظ مباشرة: قراءة آلية تُكتب بلا نظر أسوأ من إدخال يدوي
+        const cross = crossCheckCertificate(data.vatNumber, data.tin);
+        return {
+          data,
+          missing: missingRequiredFields(data),
+          warning: cross.ok ? null : cross.reason,
+        };
+      }),
     updateCompany: protectedProcedure
       .input(z.object({
         companyName: z.string().max(255).optional(),
         companyType: z.string().max(100).optional(),
         phone: z.string().max(20).optional(),
         vatNumber: z.string().max(50).optional(),
+        companyAddress: z.string().max(400).optional(),
+        crNumber: z.string().max(30).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const sub = await getSubscriptionByUserId(ctx.user.id);
