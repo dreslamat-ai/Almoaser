@@ -1037,6 +1037,17 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       );
     } catch { return null; }
   }
+  if (display.startsWith("__APP_REQUEST__")) {
+    return (
+      <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+        <div className="flex items-center gap-2 font-bold text-sky-900">
+          <CheckCircle2 className="w-4 h-4 shrink-0" /> سُجّل طلبك
+        </div>
+        <p className="text-sky-800 mt-1 text-xs">وصل طلبك لإدارة المنصة وسيتم التواصل معك لمناقشة التفاصيل.</p>
+      </div>
+    );
+  }
+
   if (display.startsWith("__CUSTOMER_UPDATED__")) {
     try {
       const d = JSON.parse(display.replace("__CUSTOMER_UPDATED__", "")) as { customer: string; complete: boolean; missing: string[] };

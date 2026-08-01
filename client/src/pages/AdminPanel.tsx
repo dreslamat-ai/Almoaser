@@ -264,6 +264,12 @@ export function AdminConsole() {
 
   const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
   const [openChatId, setOpenChatId] = useState<number | null>(null);
+  const { data: appReqs } = trpc.admin.appRequests.useQuery(undefined,
+    { enabled: isAuthenticated && user?.role === "admin" && tab === "apps" });
+  const setReqStatus = trpc.admin.setAppRequestStatus.useMutation({
+    onSuccess: () => { toast.success("تم التحديث"); utils.admin.appRequests.invalidate(); },
+    onError: e => toast.error(e.message),
+  });
   const { data: couponList } = trpc.admin.coupons.useQuery(undefined,
     { enabled: isAuthenticated && user?.role === "admin" && tab === "coupons" });
   const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent" as "percent" | "fixed", value: "", scope: "both" as "both" | "subscription" | "topup", maxUses: "", maxUsesPerUser: "1", firstPurchaseOnly: false, newAccountWithinDays: "", validUntil: "" });
@@ -364,7 +370,7 @@ export function AdminConsole() {
       {insights && <PlatformInsights data={insights} />}
 
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["coupons", "الكوبونات"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
+        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["apps", "طلبات التطبيقات"], ["coupons", "الكوبونات"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 [@media(pointer:coarse)]:min-h-11 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
             {l}
@@ -815,6 +821,57 @@ export function AdminConsole() {
             </div>
           </div>
         )}
+        {tab === "apps" && (
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="p-3 text-xs text-muted-foreground border-b border-gray-50">
+              طلبات العملاء للتطبيقات والتخصيصات. الوكيل يسجّل الطلب ولا يَعِد بسعر ولا موعد — البيع يتم منك مباشرة.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-right">
+                  <tr>
+                    <th className="p-3 font-medium">الطلب</th>
+                    <th className="p-3 font-medium">العميل</th>
+                    <th className="p-3 font-medium">لدينا ما يطابقه</th>
+                    <th className="p-3 font-medium">الحالة</th>
+                    <th className="p-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(appReqs ?? []).map(r => {
+                    const st: Record<string, string> = { new: "جديد", contacted: "تم التواصل", sold: "تم البيع", declined: "مرفوض" };
+                    return (
+                      <tr key={r.id} className="border-t border-gray-50 align-top">
+                        <td className="p-3 max-w-md"><div className="whitespace-pre-wrap">{r.requestText}</div>
+                          <div className="text-[11px] text-muted-foreground mt-1">{new Date(r.createdAt).toLocaleString("ar-SA")}</div>
+                        </td>
+                        <td className="p-3">
+                          <div>{r.orgName ?? r.ownerName ?? "—"}</div>
+                          <div className="text-xs text-muted-foreground">{r.ownerEmail}</div>
+                        </td>
+                        <td className="p-3 text-xs">{r.matchedAppNameAr ?? "—"}</td>
+                        <td className="p-3 text-xs">{st[r.status] ?? r.status}</td>
+                        <td className="p-3">
+                          <select className="border rounded-lg px-2 h-9 text-xs" value={r.status}
+                            onChange={e => setReqStatus.mutate({ id: r.id, status: e.target.value as "new" | "contacted" | "sold" | "declined" })}>
+                            <option value="new">جديد</option>
+                            <option value="contacted">تم التواصل</option>
+                            <option value="sold">تم البيع</option>
+                            <option value="declined">مرفوض</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {appReqs && appReqs.length === 0 && (
+                    <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">لا توجد طلبات بعد</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {tab === "coupons" && (
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-gray-100 p-4">

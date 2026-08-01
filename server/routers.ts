@@ -936,6 +936,48 @@ export const appRouter = router({
         });
         return res;
       }),
+    appRequests: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { listAppRequests } = await import("./appCatalog");
+      return listAppRequests();
+    }),
+    setAppRequestStatus: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        status: z.enum(["new", "contacted", "sold", "declined"]),
+        note: z.string().trim().max(2000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { setRequestStatus } = await import("./appCatalog");
+        await setRequestStatus(input.id, input.status, input.note);
+        return { ok: true };
+      }),
+    appCatalog: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { listCatalog } = await import("./appCatalog");
+      return listCatalog();
+    }),
+    upsertApp: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive().optional(),
+        name: z.string().trim().min(2).max(120),
+        nameAr: z.string().trim().min(2).max(160),
+        description: z.string().trim().max(4000).optional(),
+        erpTarget: z.enum(["erpnext", "odoo", "both"]).default("erpnext"),
+        status: z.enum(["available", "in_development", "planned"]).default("planned"),
+        priceSar: z.number().nonnegative().nullable().optional(),
+        repoUrl: z.string().trim().max(300).nullable().optional(),
+        version: z.string().trim().max(40).nullable().optional(),
+        parentAppId: z.number().int().positive().nullable().optional(),
+        changesSummary: z.string().trim().max(4000).nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { upsertCatalogApp } = await import("./appCatalog");
+        const id = await upsertCatalogApp(input);
+        return { ok: true, id };
+      }),
     coupons: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       const { listCoupons } = await import("./couponService");

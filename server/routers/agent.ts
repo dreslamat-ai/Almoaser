@@ -28,6 +28,7 @@ const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = {
   create_invoice: "createInvoices", submit_invoice: "createInvoices",
   create_customer: "createInvoices", create_item: "createInvoices", create_supplier: "createInvoices",
   update_customer: "createInvoices",
+  request_custom_app: null,
   get_sales_report: "viewInvoices",
   get_purchase_invoices: "viewInvoices", create_purchase_invoice: "createInvoices",
   get_payments: "viewInvoices", create_payment_entry: "managePayments",
@@ -593,6 +594,21 @@ const TOOLS = [
           document_name: { type: "string", description: "رقم المستند مثل ACC-SINV-2026-00001 أو ACC-PAY-2026-00001" },
         },
         required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "request_custom_app",
+      description: "تسجيل طلب عميل لتطبيق أو تخصيص برمجي على نظامه، وإبلاغ إدارة المنصة به. استدعها متى طلب العميل ميزة أو تطبيقاً غير موجود في النظام. **لا تَعِد العميل بسعر ولا بموعد تسليم ولا تقل إن التطبيق جاهز** — أبلغه فقط أن الطلب سُجّل وأن الإدارة ستتواصل معه",
+      parameters: {
+        type: "object",
+        properties: {
+          request: { type: "string", description: "وصف ما يطلبه العميل بالتفصيل كما فهمته منه" },
+        },
+        required: ["request"],
         additionalProperties: false,
       },
     },
@@ -1772,6 +1788,43 @@ async function executeTool(name: string, args: Record<string, unknown>, toolCtx?
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
       };
     }
+    case "request_custom_app": {
+      const text = String(args.request ?? "").trim();
+      if (text.length < 10) {
+        return { result: { ok: false, error: "اسأل العميل عن تفاصيل ما يريده أولاً — الوصف المختصر لا يكفي لتقييم الطلب" }, display: "" };
+      }
+      if (!toolCtx?.userId) return { result: { ok: false, error: "تعذّر تحديد الحساب" }, display: "" };
+
+      const { searchCatalog, recordAppRequest } = await import("../appCatalog");
+      // المطابقة اقتراح لإدارة المنصة لا قرار يُبلَّغ للعميل
+      const matches = await searchCatalog(text);
+      const requestId = await recordAppRequest({
+        userId: toolCtx.userId, requestText: text,
+        matchedAppId: matches[0]?.id ?? null,
+      });
+
+      try {
+        const { notifyAdmins } = await import("../notifications");
+        await notifyAdmins({
+          type: "app_request",
+          title: matches.length ? `طلب تطبيق — لدينا ما يطابقه (${matches[0].nameAr})` : "طلب تطبيق جديد",
+          body: text.slice(0, 300),
+          link: "/dashboard",
+        });
+      } catch (e) {
+        console.warn("[request_custom_app] تعذّر إشعار الإدارة:", e instanceof Error ? e.message : e);
+      }
+
+      return {
+        result: {
+          ok: true, request_id: requestId,
+          internal_matches: matches.length,
+          note: "سُجّل الطلب وأُبلغت الإدارة. أخبر العميل أن طلبه وصل وأن الإدارة ستتواصل معه لمناقشة التفاصيل. لا تذكر سعراً ولا مدة ولا تقل إن حلاً جاهزاً متوفر",
+        },
+        display: `__APP_REQUEST__${JSON.stringify({ id: requestId })}`,
+      };
+    }
+
     case "update_customer": {
       const customer = String(args.customer ?? "").trim();
       if (!customer) return { result: { ok: false, error: "اسم العميل مطلوب" }, display: "" };

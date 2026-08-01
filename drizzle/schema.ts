@@ -265,6 +265,43 @@ export type AgentMessage = typeof agentMessages.$inferSelect;
 
 // ─── نظام الإشعارات المخصصة ──────────────────────────────────────────────────
 // إشعارات المستخدم داخل الموقع (مركز الإشعارات — جرس + عدّاد غير المقروء)
+// ─── كتالوج التطبيقات التي بناها الوكيل ──────────────────────────────────────
+// شغل الوكيل أصل يُعاد بيعه لا مهمة تنتهي: تطبيق بُني لعميل يصلح لغيره. ولأن
+// النسخة اللاحقة تُبنى فوق سابقة، نحفظ نسبها والفرق بينهما — بلا ذلك لا يُعرف
+// بعد سنة ما الذي يميّز نسخة عن أخرى ولا أيّهما تُعرض على عميل جديد.
+export const appCatalog = mysqlTable("app_catalog", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  nameAr: varchar("nameAr", { length: 160 }).notNull(),
+  description: text("description"),
+  erpTarget: mysqlEnum("erpTarget", ["erpnext", "odoo", "both"]).default("erpnext").notNull(),
+  status: mysqlEnum("status", ["available", "in_development", "planned"]).default("planned").notNull(),
+  priceSar: decimal("priceSar", { precision: 10, scale: 2 }),
+  repoUrl: varchar("repoUrl", { length: 300 }),
+  version: varchar("version", { length: 40 }).default("1.0.0"),
+  // النسخة التي اشتُقّت منها هذه، وما الذي تغيّر
+  parentAppId: int("parentAppId"),
+  changesSummary: text("changesSummary"),
+  // العميل الذي بُنيت له أصلاً (للعلم لا للتقييد)
+  builtForUserId: int("builtForUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// طلبات العملاء للتطبيقات — سواء طابقت الكتالوج أم لا. غير المطابق أثمن:
+// يقول ما يطلبه السوق ولم يُبنَ بعد.
+export const appRequests = mysqlTable("app_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  requestText: text("requestText").notNull(),
+  matchedAppId: int("matchedAppId"),
+  status: mysqlEnum("status", ["new", "contacted", "sold", "declined"]).default("new").notNull(),
+  ownerNote: text("ownerNote"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CatalogApp = typeof appCatalog.$inferSelect;
+
 // ─── كوبونات الخصم ───────────────────────────────────────────────────────────
 // الخصم يقع على المبلغ قبل الضريبة (راجع shared/coupons.ts). ويُسجَّل كل استخدام
 // في جدول مستقل: عدّاد وحده لا يقول من استخدم ولا بكم، وهو ما يُسأل عنه لاحقاً.
