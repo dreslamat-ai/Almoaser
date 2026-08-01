@@ -858,6 +858,22 @@ export const appRouter = router({
       }),
   }),
 
+  coupons: router({
+    // معاينة قبل الدفع: يرى العميل ما سيدفعه فعلاً بنفس حساب السيرفر
+    preview: protectedProcedure
+      .input(z.object({
+        code: z.string().trim().min(1).max(40),
+        scope: z.enum(["subscription", "topup"]),
+        netSar: z.number().positive(),
+        planId: z.number().int().positive().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { resolveCoupon } = await import("./couponService");
+        const r = await resolveCoupon({ ...input, userId: ctx.effectiveUserId ?? ctx.user.id });
+        return r.ok ? { ok: true as const, ...r.coupon } : { ok: false as const, reason: r.reason };
+      }),
+  }),
+
   // ─── تقارير الخبير ───────────────────────────────────────────────────────────
   // المراجعة للعميل نفسه: هو من يقرّ ما أُعدّ له، لا المنصة.
   reports: router({
@@ -919,6 +935,46 @@ export const appRouter = router({
           details: `اطّلاع على محادثة #${input.conversationId} — ${res.title}`,
         });
         return res;
+      }),
+    coupons: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { listCoupons } = await import("./couponService");
+      return listCoupons();
+    }),
+    createCoupon: protectedProcedure
+      .input(z.object({
+        code: z.string().trim().min(3).max(40),
+        description: z.string().trim().max(255).optional(),
+        type: z.enum(["percent", "fixed"]),
+        value: z.number().positive(),
+        scope: z.enum(["subscription", "topup", "both"]).default("both"),
+        minAmountSar: z.number().nonnegative().nullable().optional(),
+        maxUses: z.number().int().positive().nullable().optional(),
+        maxUsesPerUser: z.number().int().positive().nullable().optional(),
+        firstPurchaseOnly: z.boolean().optional(),
+        newAccountWithinDays: z.number().int().positive().nullable().optional(),
+        planId: z.number().int().positive().nullable().optional(),
+        validUntil: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { createCoupon } = await import("./couponService");
+        const r = await createCoupon({
+          ...input,
+          validFrom: null,
+          validUntil: input.validUntil ? new Date(input.validUntil) : null,
+          createdBy: ctx.user.id,
+        });
+        if (!r.ok) throw new TRPCError({ code: "BAD_REQUEST", message: r.reason });
+        return r;
+      }),
+    setCouponActive: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), isActive: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { setCouponActive } = await import("./couponService");
+        await setCouponActive(input.id, input.isActive);
+        return { ok: true };
       }),
     allReports: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

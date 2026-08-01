@@ -8,6 +8,7 @@ import { payments } from "../../drizzle/schema";
 import { createPaymentLink, getPaymentStatus, isMyFatoorahConfigured } from "../myfatoorah";
 import { yearlyPrice, topupPriceSAR, isValidTopupCredits, TOPUP_MIN_CREDITS, TOPUP_MAX_CREDITS } from "../credits";
 import { withVat } from "../../shared/tax";
+import { resolveCoupon, recordRedemption } from "../couponService";
 import { finalizePaymentByReference } from "../paymentFinalize";
 
 function appBaseUrl(reqOrigin?: string): string {
@@ -20,7 +21,7 @@ export const paymentsRouter = router({
 
   // إنشاء دفعة اشتراك (شهري أو سنوي بخصم 15%) — لمالك الحساب فقط
   createSubscriptionPayment: protectedProcedure
-    .input(z.object({ planId: z.number(), billing: z.enum(["monthly", "yearly"]) }))
+    .input(z.object({ planId: z.number(), billing: z.enum(["monthly", "yearly"]), couponCode: z.string().trim().max(40).optional() }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.user.orgRole !== "owner") {
         throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الفوترة متاحة لمالك الحساب فقط" });
@@ -31,7 +32,14 @@ export const paymentsRouter = router({
       const listed = input.billing === "yearly" ? yearlyPrice(monthly, plan.yearlyDiscountPct) : monthly;
       // الأسعار معلنة بلا ضريبة وتُضاف عند التحصيل — amount هو المبلغ المحصَّل
       // فعلاً ليطابق كشف البوابة، وvatAmount يفصل الجزء الذي ليس إيراداً.
-      const { vat, total: amount } = withVat(listed);
+      // الخصم قبل الضريبة — التفصيل من نفس الدالة التي تعرضه الواجهة
+      const applied = input.couponCode
+        ? await resolveCoupon({ code: input.couponCode, userId: ctx.user.id, scope: "subscription", netSar: listed })
+        : null;
+      if (applied && !applied.ok) throw new TRPCError({ code: "BAD_REQUEST", message: applied.reason });
+      const priced = applied?.ok ? applied.coupon : withVat(listed);
+      const { vat, total: amount } = priced;
+      const discountAmount = applied?.ok ? applied.coupon.discount : 0;
 
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
@@ -42,9 +50,15 @@ export const paymentsRouter = router({
         billing: input.billing,
         amount: String(amount),
         vatAmount: String(vat),
+        couponId: applied?.ok ? applied.coupon.id : null,
+        discountAmount: discountAmount ? String(discountAmount) : null,
         status: "pending",
       });
       const paymentId = Number((inserted as unknown as [{ insertId: number }])[0]?.insertId ?? 0);
+      if (applied?.ok) {
+        // بعد إنشاء الدفعة لا قبلها: كوبون يُحسب استخدامه على دفعة لم تُنشأ يضيع هباءً
+        await recordRedemption({ couponId: applied.coupon.id, userId: ctx.user.id, paymentId, discountSar: discountAmount });
+      }
 
       const origin = (ctx.req.headers.origin as string) || undefined;
       const base = appBaseUrl(origin);
@@ -63,7 +77,7 @@ export const paymentsRouter = router({
 
   // إنشاء دفعة شحن نقاط (أي عدد ابتداءً من الحد الأدنى، بسعر ريال للنقطة) — لمالك الحساب فقط
   createTopupPayment: protectedProcedure
-    .input(z.object({ credits: z.number().int().min(TOPUP_MIN_CREDITS).max(TOPUP_MAX_CREDITS) }))
+    .input(z.object({ credits: z.number().int().min(TOPUP_MIN_CREDITS).max(TOPUP_MAX_CREDITS), couponCode: z.string().trim().max(40).optional() }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.user.orgRole !== "owner") {
         throw new TRPCError({ code: "FORBIDDEN", message: "إدارة الفوترة متاحة لمالك الحساب فقط" });
@@ -73,7 +87,14 @@ export const paymentsRouter = router({
       }
       const sub = await getSubscriptionByUserId(ctx.user.id);
       if (!sub) throw new TRPCError({ code: "NOT_FOUND", message: "يجب الاشتراك في باقة أولاً" });
-      const { vat, total: amount } = withVat(topupPriceSAR(input.credits));
+      const listedTopup = topupPriceSAR(input.credits);
+      const applied = input.couponCode
+        ? await resolveCoupon({ code: input.couponCode, userId: ctx.user.id, scope: "topup", netSar: listedTopup })
+        : null;
+      if (applied && !applied.ok) throw new TRPCError({ code: "BAD_REQUEST", message: applied.reason });
+      const priced = applied?.ok ? applied.coupon : withVat(listedTopup);
+      const { vat, total: amount } = priced;
+      const discountAmount = applied?.ok ? applied.coupon.discount : 0;
 
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
@@ -83,9 +104,14 @@ export const paymentsRouter = router({
         credits: input.credits,
         amount: String(amount),
         vatAmount: String(vat),
+        couponId: applied?.ok ? applied.coupon.id : null,
+        discountAmount: discountAmount ? String(discountAmount) : null,
         status: "pending",
       });
       const paymentId = Number((inserted as unknown as [{ insertId: number }])[0]?.insertId ?? 0);
+      if (applied?.ok) {
+        await recordRedemption({ couponId: applied.coupon.id, userId: ctx.user.id, paymentId, discountSar: discountAmount });
+      }
 
       const origin = (ctx.req.headers.origin as string) || undefined;
       const base = appBaseUrl(origin);

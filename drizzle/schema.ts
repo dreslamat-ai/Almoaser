@@ -141,6 +141,9 @@ export const payments = mysqlTable("payments", {
   // ضريبة القيمة المضافة داخل amount. تبقى null للصفوف القديمة السابقة لتطبيق
   // الضريبة، فيحسبها تقرير الإيرادات صفراً ولا تتغيّر أرقام الماضي بأثر رجعي.
   vatAmount: decimal("vatAmount", { precision: 10, scale: 2 }),
+  // الكوبون المستخدم والخصم الفعلي — بدونهما لا يُعرف سبب تحصيل مبلغ أقل من السعر
+  couponId: int("couponId"),
+  discountAmount: decimal("discountAmount", { precision: 10, scale: 2 }),
   currency: varchar("currency", { length: 10 }).default("SAR").notNull(),
   status: mysqlEnum("status", ["pending", "paid", "failed", "expired"]).default("pending").notNull(),
   // معرف الفاتورة لدى MyFatoorah
@@ -262,6 +265,49 @@ export type AgentMessage = typeof agentMessages.$inferSelect;
 
 // ─── نظام الإشعارات المخصصة ──────────────────────────────────────────────────
 // إشعارات المستخدم داخل الموقع (مركز الإشعارات — جرس + عدّاد غير المقروء)
+// ─── كوبونات الخصم ───────────────────────────────────────────────────────────
+// الخصم يقع على المبلغ قبل الضريبة (راجع shared/coupons.ts). ويُسجَّل كل استخدام
+// في جدول مستقل: عدّاد وحده لا يقول من استخدم ولا بكم، وهو ما يُسأل عنه لاحقاً.
+export const coupons = mysqlTable("coupons", {
+  id: int("id").autoincrement().primaryKey(),
+  // يُخزَّن بحروف كبيرة بلا مسافات — التوحيد في shared/coupons.ts
+  code: varchar("code", { length: 40 }).notNull().unique(),
+  description: varchar("description", { length: 255 }),
+  type: mysqlEnum("type", ["percent", "fixed"]).notNull(),
+  // نسبة مئوية أو مبلغ بالريال حسب النوع
+  value: decimal("value", { precision: 10, scale: 2 }).notNull(),
+  scope: mysqlEnum("scope", ["subscription", "topup", "both"]).default("both").notNull(),
+  minAmountSar: decimal("minAmountSar", { precision: 10, scale: 2 }),
+  // null = بلا حد لعدد الاستخدامات
+  maxUses: int("maxUses"),
+  usedCount: int("usedCount").default(0).notNull(),
+  // null = بلا حد لعدد المرات لكل عميل (شرط تكرار الاستخدام)
+  maxUsesPerUser: int("maxUsesPerUser").default(1),
+  // للعملاء الجدد فقط: يُرفض لمن سبق له دفع مكتمل
+  firstPurchaseOnly: boolean("firstPurchaseOnly").default(false).notNull(),
+  // للحسابات المُنشأة خلال هذا العدد من الأيام (null = بلا شرط)
+  newAccountWithinDays: int("newAccountWithinDays"),
+  // يقتصر على باقة بعينها (null = كل الباقات)
+  planId: int("planId"),
+  validFrom: timestamp("validFrom"),
+  validUntil: timestamp("validUntil"),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const couponRedemptions = mysqlTable("coupon_redemptions", {
+  id: int("id").autoincrement().primaryKey(),
+  couponId: int("couponId").notNull().references(() => coupons.id),
+  userId: int("userId").notNull().references(() => users.id),
+  paymentId: int("paymentId"),
+  // المبلغ المخصوم فعلاً بالريال — لا يُعاد حسابه لاحقاً من نسبة قد تتغيّر
+  discountSar: decimal("discountSar", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Coupon = typeof coupons.$inferSelect;
+
 // ─── تقارير الوكيل الخبير ─────────────────────────────────────────────────────
 // التقارير كانت تعيش داخل المحادثات كرسائل عادية: لا عنوان ولا نوع ولا طريقة
 // لفتح تقرير قديم دون التنقيب في شات. هنا تصير مستنداً له كيان مستقل.

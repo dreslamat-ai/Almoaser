@@ -17,6 +17,8 @@ export default function Subscription() {
   const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
   const [showHistory, setShowHistory] = useState(false);
   const [customTopup, setCustomTopup] = useState("");
+  const [coupon, setCoupon] = useState("");
+  const [couponInfo, setCouponInfo] = useState<{ ok: boolean; discount?: number; total?: number; reason?: string } | null>(null);
   const { data: subscription } = trpc.subscription.get.useQuery(undefined, { enabled: isAuthenticated });
   const { data: plans } = trpc.plans.list.useQuery();
   const { data: creditsInfo } = trpc.credits.balance.useQuery(undefined, { enabled: isAuthenticated });
@@ -33,6 +35,13 @@ export default function Subscription() {
   const switchPlanMutation = trpc.payments.createSubscriptionPayment.useMutation({
     onSuccess: (res) => { window.location.href = res.paymentUrl; },
     onError: (e) => toast.error(e.message),
+  });
+  const couponPreview = trpc.coupons.preview.useMutation({
+    onSuccess: r => {
+      setCouponInfo(r.ok ? { ok: true, discount: r.discount, total: r.total } : { ok: false, reason: r.reason });
+      if (!r.ok) toast.error(r.reason);
+    },
+    onError: e => { setCouponInfo({ ok: false, reason: e.message }); toast.error(e.message); },
   });
   const topupMutation = trpc.payments.createTopupPayment.useMutation({
     onSuccess: (res) => { window.location.href = res.paymentUrl; },
@@ -66,7 +75,7 @@ export default function Subscription() {
       toast.error(`أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة`);
       return;
     }
-    topupMutation.mutate({ credits });
+    topupMutation.mutate({ credits, couponCode: couponInfo?.ok ? coupon.trim() : undefined });
   };
 
   // الحقل يحتفظ بأرقام لاتينية داخلياً ويُعرض هندياً — الحساب يحتاج رقماً لا نصاً
@@ -78,7 +87,7 @@ export default function Subscription() {
       toast.info("بوابة الدفع قيد التفعيل — سيتوفر تغيير الباقة قريباً");
       return;
     }
-    switchPlanMutation.mutate({ planId, billing });
+    switchPlanMutation.mutate({ planId, billing, couponCode: couponInfo?.ok ? coupon.trim() : undefined });
   };
 
   return (
@@ -200,6 +209,31 @@ export default function Subscription() {
                   <Plus className="w-3.5 h-3.5" /> اشحن
                 </Button>
               </form>
+              {/* كوبون الخصم — يُتحقق منه قبل الدفع بنفس حساب السيرفر */}
+              <div className="mt-3 pt-3 border-t border-gold/20">
+                <label htmlFor="coupon" className="block text-xs text-muted-foreground mb-1">كوبون خصم (اختياري)</label>
+                <div className="flex gap-2">
+                  <Input id="coupon" value={coupon} autoComplete="off"
+                    onChange={e => { setCoupon(e.target.value.toUpperCase()); setCouponInfo(null); }}
+                    placeholder="أدخل الرمز" className="h-10 text-sm uppercase" />
+                  <Button size="sm" variant="outline" className="h-10 shrink-0 text-xs"
+                    disabled={!coupon.trim() || couponPreview.isPending || !customValid}
+                    onClick={() => couponPreview.mutate({ code: coupon.trim(), scope: "topup", netSar: topupPriceSAR(customCredits) })}>
+                    تطبيق
+                  </Button>
+                </div>
+                {!customValid && coupon.trim() && (
+                  <p className="text-[11px] text-muted-foreground mt-1">أدخل عدد النقاط أولاً لحساب الخصم</p>
+                )}
+                {couponInfo?.ok && (
+                  <p className="text-[11px] text-emerald-700 mt-1">
+                    خصم {toArabicDigits(formatSAR(couponInfo.discount ?? 0))} ريال · الإجمالي بعد الضريبة {toArabicDigits(formatSAR(couponInfo.total ?? 0))} ريال
+                  </p>
+                )}
+                {couponInfo && !couponInfo.ok && (
+                  <p className="text-[11px] text-red-600 mt-1">{couponInfo.reason}</p>
+                )}
+              </div>
               <p id="custom-topup-hint" className="text-[11px] text-muted-foreground mt-1">
                 {customTopup !== "" && !customValid
                   ? `أقل شحنة ${toArabicDigits(TOPUP_MIN_CREDITS)} نقطة`

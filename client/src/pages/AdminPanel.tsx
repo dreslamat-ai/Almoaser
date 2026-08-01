@@ -264,6 +264,17 @@ export function AdminConsole() {
 
   const { data: auditLog } = trpc.admin.auditLog.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "audit" });
   const [openChatId, setOpenChatId] = useState<number | null>(null);
+  const { data: couponList } = trpc.admin.coupons.useQuery(undefined,
+    { enabled: isAuthenticated && user?.role === "admin" && tab === "coupons" });
+  const [newCoupon, setNewCoupon] = useState({ code: "", type: "percent" as "percent" | "fixed", value: "", scope: "both" as "both" | "subscription" | "topup", maxUses: "", maxUsesPerUser: "1", firstPurchaseOnly: false, newAccountWithinDays: "", validUntil: "" });
+  const createCouponMutation = trpc.admin.createCoupon.useMutation({
+    onSuccess: () => { toast.success("أُنشئ الكوبون"); setNewCoupon({ code: "", type: "percent", value: "", scope: "both", maxUses: "", maxUsesPerUser: "1", firstPurchaseOnly: false, newAccountWithinDays: "", validUntil: "" }); utils.admin.coupons.invalidate(); },
+    onError: e => toast.error(e.message),
+  });
+  const toggleCouponMutation = trpc.admin.setCouponActive.useMutation({
+    onSuccess: () => utils.admin.coupons.invalidate(),
+    onError: e => toast.error(e.message),
+  });
   const { data: allReports } = trpc.admin.allReports.useQuery(undefined,
     { enabled: isAuthenticated && user?.role === "admin" && tab === "reports" });
   const { data: customerChats } = trpc.admin.customerConversations.useQuery(undefined,
@@ -353,7 +364,7 @@ export function AdminConsole() {
       {insights && <PlatformInsights data={insights} />}
 
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
+        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["coupons", "الكوبونات"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 [@media(pointer:coarse)]:min-h-11 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
             {l}
@@ -804,6 +815,104 @@ export function AdminConsole() {
             </div>
           </div>
         )}
+        {tab === "coupons" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-gray-100 p-4">
+              <h3 className="font-bold text-navy mb-3 text-sm">كوبون جديد</h3>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <input className="border rounded-lg px-3 h-10 text-sm uppercase" placeholder="الرمز"
+                  value={newCoupon.code} onChange={e => setNewCoupon(c => ({ ...c, code: e.target.value.toUpperCase() }))} />
+                <select className="border rounded-lg px-3 h-10 text-sm" value={newCoupon.type}
+                  onChange={e => setNewCoupon(c => ({ ...c, type: e.target.value as "percent" | "fixed" }))}>
+                  <option value="percent">نسبة %</option>
+                  <option value="fixed">مبلغ ثابت</option>
+                </select>
+                <input className="border rounded-lg px-3 h-10 text-sm" type="number" placeholder={newCoupon.type === "percent" ? "النسبة (1-100)" : "المبلغ بالريال"}
+                  value={newCoupon.value} onChange={e => setNewCoupon(c => ({ ...c, value: e.target.value }))} />
+                <select className="border rounded-lg px-3 h-10 text-sm" value={newCoupon.scope}
+                  onChange={e => setNewCoupon(c => ({ ...c, scope: e.target.value as "both" | "subscription" | "topup" }))}>
+                  <option value="both">الاشتراكات والنقاط</option>
+                  <option value="subscription">الاشتراكات فقط</option>
+                  <option value="topup">شحن النقاط فقط</option>
+                </select>
+                <input className="border rounded-lg px-3 h-10 text-sm" type="number" placeholder="حد الاستخدام (اختياري)"
+                  value={newCoupon.maxUses} onChange={e => setNewCoupon(c => ({ ...c, maxUses: e.target.value }))} />
+                <input className="border rounded-lg px-3 h-10 text-sm" type="date" placeholder="ينتهي في"
+                  value={newCoupon.validUntil} onChange={e => setNewCoupon(c => ({ ...c, validUntil: e.target.value }))} />
+                <input className="border rounded-lg px-3 h-10 text-sm" type="number" placeholder="مرات لكل عميل (فارغ = بلا حد)"
+                  value={newCoupon.maxUsesPerUser} onChange={e => setNewCoupon(c => ({ ...c, maxUsesPerUser: e.target.value }))} />
+                <input className="border rounded-lg px-3 h-10 text-sm" type="number" placeholder="خلال كم يوم من التسجيل"
+                  value={newCoupon.newAccountWithinDays} onChange={e => setNewCoupon(c => ({ ...c, newAccountWithinDays: e.target.value }))} />
+                <label className="flex items-center gap-2 text-sm h-10 px-1">
+                  <input type="checkbox" className="w-4 h-4" checked={newCoupon.firstPurchaseOnly}
+                    onChange={e => setNewCoupon(c => ({ ...c, firstPurchaseOnly: e.target.checked }))} />
+                  للعملاء الجدد فقط (بلا شراء سابق)
+                </label>
+              </div>
+              <Button size="sm" className="mt-3 bg-navy text-white gap-1"
+                disabled={createCouponMutation.isPending || !newCoupon.code.trim() || !newCoupon.value}
+                onClick={() => createCouponMutation.mutate({
+                  code: newCoupon.code.trim(),
+                  type: newCoupon.type,
+                  value: Number(newCoupon.value),
+                  scope: newCoupon.scope,
+                  maxUses: newCoupon.maxUses ? Number(newCoupon.maxUses) : null,
+                  maxUsesPerUser: newCoupon.maxUsesPerUser ? Number(newCoupon.maxUsesPerUser) : null,
+                  firstPurchaseOnly: newCoupon.firstPurchaseOnly,
+                  newAccountWithinDays: newCoupon.newAccountWithinDays ? Number(newCoupon.newAccountWithinDays) : null,
+                  validUntil: newCoupon.validUntil || null,
+                })}>
+                <PlusCircle className="w-4 h-4" /> إنشاء
+              </Button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-right">
+                    <tr>
+                      <th className="p-3 font-medium">الرمز</th>
+                      <th className="p-3 font-medium">الخصم</th>
+                      <th className="p-3 font-medium">النطاق</th>
+                      <th className="p-3 font-medium">الاستخدام</th>
+                      <th className="p-3 font-medium">ينتهي</th>
+                      <th className="p-3 font-medium">الحالة</th>
+                      <th className="p-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(couponList ?? []).map(c => (
+                      <tr key={c.id} className="border-t border-gray-50">
+                        <td className="p-3 font-mono">{c.code}</td>
+                        <td className="p-3">{c.type === "percent" ? `${Number(c.value)}%` : `${Number(c.value)} ريال`}</td>
+                        <td className="p-3 text-xs">{c.scope === "both" ? "الكل" : c.scope === "topup" ? "النقاط" : "الاشتراكات"}</td>
+                        <td className="p-3 text-xs">
+                          {c.usedCount}{c.maxUses ? ` / ${c.maxUses}` : ""}
+                          {c.maxUsesPerUser ? <div className="text-muted-foreground">{c.maxUsesPerUser}× لكل عميل</div> : null}
+                          {c.firstPurchaseOnly ? <div className="text-amber-700">عملاء جدد</div> : null}
+                          {c.newAccountWithinDays ? <div className="text-muted-foreground">خلال {c.newAccountWithinDays} يوم</div> : null}
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground">{c.validUntil ? new Date(c.validUntil).toLocaleDateString("ar-SA") : "—"}</td>
+                        <td className="p-3 text-xs">{c.isActive ? "مفعّل" : "موقوف"}</td>
+                        <td className="p-3">
+                          <Button size="sm" variant="outline" className="text-xs"
+                            disabled={toggleCouponMutation.isPending}
+                            onClick={() => toggleCouponMutation.mutate({ id: c.id, isActive: !c.isActive })}>
+                            {c.isActive ? "إيقاف" : "تفعيل"}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                    {couponList && couponList.length === 0 && (
+                      <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">لا توجد كوبونات بعد</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {tab === "reports" && (
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
