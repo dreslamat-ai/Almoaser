@@ -12,7 +12,7 @@ import {
   BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
   ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle, ShieldCheck, Lock, AlertCircle} from "lucide-react";
 import { planCapacityLabel } from "@shared/planDisplay";
-import { PLAN_FEATURES } from "@shared/planFeatures";
+import { featuresForCard } from "@shared/planFeatures";
 import SalesChat from "@/components/SalesChat";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
@@ -627,7 +627,7 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
                       إكس. عرض المتاح وحده يُخفي الفرق بين الباقات، وهو تحديداً
                       ما يحتاجه الزائر ليقرر الترقية. */}
                   <ul className="space-y-2 mb-8">
-                    {PLAN_FEATURES.map(f => {
+                    {featuresForCard(plan.id).map(f => {
                       const has = f.includedIn.includes(plan.id);
                       return (
                         <li key={f.key} className={`flex items-start gap-2 text-sm ${has ? "" : "opacity-45"}`}>
