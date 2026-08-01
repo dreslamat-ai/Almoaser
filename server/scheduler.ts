@@ -37,7 +37,7 @@ function startLeadDigest(): void {
     lastDigestDay = day;
     try {
       const r = await sendLeadDigest();
-      if (r.sent) console.log(`[scheduler] تذكير العملاء المحتملين: ${r.count} سجلاً`);
+      if (r.sent) console.log(`[scheduler] تذكير العملاء المحتملين: ${r.count} سجلاً عبر ${r.via.join(" و ")}`);
       else if (r.reason) console.log(`[scheduler] لم يُرسل التذكير: ${r.reason}`);
     } catch (e) {
       console.warn("[scheduler] فشل تذكير العملاء المحتملين:", e instanceof Error ? e.message : e);

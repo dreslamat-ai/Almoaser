@@ -10,6 +10,7 @@ import { getDb } from "./db";
 import { salesLeads } from "../drizzle/schema";
 import { and, eq, lt, isNull, or, gte, desc } from "drizzle-orm";
 import { sendEmail } from "./email";
+import { sendTelegram, tg, isTelegramConfigured } from "./telegram";
 
 /** لا يُذكَّر بعميل قبل مرور هذه المدة: التذكير الفوري ضجيج لا متابعة. */
 const STALE_HOURS = 20;
@@ -93,25 +94,60 @@ export function buildDigestHtml(leads: PendingLead[]): string {
 const esc = (s: string) => s.replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]!));
 const toArabicDigits = (s: string) => s.replace(/[0-9]/g, d => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
 
+/** نصّ الملخّص لتيليجرام — الجدول لا يُقرأ على شاشة جوال، فالسطور تُقرأ. */
+export function buildDigestText(leads: PendingLead[]): string {
+  const sorted = [...leads].sort((a, b) => rank(b) - rank(a) || b.hoursWaiting - a.hoursWaiting);
+  const line = (l: PendingLead) => {
+    const bits = [l.city, l.activity, l.employees ? `${toArabicDigits(String(l.employees))} موظفين` : null]
+      .filter(Boolean).join(" · ");
+    // الجوال بصيغة قابلة للنقر: الهدف أن يُتصل به لا أن يُقرأ
+    const phone = l.phone ? `\n   📞 <code>${tg(l.phone)}</code>` : "\n   <i>لم يترك جوالاً</i>";
+    return `• <b>${tg(l.name)}</b>${bits ? ` — ${tg(bits)}` : ""}${phone}\n   ⏱ منتظر ${toArabicDigits(String(l.hoursWaiting))} ساعة`;
+  };
+  return [
+    `<b>عملاء محتملون ينتظرون متابعة</b>`,
+    `${toArabicDigits(String(sorted.length))} سجلاً — من ترك جواله أولاً.`,
+    "",
+    sorted.slice(0, 15).map(line).join("\n\n"),
+    sorted.length > 15 ? `\n<i>و${toArabicDigits(String(sorted.length - 15))} غيرهم في لوحة التحكم</i>` : "",
+  ].filter(Boolean).join("\n");
+}
+
 /**
  * تذكير يومي واحد لا رسالة لكل عميل.
  *
  * الرسالة لكل سجل تُغرق البريد فتُصفَّى تلقائياً وتُقرأ كلها أو لا شيء منها.
  * الملخّص الواحد يُقرأ.
  */
-export async function sendLeadDigest(): Promise<{ sent: boolean; count: number; reason?: string }> {
-  const to = process.env.LEADS_DIGEST_EMAIL?.trim() || process.env.ADMIN_EMAIL?.trim();
-  if (!to) return { sent: false, count: 0, reason: "لا عنوان بريد مضبوط (LEADS_DIGEST_EMAIL)" };
-
+export async function sendLeadDigest(): Promise<{
+  sent: boolean; count: number; via: Array<"telegram" | "email">; reason?: string;
+}> {
   const leads = await pendingLeads();
-  if (!leads.length) return { sent: false, count: 0, reason: "لا سجلات تنتظر" };
+  if (!leads.length) return { sent: false, count: 0, via: [], reason: "لا سجلات تنتظر" };
 
-  const r = await sendEmail({
-    to,
-    subject: `${toArabicDigits(String(leads.length))} عميل محتمل ينتظر متابعة — المعاصر AI`,
-    html: buildDigestHtml(leads),
-  });
-  return { sent: r.ok, count: leads.length, reason: r.error };
+  const via: Array<"telegram" | "email"> = [];
+  const problems: string[] = [];
+
+  // تيليجرام أولاً: يصل حيث يُقرأ في دقائق، والبريد يُصفّى ويُقرأ متأخراً
+  if (isTelegramConfigured()) {
+    const t = await sendTelegram(buildDigestText(leads));
+    if (t.ok) via.push("telegram"); else problems.push(`تيليجرام: ${t.error}`);
+  }
+
+  // البريد بديل لا مستبدَل: يُرسَل حين لا تيليجرام أو حين فشل — تنبيه ضائع
+  // بصمت أسوأ من تنبيه مكرر.
+  const to = process.env.LEADS_DIGEST_EMAIL?.trim() || process.env.ADMIN_EMAIL?.trim();
+  if (to && !via.includes("telegram")) {
+    const r = await sendEmail({
+      to,
+      subject: `${toArabicDigits(String(leads.length))} عميل محتمل ينتظر متابعة — المعاصر AI`,
+      html: buildDigestHtml(leads),
+    });
+    if (r.ok) via.push("email"); else if (r.error) problems.push(`البريد: ${r.error}`);
+  }
+  if (!to && !via.length) problems.push("لا وجهة مضبوطة (TELEGRAM_CHAT_ID أو LEADS_DIGEST_EMAIL)");
+
+  return { sent: via.length > 0, count: leads.length, via, reason: problems.join(" · ") || undefined };
 }
 
 export { STALE_HOURS, GIVE_UP_DAYS };
