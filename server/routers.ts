@@ -3,6 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
+import { checkSalesRateLimit, SALES_MAX_MESSAGES, SALES_MAX_CHARS } from "./salesAgent";
 import { TRPCError } from "@trpc/server";
 import { invokeLLM } from "./_core/llm";
 import { agentRouter } from "./routers/agent";
@@ -855,6 +856,48 @@ export const appRouter = router({
         if (!sub) throw new TRPCError({ code: "NOT_FOUND", message: "لا يوجد اشتراك — اشترك في باقة أولاً" });
         await updateSubscription(sub.id, input);
         return { success: true };
+      }),
+  }),
+
+  // ─── شات المبيعات العام (بلا تسجيل دخول) ────────────────────────────────────
+  sales: router({
+    chat: publicProcedure
+      .input(z.object({
+        messages: z.array(z.object({
+          role: z.enum(["user", "assistant"]),
+          content: z.string().min(1).max(SALES_MAX_CHARS),
+        })).min(1).max(SALES_MAX_MESSAGES),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // مفتوح للعموم وتكلفته علينا: الحدّ بالعنوان يمنع الاستنزاف
+        const ip = (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+          || ctx.req.socket?.remoteAddress || "unknown";
+        const rate = checkSalesRateLimit(ip);
+        if (!rate.ok) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `وصلت للحد المسموح — جرّب بعد ${rate.retryAfterMin} دقيقة` });
+        }
+
+        const plans = await getActivePlans();
+        const { invokeNamedModel } = await import("./llmProvider");
+        const { buildSalesSystemPrompt, SALES_MODEL } = await import("./salesAgent");
+        try {
+          const res = await invokeNamedModel({
+            messages: [
+              { role: "system", content: buildSalesSystemPrompt(plans) },
+              ...input.messages,
+            ],
+            maxTokens: 700,
+          } as Parameters<typeof invokeNamedModel>[0], SALES_MODEL);
+          const raw = res?.choices?.[0]?.message?.content;
+          const reply = typeof raw === "string" ? raw.trim() : undefined;
+          if (typeof reply !== "string" || !reply.trim()) {
+            return { reply: "اعذرني، ما وصلني ردّ واضح. ممكن تعيد سؤالك؟" };
+          }
+          return { reply };
+        } catch (e) {
+          console.warn("[sales.chat] فشل:", e instanceof Error ? e.message : e);
+          return { reply: "اعذرني، فيه عطل مؤقت عندي. جرّب بعد شوية أو سجّل من صفحة الاشتراك وفريقنا يتواصل معك." };
+        }
       }),
   }),
 

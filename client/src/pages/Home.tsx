@@ -10,9 +10,10 @@ import { toast } from "sonner";
 import {
   BookOpen, Bot, CheckCircle2, ChevronDown, DollarSign, FileText,
   BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
-  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles
-} from "lucide-react";
+  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle} from "lucide-react";
 import { planCapacityLabel } from "@shared/planDisplay";
+import { PLAN_FEATURES } from "@shared/planFeatures";
+import SalesChat from "@/components/SalesChat";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
 type ChatMessage = { from: "user" | "agent"; text: string; delay: number; type?: "text" | "pdf"; pdfName?: string; pdfSize?: string };
@@ -568,13 +569,24 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
                     <span className="px-2 py-1 rounded-full bg-navy/5 text-navy">{planCapacityLabel(plan)}</span>
                     <span className="px-2 py-1 rounded-full bg-gold/10 text-gold-ink">{plan.monthlyCredits ?? 150} نقطة / شهر</span>
                   </div>
-                  <ul className="space-y-3 mb-8">
-                    {features.map((f, j) => (
-                      <li key={j} className="flex items-start gap-2 text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-foreground">{f}</span>
-                      </li>
-                    ))}
+                  {/* كل المزايا في كل بطاقة: المتاح بعلامة صح والمستبعد بعلامة
+                      إكس. عرض المتاح وحده يُخفي الفرق بين الباقات، وهو تحديداً
+                      ما يحتاجه الزائر ليقرر الترقية. */}
+                  <ul className="space-y-2 mb-8">
+                    {PLAN_FEATURES.map(f => {
+                      const has = f.includedIn.includes(plan.id);
+                      return (
+                        <li key={f.key} className={`flex items-start gap-2 text-sm ${has ? "" : "opacity-45"}`}>
+                          {has
+                            ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden />
+                            : <XCircle className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" aria-hidden />}
+                          <span className={has ? "text-foreground" : "text-muted-foreground line-through decoration-gray-300"}>
+                            {f.label}
+                          </span>
+                          <span className="sr-only">{has ? "متاح" : "غير متاح"}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                   {/* الزر كان يقول "اطلب استشارة" ويُنزل لفورم التواصل، فلا يصل أحد
                       إلى التسجيل من هنا. الآن يبدأ التجربة مباشرة والباقة محمولة معه. */}
@@ -916,6 +928,8 @@ export default function Home() {
       <PricingSection onSelectPlan={setSelectedPlanId} />
       <ContactSection initialPlanId={selectedPlanId} />
       <Footer />
+      {/* شات المبيعات — للزوار قبل التسجيل */}
+      <SalesChat />
     </div>
   );
 }

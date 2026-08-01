@@ -139,6 +139,22 @@ const invokeOpenRouter = async (
 };
 
 /**
+ * استدعاء بموديل مُسمّى، بلا سلسلة الاحتياط.
+ * يُستعمل حين تكون خصائص الموديل جزءاً من المتطلب لا تفصيلاً: شات المبيعات
+ * يحتاج ردّاً في ثوانٍ، والموديل الاستنتاجي الافتراضي ينفق عشرات الثواني في
+ * التفكير قبل أن يبدأ الرد — وهو صواب للمحاسبة وخطأ لزائر ينتظر أمام الشاشة.
+ */
+export async function invokeNamedModel(
+  params: InvokeParams,
+  model: string,
+): Promise<InvokeResult & { _provider: string }> {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error("OPENROUTER_API_KEY is not configured");
+  const result = await invokeOpenRouterModel(params, key, model);
+  return { ...result, _provider: `openrouter:${model}` };
+}
+
+/**
  * نقطة الاستدعاء الموحدة للوكيل: OpenRouter أولاً (بترتيب موديلات LLM_MODEL)،
  * ثم OpenAI المباشر، ثم fallback أخير للنموذج المدمج. تُرجع أيضاً اسم المزود
  * المستخدم لأغراض السجلات.
