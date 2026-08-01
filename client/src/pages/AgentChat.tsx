@@ -1055,14 +1055,15 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
 
   if (display.startsWith("__PRINT_FORMAT_CREATED__")) {
     try {
-      const d = JSON.parse(display.replace("__PRINT_FORMAT_CREATED__", "")) as { name: string; doctype: string };
+      const d = JSON.parse(display.replace("__PRINT_FORMAT_CREATED__", "")) as { name: string; doctype: string; font?: string; letterhead?: boolean };
       return (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
           <div className="flex items-center gap-2 font-bold text-amber-900">
             <FileText className="w-4 h-4 shrink-0" /> أُنشئ نموذج الطباعة: {d.name}
           </div>
           <p className="text-amber-800 mt-1 text-xs">
-            لمستندات <span className="font-medium">{d.doctype}</span> — <span className="font-bold">معطّل حتى تعاينه وتفعّله بنفسك</span> من نظامك.
+            لمستندات <span className="font-medium">{d.doctype}</span>
+            {d.font ? ` · خط ${d.font}` : ""}{d.letterhead ? " · بترويسة" : " · بلا ترويسة"} — <span className="font-bold">معطّل حتى تعاينه وتفعّله بنفسك</span> من نظامك.
           </p>
         </div>
       );

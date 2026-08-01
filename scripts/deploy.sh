@@ -22,6 +22,11 @@ KEEP=3                      # نُبقي إصدارات سابقة للتراج�
 STAMP=$(date +%Y%m%d-%H%M%S)
 NEW="$RELEASES/$STAMP"
 
+# vite build لا يفحص الأنواع: نشرتُ مرة كوداً فيه خطأ نوع لأن البناء نجح.
+# الفحص هنا يوقف النشر قبل أن يصل الخطأ للعملاء، لا بعده.
+echo "▶ فحص الأنواع"
+npx tsc --noEmit || { echo "✗ فحص الأنواع فشل — أُلغي النشر ولم يتغيّر الإصدار الحيّ"; exit 1; }
+
 echo "▶ البناء إلى $NEW"
 mkdir -p "$RELEASES"
 SERVER_BEFORE=$(sha256sum "$ROOT/dist/index.js" 2>/dev/null | cut -d' ' -f1 || true)

@@ -626,7 +626,7 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "create_print_format",
-      description: "إنشاء نموذج طباعة مخصص لنوع مستند بصيغة HTML/Jinja. **لا تستدعِها قبل عرض التصميم على العميل وأخذ موافقته** — ترفض بلا confirmed: true. النموذج يُنشأ غير مفعّل افتراضياً حتى يعتمده العميل",
+      description: "إنشاء نموذج طباعة مخصص لنوع مستند بصيغة HTML/Jinja. **اطلب من العميل أولاً شعاره أو ترويسته (letterhead) كصورة، واعرض عليه خيارات الخط** — النموذج بلا شعار وبلا خط عربي يبدو رديئاً على فاتورة تصل لعملائه. **لا تستدعِها قبل عرض التصميم على العميل وأخذ موافقته** — ترفض بلا confirmed: true. النموذج يُنشأ غير مفعّل افتراضياً حتى يعتمده العميل",
       parameters: {
         type: "object",
         properties: {
@@ -634,6 +634,8 @@ const TOOLS = [
           name: { type: "string", description: "اسم النموذج" },
           html: { type: "string", description: "قالب Jinja/HTML كامل. استخدم doc.field للوصول للحقول" },
           css: { type: "string", description: "تنسيق CSS اختياري" },
+          font: { type: "string", enum: ["Cairo", "Tajawal", "IBM Plex Sans Arabic", "Almarai", "Noto Naskh Arabic"], description: "خط عربي للنموذج — Cairo واضح وعملي للفواتير، Tajawal أنعم، Almarai أعرض، Noto Naskh تقليدي" },
+          letterhead_url: { type: "string", description: "رابط صورة الترويسة أو الشعار الذي أرسله العميل (رابط ملف في نظامه مثل /files/logo.png) — يوضع خلفية للنموذج" },
           confirmed: { type: "boolean", description: "true فقط بعد موافقة العميل الصريحة" },
         },
         required: ["doctype", "name", "html", "confirmed"],
@@ -1877,9 +1879,23 @@ async function executeTool(name: string, args: Record<string, unknown>, toolCtx?
       const existing = await erpGET(`/api/resource/Print Format/${encodeURIComponent(name)}`).catch(() => null);
       if (existing) return { result: { ok: false, error: `يوجد نموذج طباعة بالاسم ${name} — اختر اسماً آخر أو راجعه أولاً` }, display: "" };
 
+      // الخط والترويسة يُحقنان في CSS بدل تركهما للقالب: النموذج بلا خط عربي
+      // يُطبع بخط لاتيني افتراضي فتبدو الفاتورة رديئة، والترويسة صورة خلفية
+      // تُطبع خلف المحتوى بلا أن تزيح تخطيطه.
+      const font = typeof args.font === "string" ? args.font : "Cairo";
+      const letterhead = typeof args.letterhead_url === "string" ? args.letterhead_url.trim() : "";
+      const baseCss = [
+        `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;600;700&display=swap');`,
+        `.print-format { font-family: '${font}', 'IBM Plex Sans Arabic', sans-serif; direction: rtl; }`,
+        letterhead
+          ? `.print-format { background-image: url('${letterhead}'); background-repeat: no-repeat; background-position: top center; background-size: 100% auto; padding-top: 140px; }`
+          : "",
+        typeof args.css === "string" ? args.css : "",
+      ].filter(Boolean).join("\n");
+
       await erpPOST("/api/resource/Print Format", {
         name, doc_type: doctype, html,
-        ...(args.css ? { css: args.css } : {}),
+        css: baseCss,
         // standard=No يجعله نموذجاً مخصصاً قابلاً للتعديل، لا جزءاً من التطبيق
         standard: "No",
         print_format_type: "Jinja",
@@ -1888,9 +1904,9 @@ async function executeTool(name: string, args: Record<string, unknown>, toolCtx?
         disabled: 1,
       });
       return {
-        result: { ok: true, name, doctype,
+        result: { ok: true, name, doctype, font, letterhead: letterhead || null,
           note: "أُنشئ النموذج **معطّلاً**. اطلب من العميل معاينته من نظامه ثم تفعيله بنفسه — لا تفعّله أنت. يمكنه ذلك من Print Format > " + name },
-        display: `__PRINT_FORMAT_CREATED__${JSON.stringify({ name, doctype })}`,
+        display: `__PRINT_FORMAT_CREATED__${JSON.stringify({ name, doctype, font, letterhead: !!letterhead })}`,
       };
     }
 
