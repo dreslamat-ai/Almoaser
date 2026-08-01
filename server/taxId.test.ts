@@ -11,9 +11,16 @@ describe("normalizeTaxId", () => {
 });
 
 describe("validateTaxId — السعودية", () => {
+  // النمط الحقيقي المرصود في أنظمة عملاء: الرقم المميز (10 خانات) + 00003
   it("يقبل رقماً سعودياً صحيح الصيغة", () => {
-    const r = validateTaxId("310123456789003", "SA");
-    expect(r.valid).toBe(true);
+    for (const n of ["314533971400003", "310770533900003", "300235269200003"]) {
+      expect(validateTaxId(n, "SA").valid).toBe(true);
+    }
+  });
+
+  // كان الفحص يشترط البداية بـ 3 فيرفض رقماً يعمل به عميل فعلاً
+  it("يقبل رقماً لا يبدأ بـ 3 ما دام على النمط", () => {
+    expect(validateTaxId("258941285800003", "SA").valid).toBe(true);
   });
 
   it("يرفض طولاً غير 15", () => {
@@ -22,10 +29,10 @@ describe("validateTaxId — السعودية", () => {
     if (!r.valid) expect(r.reason).toContain("15");
   });
 
-  it("يرفض ما لا يبدأ بـ 3", () => {
-    const r = validateTaxId("410123456789003", "SA");
+  it("يرفض ما لا ينتهي بـ 00003", () => {
+    const r = validateTaxId("310123456789003", "SA");
     expect(r.valid).toBe(false);
-    if (!r.valid) expect(r.reason).toContain("يبدأ");
+    if (!r.valid) expect(r.reason).toContain("00003");
   });
 
   it("يرفض ما لا ينتهي بـ 3", () => {
@@ -56,7 +63,7 @@ describe("validateTaxId — السعودية", () => {
   });
 
   it("لا يدّعي التحقق الفعلي من التسجيل لدى الهيئة", () => {
-    const r = validateTaxId("310123456789003", "SA");
+    const r = validateTaxId("314533971400003", "SA");
     expect(r.valid).toBe(true);
     if (r.valid) expect(r.note).toMatch(/لا توجد واجهة رسمية|يدوي/);
   });
