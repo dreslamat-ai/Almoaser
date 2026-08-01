@@ -1558,42 +1558,6 @@ export const appRouter = router({
         return { success: true, invoiceName: data.data?.name };
       }),
 
-    agentChat: protectedProcedure
-      .input(z.object({
-        messages: z.array(z.object({
-          role: z.enum(["user", "assistant"]),
-          content: z.string(),
-        })),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const erpUrl = (await getErpConfigForUser(ctx.user.id)).url || "demo.almoaser.cloud";
-        let erpContext = "";
-        try {
-          const [customersRes, invoicesRes, itemsRes] = await Promise.allSettled([
-            erpFetch("/api/resource/Customer?limit=20&fields=%5B%22name%22%2C%22customer_name%22%5D", ctx.user.id) as Promise<{ data: Array<{ name: string; customer_name: string }> }>,
-            erpFetch("/api/resource/Sales%20Invoice?limit=10&fields=%5B%22name%22%2C%22customer%22%2C%22grand_total%22%2C%22status%22%5D&order_by=posting_date%20desc", ctx.user.id) as Promise<{ data: Array<{ name: string; customer: string; grand_total: number; status: string }> }>,
-            erpFetch("/api/resource/Item?limit=20&fields=%5B%22name%22%2C%22item_name%22%2C%22standard_rate%22%5D", ctx.user.id) as Promise<{ data: Array<{ name: string; item_name: string; standard_rate: number }> }>,
-          ]);
-          const customers = customersRes.status === "fulfilled" ? customersRes.value?.data ?? [] : [];
-          const invoices = invoicesRes.status === "fulfilled" ? invoicesRes.value?.data ?? [] : [];
-          const items = itemsRes.status === "fulfilled" ? itemsRes.value?.data ?? [] : [];
-          erpContext = `\nبيانات ERPNext الحالية (${erpUrl}):\n- العملاء (${customers.length}): ${customers.map((c: { name: string; customer_name: string }) => c.customer_name || c.name).slice(0, 10).join(", ")}\n- آخر الفواتير (${invoices.length}): ${invoices.slice(0, 5).map((i: { name: string; customer: string; grand_total: number; status: string }) => `${i.name} - ${i.customer} - ${i.grand_total} (${i.status})`).join(" | ")}\n- الاصناف (${items.length}): ${items.map((i: { name: string; item_name: string; standard_rate: number }) => `${i.item_name} (${i.standard_rate})`).slice(0, 10).join(", ")}`;
-        } catch {
-          erpContext = "لم يتمكن الوكيل من جلب بيانات ERPNext حالياً.";
-        }
-
-        const systemPrompt = `انت وكيل ذكاء اصطناعي متخصص في نظام ERPNext للمحاسبة والمبيعات والمشتريات.\nتعمل مع شركة تستخدم نظام Almoaser AI ERP.\nمهمتك: مساعدة المستخدم في انشاء الفواتير، جلب التقارير، الاستعلام عن العملاء والاصناف، وتنفيذ العمليات المحاسبية.\nتحدث دائما بالعربية وكن مختصرا ومفيدا.\nعند طلب انشاء فاتورة، اطلب: اسم العميل، الصنف، الكمية، السعر.\nعند طلب تقرير، قدم ملخصا واضحا من البيانات المتاحة.\n${erpContext}`;
-
-        const llmMessages = [
-          { role: "system" as const, content: systemPrompt },
-          ...input.messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-        ];
-
-        const result = await invokeLLM({ messages: llmMessages, maxTokens: 1000 });
-        const reply = result.choices[0]?.message?.content;
-        const replyText = typeof reply === "string" ? reply : Array.isArray(reply) ? reply.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text ?? "" : "").join("") : "";
-        return { reply: replyText };
-      }),
   }),
 
   agent: agentRouter,
