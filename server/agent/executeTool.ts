@@ -618,8 +618,11 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
       const rootName = String(args.document_name ?? "").trim();
       if (!rootType || !rootName) return { result: { error: "نوع السجل واسمه مطلوبان" }, display: "" };
       if (!args.confirmed) {
+        // التحذير يسمّي ما قد يُتلَف: تجربة حقيقية حذفت فاتورة مبيعات معتمدة
+        // وسند قبض مع العميل. "المستندات المرتبطة" وصفٌ لا يُنذر، وذكر الفواتير
+        // والسندات صراحةً هو ما يجعل الموافقة موافقةً على ما سيحدث فعلاً.
         return { result: { ok: false, needs_confirmation: true,
-          message: `سيُحذف ${rootType} "${rootName}" وكل المستندات المرتبطة به نهائياً ولا يمكن التراجع. اعرض ذلك على المستخدم واطلب موافقته الصريحة ثم أعد الاستدعاء بـ confirmed: true` }, display: "" };
+          message: `سيُحذف ${rootType} "${rootName}" **وكل ما يرتبط به** نهائياً — وقد يشمل ذلك **فواتير مبيعات معتمدة وسندات قبض وصرف وقيوداً محاسبية**، تُلغى ثم تُحذف ولا يمكن التراجع عنها، ويسقط أثرها من الحسابات. اعرض هذا التحذير على المستخدم بنصّه، واسأله صراحةً إن كان يقبل حذف المستندات المالية أيضاً، ثم أعد الاستدعاء بـ confirmed: true بعد موافقته وحدها.` }, display: "" };
       }
 
       const deleted: Array<{ doctype: string; name: string }> = [];
@@ -661,7 +664,12 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
         // اكتمل الهدف؟
         if (removedThisRound.doctype === rootType && removedThisRound.name === rootName) {
           return {
-            result: { deleted: true, name: rootName, doctype: rootType, also_deleted: deleted.slice(0, -1), total: deleted.length },
+            result: {
+              deleted: true, name: rootName, doctype: rootType,
+              also_deleted: deleted.slice(0, -1), total: deleted.length,
+              // يُعرض للمستخدم لا يُلخَّص: من حُذفت فاتورته المعتمدة يجب أن يقرأ رقمها
+              report: "اذكر للمستخدم كل مستند حُذف باسمه ونوعه — خصوصاً الفواتير والسندات",
+            },
             display: `__DOC_DELETED__${JSON.stringify({ doctype: rootType, name: rootName, cascade: deleted.length })}`,
           };
         }
