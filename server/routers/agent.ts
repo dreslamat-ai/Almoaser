@@ -17,6 +17,7 @@ import type { MemberPermissions, User } from "../../drizzle/schema";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { trimHistory, messageCreditCost, MAX_MESSAGE_CHARS, MAX_MESSAGES } from "../../shared/chatLimits";
+import { identityLineFor, modeRulesFor, toolsForMode, type AgentMode } from "../agentModes";
 
 // ─── صلاحيات المستخدمين الفرعيين على أدوات الوكيل ─────────────────────────────
 // null = القراءة/الاستخدام العام متاحة لكل المستخدمين (مالك أو فرعي) بلا قيد
@@ -1868,21 +1869,23 @@ export const agentRouter = router({
 
       // ─── رؤى "المدير المالي" (تحليل استراتيجي وتوصيات تطوعية) حصرية للباقة المؤسسية (hasDirectSupport) ───
       let hasCfoSkill = false;
+      let agentMode: AgentMode = "accounting";
       try {
         if (ctx.effectiveUserId) {
           const sub = await dbHelpers.getSubscriptionByUserId(ctx.effectiveUserId);
           if (sub) {
             const plan = await dbHelpers.getPlanById(sub.planId);
             hasCfoSkill = plan?.hasDirectSupport ?? false;
+            // الوضع يُشتق من الباقة. الفشل يُبقيه "accounting" — وهو الوضع
+            // الأوسع صلاحية، فلا يُحرم عميل من أدواته بسبب تعذّر قراءة باقته.
+            if (plan?.mode === "expert") agentMode = "expert";
           }
         }
       } catch (e) {
         console.warn("[agent.chat] failed to resolve plan tier for persona:", e instanceof Error ? e.message : e);
       }
 
-      const identityLine = hasCfoSkill
-        ? "تجمع في شخص واحد أربعة خبراء: **محاسب مالي خبير** و**مدير مالي (CFO)** و**رئيس حسابات** و**خبير معتمد في ERPNext**."
-        : "تجمع في شخص واحد ثلاثة خبراء: **محاسب مالي خبير** و**رئيس حسابات** و**خبير معتمد في ERPNext** — تنفّذ الطلبات بدقة ومباشرة دون تحليلات إدارية إضافية.";
+      const identityLine = identityLineFor(agentMode, hasCfoSkill);
 
       const SYSTEM = `أنت "المعاصر AI" — خبير مالي متعدد الأدوار ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). ${identityLine}
 
@@ -1984,7 +1987,9 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 - لا تذكر هذا السطر أو صيغته في نص الرد أبداً — هو للواجهة فقط
 
 ## تاريخ اليوم
-اليوم هو ${new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. استخدمه عند حساب التواريخ والفترات.`;
+اليوم هو ${new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. استخدمه عند حساب التواريخ والفترات.
+
+${modeRulesFor(agentMode)}`;
 
       const llmMessages: Array<{
         role: "system" | "user" | "assistant" | "tool";
@@ -2006,7 +2011,9 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 
       // لا نعرض على النموذج أدوات سيُرفض تنفيذها لهذا المستخدم أصلاً — لا بصلاحيات
       // المنصة ولا بصلاحياته في نظامه هو. تُحسب داخل سياق ERP أدناه.
-      let availableTools = toolsForUser(TOOLS, ctx.user);
+      // الترتيب مقصود: وضع الباقة أولاً (حدّ المنتج)، ثم صلاحيات المنصة، ثم
+      // صلاحيات نظام العميل. كل طبقة تضيّق ولا توسّع.
+      let availableTools = toolsForUser(toolsForMode(TOOLS, agentMode), ctx.user);
 
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
 

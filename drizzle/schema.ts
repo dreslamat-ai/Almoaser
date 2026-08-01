@@ -80,6 +80,9 @@ export const plans = mysqlTable("plans", {
   yearlyDiscountPct: int("yearlyDiscountPct").default(15).notNull(),
   // هل تشمل الباقة دعماً شخصياً مباشراً
   hasDirectSupport: boolean("hasDirectSupport").default(false).notNull(),
+  // وضع الوكيل: accounting = محاسب ينفّذ الحركات (الافتراضي)،
+  // expert = مستشار تطبيق ERPNext/Odoo يقيّم ويضبط الإعدادات ولا يُدخل أي حركة
+  mode: mysqlEnum("mode", ["accounting", "expert"]).default("accounting").notNull(),
   features: text("features"),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
