@@ -63,6 +63,13 @@
     box-sizing: border-box;
   }
 
+  :root {
+    /* مقاس شريط مؤشر الصفحة الرئيسية. يساوي صفراً في المتصفح العادي، ويكبر
+       داخل PWA مثبَّت (display: standalone) حيث يمتد المحتوى خلفه فيُقتطع
+       أسفل الشاشة. يحتاج viewport-fit=cover في الـmeta وإلا بقي صفراً دائماً. */
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   html {
     direction: rtl;
     scroll-behavior: smooth;

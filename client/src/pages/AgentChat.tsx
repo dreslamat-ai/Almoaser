@@ -1359,10 +1359,13 @@ export default function AgentChat() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-[calc(100vh-6rem)] max-w-4xl mx-auto gap-3">
+      {/* dvh لا vh: الأخير لا يتغيّر مع أشرطة المتصفح المتحركة على الجوال فيقع
+          حقل الكتابة خارج الشاشة. وطرح المنطقة الآمنة يمنع اقتطاعه في PWA. */}
+      <div className="flex flex-col h-[calc(100dvh-6rem-var(--safe-bottom))] max-w-4xl mx-auto gap-3">
         {/* Header */}
-       {/* يلتف على الشاشات الضيقة: بدون ذلك يتجاوز محتواه عرض الجوال ويُزيح الصفحة كلها */}
-       <div className="flex items-center justify-between gap-2 shrink-0 flex-wrap">
+       {/* يُكدَّس على الجوال بدل الالتفاف: الالتفاف كان يترك العنوان في عمود
+           ضيق يتكسّر على ثلاثة أسطر بينما تتزاحم الأزرار الستة بجانبه. */}
+       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shrink-0">
          <div className="flex items-center gap-3 min-w-0">
             <img
               src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
@@ -1374,7 +1377,7 @@ export default function AgentChat() {
              <p className="text-xs text-muted-foreground truncate">متصل بـ Almoaser AI ERP · ينفذ العمليات مباشرة</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end shrink-0">
             <NotificationBell />
             {creditsInfo && (() => {
               const low = creditsInfo.monthlyCredits > 0 && creditsInfo.balance / creditsInfo.monthlyCredits <= 0.15;

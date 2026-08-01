@@ -80,6 +80,12 @@ export function canUseTool(user: Pick<User, "orgRole" | "permissions">, toolName
 async function narrowToolsByErpPermissions<T extends { function: { name: string } }>(
   tools: T[],
 ): Promise<T[]> {
+  // معطَّل افتراضياً. يضيف تسجيل دخول واستدعاءين لنظام العميل أمام كل رسالة،
+  // وقد ظهر عطل "Load failed" في الدردشة بعد تفعيله ولم يُثبت أنه سببه ولا أنه
+  // بريء منه. وفائدته اليوم صفر — كل مستخدمي المنصة مديرو نظام في أنظمتهم —
+  // فلا معنى لتحمّل شكٍّ في المسار الأهم مقابل لا شيء.
+  // للتشغيل عند التحقيق: ERP_PERMISSION_NARROWING=true
+  if (process.env.ERP_PERMISSION_NARROWING !== "true") return tools;
   try {
     const cfg = currentErpConfig();
     if (cfg.provider !== "erpnext" || !cfg.url || !cfg.username) return tools;
@@ -2333,7 +2339,11 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 
       let response;
       try {
-        response = await invokeLLM({
+        // invokeAgentLLM لا invokeLLM: الأخير يقصد OpenAI/المدمج مباشرة ويرمي
+        // "OPENAI_API_KEY is not configured" — بقيّة المنصة انتقلت إلى
+        // OpenRouter وبقي هذا المسار وحده على الإعداد القديم، فتعطّلت قراءة
+        // الصور وحدها بينما الدردشة تعمل. الموديل الأول في القائمة يقبل الصور.
+        response = await invokeAgentLLM({
           messages: [
             {
               role: "system",
