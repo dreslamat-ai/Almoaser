@@ -181,7 +181,21 @@ export function translateErpError(raw: string): string {
     return "أحد السجلات المرتبطة (عميل/صنف/حساب) غير موجود في النظام";
   }
   if (/DuplicateEntryError|already exists/i.test(raw)) return "السجل موجود مسبقاً — استخدم الموجود بدلاً من إنشاء نسخة مكررة";
+  // إلغاء الملغى: ليس خطأ تحقق غامضاً بل حالة معروفة، والخطوة التالية الحذف
+  if (/Cannot cancel|already cancelled|docstatus.*2/i.test(raw)) {
+    return "المستند ملغى بالفعل — الإلغاء لا يُعاد، والخطوة التالية حذفه إن أردت إزالته";
+  }
   if (/MandatoryError|is mandatory/i.test(raw)) return "حقل إلزامي ناقص: " + raw.slice(0, 200);
+  // يُفحص قبل الصلاحيات: نصّه يحوي "not permitted" فكان يُقرأ رفضَ صلاحية،
+  // فيُقال لمن يملك System Manager إن صلاحياته ناقصة. الحقيقة أن Frappe يقيّد
+  // الحقول القابلة للترشيح في استعلام REST، والحل تغيير الحقل لا الصلاحيات.
+  if (/Field not permitted in query|DataError/i.test(raw)) {
+    const f = frappeHumanMessage(raw);
+    const field = raw.match(/Field not permitted in query:\s*([A-Za-z0-9_]+)/)?.[1];
+    return field
+      ? `لا يمكن الترشيح بالحقل "${field}" في هذا النوع — جرّب حقلاً آخر أو ابحث من الطرف المقابل. (ليست مشكلة صلاحيات)`
+      : f ? `رفض النظام الاستعلام: ${f}` : "استعلام غير مقبول من ERPNext — راجع أسماء الحقول";
+  }
   if (/PermissionError|not permitted/i.test(raw)) {
     const f = frappeHumanMessage(raw);
     return f ? `صلاحيات غير كافية في نظامك: ${f}` : "صلاحيات غير كافية لتنفيذ هذه العملية في نظامك";

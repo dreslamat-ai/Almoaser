@@ -613,19 +613,62 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
       const doctype = args.doctype as string;
       const docName = args.document_name as string;
       const path = `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(docName)}`;
-      // إن كان المستند معتمداً — ألغِه أولاً (شرط ERPNext للحذف)
-      const transactional = ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"];
+      // الإلغاء قبل الحذف لأي نوع لا لأربعة أنواع: إشعار التسليم وأمر البيع
+      // يُعتمدان أيضاً، وقصرُ الفحص على المستندات المالية كان يجعل الحذف يفشل
+      // عندها برسالة عامة. والملغى أصلاً (docstatus=2) يُحذف مباشرة بلا إلغاء.
       let wasCancelled = false;
-      if (transactional.includes(doctype)) {
-        try {
-          const cur = await erpGET(path) as { data?: { docstatus?: number } };
-          if (cur?.data?.docstatus === 1) {
-            await cancelDoc(doctype, docName);
-            wasCancelled = true;
-          }
-        } catch { /* المستند غير موجود — سيفشل الحذف برسالة واضحة */ }
+      try {
+        const cur = await erpGET(path) as { data?: { docstatus?: number } };
+        if (cur?.data?.docstatus === 1) {
+          await cancelDoc(doctype, docName);
+          wasCancelled = true;
+        }
+      } catch { /* المستند غير موجود — سيفشل الحذف برسالة واضحة */ }
+
+      try {
+        await erpDELETE(path);
+      } catch (e) {
+        // Frappe يسمّي المستند المانع داخل رابط في رسالة الخطأ:
+        // /app/Form/Delivery Note/MAT-DN-2024-00001 — استخراجه يعطي الوكيل
+        // الهدف التالي مباشرةً بدل أن يخمّن أسماء حقول للبحث بها، وهو ما ظلّ
+        // يفشل فيه ويظهر للعميل كأنه عجز.
+        const rawErr = e instanceof Error ? e.message : String(e);
+        // الرسالة تصل مهرَّبة \uXXXX داخل JSON، فالبحث عن الرابط في النص الخام
+        // لا يجده. نفكّ الترميز أولاً ثم نقرأ.
+        const raw = (() => {
+          const b = rawErr.indexOf("{");
+          if (b < 0) return rawErr;
+          try {
+            const body = JSON.parse(rawErr.slice(b)) as { exception?: string; _server_messages?: string };
+            return [body.exception ?? "", body._server_messages ?? ""].join(" ") || rawErr;
+          } catch { return rawErr; }
+        })();
+        // الرسالة تحوي رابطين: السجل الجاري حذفه ثم المستند المانع. أخذُ الأول
+        // يعيد السجل نفسه كأنه يمنع نفسه — فنستبعد ما يطابق ما نحذفه.
+        const seen = new Set<string>();
+        const links: Array<{ doctype: string; name: string }> = [];
+        const re = /\/app\/Form\/([^/"\\]+)\/([^"\\<>]+)/g;
+        for (let m = re.exec(raw); m !== null; m = re.exec(raw)) {
+          const l = { doctype: decodeURIComponent(m[1]).trim(), name: decodeURIComponent(m[2]).trim() };
+          if (l.doctype === doctype && l.name === docName) continue;
+          const key = `${l.doctype}|${l.name}`;
+          if (seen.has(key)) continue;      // الرابط يتكرّر في النص وفي الرسالة
+          seen.add(key);
+          links.push(l);
+        }
+        if (links.length) {
+          return {
+            result: {
+              error: `لا يمكن حذف ${doctype} "${docName}" لارتباطه بمستند آخر`,
+              blocked_by: links[0],
+              all_blockers: links,
+              next_step: "احذف المستند المذكور في blocked_by أولاً (بعد أخذ موافقة المستخدم) ثم أعد محاولة الحذف",
+            },
+            display: "",
+          };
+        }
+        throw e;
       }
-      await erpDELETE(path);
       return {
         result: { deleted: true, name: docName },
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,

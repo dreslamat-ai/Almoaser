@@ -5,6 +5,12 @@
 import { AsyncLocalStorage } from "async_hooks";
 import { getErpConfigForUser, getErpSession, invalidateErpSession, type ErpConfig } from "../erpConnection";
 
+// حدّ الاقتطاع للخطأ: 300 حرفاً كانت تبتر رسالة LinkExistsError عند الرابط
+// الأول — رابط السجل نفسه — فيضيع الرابط الثاني الذي يسمّي المستند المانع،
+// ويظلّ الوكيل يبحث عمّا لم نُرِه إياه. النص لا يُعرض خاماً للعميل:
+// translateErpError يستخرج منه الرسالة البشرية.
+const ERROR_KEEP = 4000;
+
 // فتعمل كل helpers (erpGET/erpPOST/submitDoc...) على نظام المستخدم دون تمرير config يدوياً
 export const erpContext = new AsyncLocalStorage<ErpConfig>();
 
@@ -59,7 +65,7 @@ export async function erpPOST(path: string, body: Record<string, unknown>): Prom
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`ERPNext POST error ${res.status}: ${errText.slice(0, 300)}`);
+    throw new Error(`ERPNext POST error ${res.status}: ${errText.slice(0, ERROR_KEEP)}`);
   }
   return res.json();
 }
@@ -74,7 +80,7 @@ export async function erpPUT(path: string, body: Record<string, unknown>): Promi
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`ERPNext PUT error ${res.status}: ${errText.slice(0, 300)}`);
+    throw new Error(`ERPNext PUT error ${res.status}: ${errText.slice(0, ERROR_KEEP)}`);
   }
   return res.json();
 }
@@ -88,7 +94,7 @@ export async function erpDELETE(path: string): Promise<void> {
   });
   if (!res.ok && res.status !== 202) {
     const errText = await res.text();
-    throw new Error(`ERPNext DELETE error ${res.status}: ${errText.slice(0, 300)}`);
+    throw new Error(`ERPNext DELETE error ${res.status}: ${errText.slice(0, ERROR_KEEP)}`);
   }
 }
 

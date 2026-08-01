@@ -46,3 +46,27 @@ describe("translateErpError — لا شيفرة خام للعميل", () => {
     expect(translateErpError("تعذّر الاتصال بالخادم")).toBe("تعذّر الاتصال بالخادم");
   });
 });
+
+// وقع فعلاً: قيل لمن يملك System Manager إن صلاحياته ناقصة، والسبب أن نص
+// Frappe يحوي "not permitted" وهو عن حقول الاستعلام لا عن الصلاحيات
+describe("لا تُنسب أخطاء الاستعلام للصلاحيات", () => {
+  const FIELD = String.raw`ERPNext GET error 417: {"exc_type":"DataError","exception":"frappe.exceptions.DataError: Field not permitted in query: delivery_note"}`;
+
+  it("يسمّي الحقل ويقول صراحةً إنها ليست صلاحيات", () => {
+    const t = translateErpError(FIELD);
+    expect(t).toContain("delivery_note");
+    expect(t).toContain("ليست مشكلة صلاحيات");
+    expect(t).not.toContain("صلاحيات غير كافية");
+  });
+
+  it("يبقي رفض الصلاحية الحقيقي كما هو", () => {
+    const real = String.raw`{"exc_type":"PermissionError","exception":"frappe.exceptions.PermissionError: لا تملك صلاحية"}`;
+    expect(translateErpError(real)).toContain("صلاحيات غير كافية");
+  });
+
+  it("الإلغاء على مستند ملغى يُشرح ويوجّه للحذف", () => {
+    const t = translateErpError(String.raw`{"exc_type":"ValidationError","exception":"frappe.exceptions.ValidationError: Cannot cancel a cancelled document"}`);
+    expect(t).toContain("ملغى بالفعل");
+    expect(t).toContain("حذفه");
+  });
+});
