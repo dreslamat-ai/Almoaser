@@ -1006,7 +1006,9 @@ export const appRouter = router({
         try {
           const { name, phone, ...rest } = lead.patch;
           if (name || phone || leadId == null) {
-            const id = await upsertLead({ name, phone, leadId });
+            // المدينة والنشاط يُمرَّران للمطابقة لا للحفظ: بهما نفرّق بين شخصين
+            // يحملان اسماً شائعاً بدل أن ندمجهما في سجل واحد
+            const id = await upsertLead({ name, phone, leadId, city: rest.city, activity: rest.activity });
             if (id) leadId = id;
           }
           if (leadId && (Object.keys(rest).length || plan)) {
@@ -1022,7 +1024,7 @@ export const appRouter = router({
             const found = await extractLeadFromConversation(input.messages);
             if (!Object.keys(found).length) return;
             const { name, phone, ...rest } = found;
-            const id = await upsertLead({ name, phone, leadId });
+            const id = await upsertLead({ name, phone, leadId, city: rest.city, activity: rest.activity });
             if (id) await updateLead(id, rest);
           } catch (e) {
             console.warn("[sales.chat] تعذّر استخلاص بيانات المحادثة:", e instanceof Error ? e.message : e);

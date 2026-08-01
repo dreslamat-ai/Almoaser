@@ -5,7 +5,7 @@
 // السجل يُنشأ بأي بيانات ولو ناقصة — اسم ومدينة عميلٌ محتمل، وانتظار الاكتمال
 // يعني ألا نحفظ شيئاً.
 
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, gte } from "drizzle-orm";
 import { getDb } from "./db";
 import { salesLeads } from "../drizzle/schema";
 import { normalizePhone } from "./phone";
@@ -19,12 +19,80 @@ export type LeadUpdate = {
 
 export type LeadIdentity = { name?: string | null; phone?: string | null };
 
+// ─── مطابقة الهوية بلا رقم جوال ───────────────────────────────────────────────
+//
+// الجوال مفتاح قاطع، لكن سارة تجمع الاسم أولاً وتطلب الرقم أخيراً — وبينهما
+// رسائل كثيرة. كل معلومة جديدة كانت تُنشئ صفاً: ظهر "احمد" خمس مرات في دقيقة
+// واحدة، أحدها بالاسم وحده والأخير مكتملاً بالجوال. وتكرّر الاسم عبر جلستين
+// أيضاً حين أغلق الزائر التبويب (معرّف الجلسة في sessionStorage يموت معه).
+//
+// لذلك نطابق بالاسم حين لا يوجد رقم — بشرط ألّا تتعارض بقية الحقول. التعارض
+// وحده هو ما يفرّق بين شخصين يحملان اسماً شائعاً: "احمد الدمام حسابات" و"احمد
+// الرياض تجارة" سجلّان، أما "احمد" و"احمد الدمام" فواحد لم يكتمل بعد.
+
+/** توحيد الاسم للمقارنة: التشكيل وصور الألف والتاء المربوطة لا تصنع شخصاً آخر. */
+export function normalizeArabicName(raw: string): string {
+  return raw
+    .replace(/[\u064B-\u0652\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/[ىي]/g, "ي")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/** توحيد حقل وصفي: "المقاولات" و"مقاولات" نشاط واحد. */
+function normalizeAttr(raw: string | null | undefined): string {
+  if (!raw?.trim()) return "";
+  return normalizeArabicName(raw).replace(/^ال/, "");
+}
+
+/** هل يتعارض حقلان؟ الفراغ لا يعارض شيئاً — الغياب ليس اختلافاً. */
+function conflicts(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = normalizeAttr(a), y = normalizeAttr(b);
+  return x !== "" && y !== "" && x !== y;
+}
+
+/** نافذة المطابقة: زائر يعود بعد شهرين حالةٌ جديدة لا استكمال لحديث قديم. */
+const MATCH_WINDOW_DAYS = 45;
+
+/**
+ * أقدم سجل يصلح أن يكون نفس الشخص، أو undefined.
+ *
+ * يُفضَّل الأقدم كي تلتحق البيانات الجديدة بالسجل الأصلي بدل أن ينشأ فرع ثانٍ.
+ */
+export async function findLeadByIdentity(
+  name: string,
+  hints: { city?: string | null; activity?: string | null } = {},
+): Promise<number | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const target = normalizeArabicName(name);
+  if (target.length < 2) return undefined;
+
+  const since = new Date(Date.now() - MATCH_WINDOW_DAYS * 86_400_000);
+  const rows = await db.select({
+    id: salesLeads.id, name: salesLeads.name, city: salesLeads.city, activity: salesLeads.activity,
+  }).from(salesLeads).where(gte(salesLeads.createdAt, since)).orderBy(salesLeads.id);
+
+  for (const r of rows) {
+    if (normalizeArabicName(r.name) !== target) continue;
+    if (conflicts(r.city, hints.city)) continue;
+    if (conflicts(r.activity, hints.activity)) continue;
+    return r.id;
+  }
+  return undefined;
+}
+
 /**
  * ينشئ أو يحدّث عميلاً محتملاً بما توفّر.
  * المفتاح هو الجوال حين يوجد — العائد بعد أسبوع هو نفسه لا سجل ثانٍ. وقبل أن
  * يعطي رقمه نستعمل معرّف الجلسة الذي أنشأناه له.
  */
-export async function upsertLead(input: LeadIdentity & { leadId?: number | null }): Promise<number | undefined> {
+export async function upsertLead(
+  input: LeadIdentity & { leadId?: number | null; city?: string | null; activity?: string | null },
+): Promise<number | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
@@ -54,6 +122,22 @@ export async function upsertLead(input: LeadIdentity & { leadId?: number | null 
   }
 
   if (!input.name?.trim() && !phoneE164) return undefined;
+
+  // قبل إنشاء صف جديد: هل هذا الشخص مسجّل بالفعل بلا رقم؟ يحدث حين يعطي رقمه
+  // متأخراً، أو حين يعود في جلسة أخرى، أو حين يسبق الاستخلاصُ الخلفيُّ وصولَ
+  // معرّف السجل إلى المتصفح — والحالات الثلاث تنتج نفس الأثر: اسم مكرر.
+  if (input.name?.trim()) {
+    const existing = await findLeadByIdentity(input.name, {
+      city: input.city ?? null, activity: input.activity ?? null,
+    });
+    if (existing) {
+      const set: Record<string, unknown> = {};
+      if (phoneE164) set.phone = phoneE164;
+      if (Object.keys(set).length) await db.update(salesLeads).set(set).where(eq(salesLeads.id, existing));
+      return existing;
+    }
+  }
+
   const values: Record<string, unknown> = {};
   if (input.name?.trim()) values.name = input.name.trim().slice(0, 160);
   if (phoneE164) values.phone = phoneE164;
