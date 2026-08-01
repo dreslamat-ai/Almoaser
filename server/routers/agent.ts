@@ -17,6 +17,7 @@ import type { MemberPermissions, User } from "../../drizzle/schema";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { trimHistory, messageCreditCost, MAX_MESSAGE_CHARS, MAX_MESSAGES } from "../../shared/chatLimits";
+import { inspectCustomerCompleteness, describeMissing, type CustomerDoc, type AddressDoc } from "../customerCompleteness";
 import { identityLineFor, modeRulesFor, toolsForMode, type AgentMode } from "../agentModes";
 
 // ─── صلاحيات المستخدمين الفرعيين على أدوات الوكيل ─────────────────────────────
@@ -26,6 +27,7 @@ const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = {
   get_customers: null, get_items: null, get_suppliers: null,
   create_invoice: "createInvoices", submit_invoice: "createInvoices",
   create_customer: "createInvoices", create_item: "createInvoices", create_supplier: "createInvoices",
+  update_customer: "createInvoices",
   get_sales_report: "viewInvoices",
   get_purchase_invoices: "viewInvoices", create_purchase_invoice: "createInvoices",
   get_payments: "viewInvoices", create_payment_entry: "managePayments",
@@ -598,6 +600,27 @@ const TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "update_customer",
+      description: "تحديث بيانات عميل قائم: الرقم الضريبي، نوعه (شركة/فرد)، وعنوانه. استخدمها عند رفض إنشاء فاتورة بسبب customer_data_incomplete — اطلب الناقص من المستخدم أولاً ثم سجّله هنا. الرقم الضريبي يُفحص شكلياً ويُرفض إن كانت صيغته خاطئة",
+      parameters: {
+        type: "object",
+        properties: {
+          customer: { type: "string", description: "اسم العميل كما هو في النظام" },
+          tax_id: { type: "string", description: "الرقم الضريبي — اتركه فارغاً لعدم تغييره" },
+          customer_type: { type: "string", enum: ["Company", "Individual"], description: "نوع العميل" },
+          address_line1: { type: "string", description: "الشارع/المبنى" },
+          city: { type: "string", description: "المدينة" },
+          country: { type: "string", description: "الدولة" },
+          pincode: { type: "string", description: "الرمز البريدي" },
+        },
+        required: ["customer"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "save_report",
       description: "حفظ تقرير رسمي في حساب العميل (تقييم نظام، بنود استلام، مراجعة عقد، سياسات، تصميم دورة عمل). استدعها بعد أن تكتب التقرير كاملاً في المحادثة — الحفظ يجعله مستنداً يُفتح لاحقاً ويُراجع، ويُشعر إدارة المنصة. التقرير يُحفظ بانتظار مراجعة العميل",
       parameters: {
@@ -1122,6 +1145,41 @@ async function inspectTaxSetup(): Promise<TaxSetupOk | TaxSetupGap> {
   };
 }
 
+
+/**
+ * عنوان العميل: من customer_primary_address إن وُجد، وإلا بحثاً في Address عبر
+ * جدول الربط الديناميكي — العناوين في Frappe ليست حقلاً في العميل بل مستنداً
+ * مرتبطاً، وكثير من الحسابات لا تملأ حقل العنوان الأساسي أصلاً.
+ */
+async function fetchCustomerAddress(customerName: string, primary: string | null): Promise<AddressDoc> {
+  const fields = encodeURIComponent(JSON.stringify(["address_line1", "city", "country", "pincode"]));
+  try {
+    if (primary) {
+      const doc = await erpGET(`/api/resource/Address/${encodeURIComponent(primary)}`) as { data?: AddressDoc };
+      if (doc?.data) return doc.data;
+    }
+    const filters = encodeURIComponent(JSON.stringify([["Dynamic Link", "link_name", "=", customerName]]));
+    const list = await erpGET(`/api/resource/Address?filters=${filters}&fields=${fields}&limit_page_length=1`) as { data?: AddressDoc[] };
+    return list?.data?.[0] ?? null;
+  } catch (e) {
+    // تعذّر القراءة ≠ لا يوجد عنوان. نعيد null فيُطلب العنوان — الطلب مرة
+    // زائدة أهون من إصدار فاتورة ضريبية ناقصة.
+    console.warn("[fetchCustomerAddress] تعذّرت قراءة العنوان:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+
+/** اسم مستند العنوان المرتبط بالعميل (لا محتواه) — للتحديث بدل إنشاء ثانٍ */
+async function fetchCustomerAddressName(customerName: string, primary: string | null): Promise<string | null> {
+  if (primary) return primary;
+  try {
+    const filters = encodeURIComponent(JSON.stringify([["Dynamic Link", "link_name", "=", customerName]]));
+    const list = await erpGET(`/api/resource/Address?filters=${filters}&fields=${encodeURIComponent(JSON.stringify(["name"]))}&limit_page_length=1`) as { data?: { name: string }[] };
+    return list?.data?.[0]?.name ?? null;
+  } catch { return null; }
+}
+
 type ToolCtx = { userId: number; conversationId?: number };
 async function executeTool(name: string, args: Record<string, unknown>, toolCtx?: ToolCtx): Promise<{ result: unknown; display: string }> {
   switch (name) {
@@ -1188,16 +1246,28 @@ async function executeTool(name: string, args: Record<string, unknown>, toolCtx?
       // حماية: الفاتورة الضريبية تتطلب رقماً ضريبياً مسجلاً للعميل من نوع شركة/مؤسسة —
       // امنع إنشاء الفاتورة وأعد needs_clarification بدل إنشائها ناقصة
       try {
-        const custDoc = await erpGET(`/api/resource/Customer/${encodeURIComponent(resolvedCustomer)}`) as { data: { customer_type?: string; tax_id?: string; customer_name?: string } };
-        const custType = custDoc?.data?.customer_type ?? "Company";
-        if (custType !== "Individual" && !custDoc?.data?.tax_id) {
+        const custDoc = await erpGET(`/api/resource/Customer/${encodeURIComponent(resolvedCustomer)}`) as { data: CustomerDoc };
+        const address = await fetchCustomerAddress(resolvedCustomer, custDoc?.data?.customer_primary_address ?? null);
+        const completeness = inspectCustomerCompleteness(custDoc?.data ?? {}, address);
+        if (!completeness.complete) {
           return {
-            result: { needs_clarification: true, reason: "missing_tax_id", customer: resolvedCustomer, customer_name: custDoc?.data?.customer_name ?? resolvedCustomer },
+            result: {
+              needs_clarification: true,
+              reason: "customer_data_incomplete",
+              customer: resolvedCustomer,
+              customer_name: custDoc?.data?.customer_name ?? resolvedCustomer,
+              missing: completeness.missing,
+              missing_ar: describeMissing(completeness.missing),
+              message: `لا يمكن إصدار فاتورة ضريبية لهذا العميل قبل استكمال: ${describeMissing(completeness.missing)}. اطلب هذه البيانات من المستخدم ثم سجّلها بـ update_customer، ولا تُصدر الفاتورة قبل ذلك`,
+            },
             display: "",
           };
         }
+        if (completeness.warnings.length) {
+          console.info("[create_invoice] بيانات ناقصة غير مانعة:", completeness.warnings.join(","));
+        }
       } catch (e) {
-        console.warn("[create_invoice] tax_id check failed:", e instanceof Error ? e.message : e);
+        console.warn("[create_invoice] customer completeness check failed:", e instanceof Error ? e.message : e);
       }
       // حماية: حل أكواد الأصناف — استخدم الموجود إن وُجد مشابه
       const rawItems = args.items as Array<{ item_code: string; qty: number; rate: number }>;
@@ -1702,6 +1772,76 @@ async function executeTool(name: string, args: Record<string, unknown>, toolCtx?
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
       };
     }
+    case "update_customer": {
+      const customer = String(args.customer ?? "").trim();
+      if (!customer) return { result: { ok: false, error: "اسم العميل مطلوب" }, display: "" };
+
+      const custFields: Record<string, unknown> = {};
+      if (args.customer_type) custFields.customer_type = args.customer_type;
+      if (typeof args.tax_id === "string" && args.tax_id.trim()) {
+        // نفس فحص create_customer: صيغة فقط، ولا يُقال للعميل إنه "تحقق لدى الهيئة"
+        const { validateTaxId } = await import("../taxId");
+        const check = validateTaxId(args.tax_id.trim());
+        if (!check.valid) {
+          return { result: { needs_clarification: true, reason: "invalid_tax_id", provided: String(args.tax_id),
+            problem: check.reason, message: "الرقم الضريبي الذي أعطاه المستخدم غير صحيح الصيغة — أبلغه بالمشكلة واطلب الرقم الصحيح" }, display: "" };
+        }
+        custFields.tax_id = check.normalized;
+      }
+      if (Object.keys(custFields).length) {
+        await erpPUT(`/api/resource/Customer/${encodeURIComponent(customer)}`, custFields);
+      }
+
+      // العنوان مستند مستقل مرتبط بالعميل، لا حقول داخله
+      const addrInput = {
+        address_line1: typeof args.address_line1 === "string" ? args.address_line1.trim() : "",
+        city: typeof args.city === "string" ? args.city.trim() : "",
+        country: typeof args.country === "string" ? args.country.trim() : "",
+        pincode: typeof args.pincode === "string" ? args.pincode.trim() : "",
+      };
+      let addressAction: string | null = null;
+      if (addrInput.address_line1 || addrInput.city || addrInput.country || addrInput.pincode) {
+        const custDoc = await erpGET(`/api/resource/Customer/${encodeURIComponent(customer)}`) as { data?: CustomerDoc };
+        const existingName = custDoc?.data?.customer_primary_address ?? null;
+        const existing = await fetchCustomerAddressName(customer, existingName);
+        const payload: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(addrInput)) if (v) payload[k] = v;
+        if (existing) {
+          await erpPUT(`/api/resource/Address/${encodeURIComponent(existing)}`, payload);
+          addressAction = "updated";
+        } else {
+          // العنوان الجديد يحتاج حقوله الإلزامية كاملة وربطاً بالعميل
+          if (!addrInput.address_line1 || !addrInput.city || !addrInput.country) {
+            return { result: { needs_clarification: true, reason: "address_incomplete",
+              message: "لإنشاء عنوان جديد نحتاج الشارع/المبنى والمدينة والدولة معاً — اطلبها من المستخدم" }, display: "" };
+          }
+          await erpPOST("/api/resource/Address", {
+            ...payload,
+            address_title: customer,
+            address_type: "Billing",
+            links: [{ link_doctype: "Customer", link_name: customer }],
+          });
+          addressAction = "created";
+        }
+      }
+
+      const after = await erpGET(`/api/resource/Customer/${encodeURIComponent(customer)}`) as { data?: CustomerDoc };
+      const addrAfter = await fetchCustomerAddress(customer, after?.data?.customer_primary_address ?? null);
+      const state = inspectCustomerCompleteness(after?.data ?? {}, addrAfter);
+      return {
+        result: {
+          ok: true, customer, address: addressAction,
+          complete: state.complete,
+          still_missing: state.missing,
+          still_missing_ar: describeMissing(state.missing),
+          note: state.complete
+            ? "بيانات العميل مكتملة — يمكن إصدار الفاتورة الآن"
+            : `ما زال ناقصاً: ${describeMissing(state.missing)} — اطلبه من المستخدم قبل إصدار الفاتورة`,
+        },
+        display: `__CUSTOMER_UPDATED__${JSON.stringify({ customer, complete: state.complete, missing: state.missing })}`,
+      };
+    }
+
     case "save_report": {
       const kind = String(args.kind ?? "other");
       const title = String(args.title ?? "").trim();

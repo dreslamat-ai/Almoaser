@@ -16,8 +16,7 @@ import {
   FileText, BarChart3, Users, Package, MessageSquare,
   Download, CheckCircle2, AlertCircle, TrendingUp,
   Mic, Square, ImagePlus, Camera,
-  History, Plus, X, Volume2, VolumeX, Coins,
-} from "lucide-react";
+  History, Plus, X, Volume2, VolumeX, Coins, AlertTriangle} from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ToolResult = { tool_call_id: string; tool_name: string; display: string };
@@ -1038,6 +1037,29 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       );
     } catch { return null; }
   }
+  if (display.startsWith("__CUSTOMER_UPDATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__CUSTOMER_UPDATED__", "")) as { customer: string; complete: boolean; missing: string[] };
+      const labels: Record<string, string> = {
+        tax_id: "الرقم الضريبي", address: "العنوان", address_city: "المدينة",
+        address_country: "الدولة", postal_code: "الرمز البريدي",
+      };
+      return (
+        <div className={`rounded-xl border p-3 text-sm ${d.complete ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+          <div className={`flex items-center gap-2 font-bold ${d.complete ? "text-emerald-900" : "text-amber-900"}`}>
+            {d.complete ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+            تحديث بيانات: {d.customer}
+          </div>
+          <p className={`mt-1 text-xs ${d.complete ? "text-emerald-800" : "text-amber-800"}`}>
+            {d.complete
+              ? "البيانات مكتملة — يمكن إصدار فاتورة ضريبية."
+              : `ما زال ناقصاً: ${d.missing.map(m => labels[m] ?? m).join("، ")}`}
+          </p>
+        </div>
+      );
+    } catch { return null; }
+  }
+
   if (display.startsWith("__REPORT_SAVED__")) {
     try {
       const d = JSON.parse(display.replace("__REPORT_SAVED__", "")) as { id: number; kind: string; title: string };
