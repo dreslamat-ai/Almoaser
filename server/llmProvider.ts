@@ -16,6 +16,29 @@ import { invokeLLM } from "./_core/llm";
 type InvokeParams = Parameters<typeof invokeLLM>[0];
 type InvokeResult = Awaited<ReturnType<typeof invokeLLM>>;
 
+/**
+ * رد بلا نص = فشل، لا نجاح.
+ *
+ * موديل استنتاجي قد ينفق الميزانية كلها في التفكير فيعيد content=null بحالة
+ * 200 و finish_reason="length" — قياساً على الحالة وحدها يبدو ناجحاً، فيصل
+ * للعميل ردٌّ فارغ بلا رسالة خطأ ولا تحويل لموديل آخر. رفعُ الخطأ هنا يجعل
+ * السلسلة تنتقل للموديل التالي بدل تسليم الفراغ.
+ *
+ * استدعاء الأداة يأتي بلا نص وهو نجاح: الخلط بينهما يعطّل كل عمليات النظام.
+ */
+function assertNonEmptyReply(parsed: InvokeResult, label: string): void {
+  const choice = (parsed as {
+    choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown[] }; finish_reason?: string }>;
+  }).choices?.[0];
+  if (choice?.message?.tool_calls?.length) return;
+  const content = choice?.message?.content;
+  const empty = content === null || content === undefined
+    || (typeof content === "string" && content.trim() === "");
+  if (empty) {
+    throw new Error(`${label} أعاد رداً فارغاً (finish_reason=${choice?.finish_reason ?? "?"})`);
+  }
+}
+
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 export const OPENAI_MODEL = "gpt-4.1";
 
@@ -90,7 +113,9 @@ const invokeOpenAI = async (
       `OpenAI invoke failed: ${response.status} ${response.statusText} - ${errorText.slice(0, 300)}`
     );
   }
-  return (await response.json()) as InvokeResult;
+  const parsed = (await response.json()) as InvokeResult;
+  assertNonEmptyReply(parsed, "OpenAI");
+  return parsed;
 };
 
 /** استدعاء OpenRouter بموديل محدد. يرمي خطأً عند أي فشل. */
@@ -113,7 +138,9 @@ const invokeOpenRouterModel = async (
       `OpenRouter invoke failed (${model}): ${response.status} ${response.statusText} - ${errorText.slice(0, 300)}`
     );
   }
-  return (await response.json()) as InvokeResult;
+  const parsed = (await response.json()) as InvokeResult;
+  assertNonEmptyReply(parsed, `OpenRouter (${model})`);
+  return parsed;
 };
 
 /** يجرّب موديلات OpenRouter بالترتيب حتى ينجح واحد منها. */

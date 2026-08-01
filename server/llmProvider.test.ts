@@ -104,3 +104,55 @@ describe("llmProvider", () => {
     expect(payload).not.toHaveProperty("reasoning");
   });
 });
+
+// qwen3.5 استنتاجي: على "2+2" أنفق 672 توكن تفكير وأعاد content=null بحالة 200
+describe("الرد الفارغ من موديل استنتاجي", () => {
+  const originalRouterKey = process.env.OPENROUTER_API_KEY;
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    if (originalRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalRouterKey;
+    globalThis.fetch = originalFetch;
+  });
+
+  const reply = (content: unknown, finish = "stop", extra: object = {}) =>
+    new Response(JSON.stringify({ choices: [{ message: { content, ...extra }, finish_reason: finish }] }), { status: 200 });
+
+  it("ينتقل للموديل التالي بدل تسليم رد فارغ للعميل", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    process.env.LLM_MODEL = "model-a,model-b";
+    let call = 0;
+    globalThis.fetch = vi.fn(async () => {
+      call++;
+      return call === 1 ? reply(null, "length") : reply("الإجابة");
+    }) as unknown as typeof fetch;
+    const { invokeAgentLLM } = await import("./llmProvider");
+    const r = await invokeAgentLLM({ messages: [{ role: "user", content: "س" }], maxTokens: 100 } as never);
+    expect(call).toBe(2);
+    expect((r as { choices: Array<{ message: { content: string } }> }).choices[0].message.content).toBe("الإجابة");
+  });
+
+  it("يعدّ النص الفارغ والمسافات فشلاً كما يعدّ null", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    process.env.LLM_MODEL = "model-a,model-b";
+    let call = 0;
+    globalThis.fetch = vi.fn(async () => (++call === 1 ? reply("   ") : reply("تمام"))) as unknown as typeof fetch;
+    const { invokeAgentLLM } = await import("./llmProvider");
+    await invokeAgentLLM({ messages: [{ role: "user", content: "س" }], maxTokens: 100 } as never);
+    expect(call).toBe(2);
+  });
+
+  // استدعاء أداة يأتي بلا نص وهو نجاح لا فشل — الخلط هنا يعطّل كل عمليات النظام
+  it("لا يعدّ استدعاء أداة رداً فارغاً", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    process.env.LLM_MODEL = "model-a,model-b";
+    let call = 0;
+    globalThis.fetch = vi.fn(async () => {
+      call++;
+      return reply(null, "tool_calls", { tool_calls: [{ id: "t1", function: { name: "get_invoices", arguments: "{}" } }] });
+    }) as unknown as typeof fetch;
+    const { invokeAgentLLM } = await import("./llmProvider");
+    await invokeAgentLLM({ messages: [{ role: "user", content: "س" }], maxTokens: 100 } as never);
+    expect(call).toBe(1);
+  });
+});
