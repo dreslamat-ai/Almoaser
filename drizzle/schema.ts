@@ -92,6 +92,11 @@ export const subscriptions = mysqlTable("subscriptions", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull().references(() => users.id),
   planId: int("planId").notNull().references(() => plans.id),
+  // السعر المتفق عليه وقت الاشتراك — التجديد يُحاسَب عليه لا على جدول اليوم.
+  // بدونه يُعاد تسعير مشترك قائم لمجرّد أنه سافر أو تغيّر عنوانه.
+  priceAtPurchase: decimal("priceAtPurchase", { precision: 10, scale: 2 }),
+  currencyAtPurchase: varchar("currencyAtPurchase", { length: 3 }),
+  marketAtPurchase: varchar("marketAtPurchase", { length: 2 }),
   status: mysqlEnum("status", ["active", "inactive", "cancelled", "trial"]).default("trial").notNull(),
   startDate: timestamp("startDate").defaultNow().notNull(),
   endDate: timestamp("endDate"),
@@ -295,6 +300,23 @@ export const salesLeads = mysqlTable("sales_leads", {
 });
 
 export type SalesLead = typeof salesLeads.$inferSelect;
+
+// ─── أسعار الباقات حسب السوق ─────────────────────────────────────────────────
+// السعر بيانات لا معادلة: فتح سوق صفٌّ يُضاف لا إصدار يُنشر. والنسبة الضريبية
+// مع الصف كي يكون تغييرها لسوق ما تعديلَ بيانات.
+export const planPrices = mysqlTable("plan_prices", {
+  id: int("id").autoincrement().primaryKey(),
+  planId: int("planId").notNull().references(() => plans.id),
+  market: varchar("market", { length: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  vatRatePct: decimal("vatRatePct", { precision: 5, scale: 2 }).default("15.00").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlanPrice = typeof planPrices.$inferSelect;
 
 // ─── كتالوج التطبيقات التي بناها الوكيل ──────────────────────────────────────
 // شغل الوكيل أصل يُعاد بيعه لا مهمة تنتهي: تطبيق بُني لعميل يصلح لغيره. ولأن

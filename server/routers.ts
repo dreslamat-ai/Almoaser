@@ -589,7 +589,32 @@ export const appRouter = router({
   }),
 
   plans: router({
-    list: publicProcedure.query(() => getActivePlans()),
+    // السعر يُقرأ من سوق الزائر لا من عمود واحد. اليوم كل الأسواق تسقط على
+    // السعودية لأنها الوحيدة المسعّرة، فالسلوك لم يتغيّر — والهيكل جاهز لأن
+    // يفتح سوقاً جديداً بصفٍّ في جدول لا بإصدار جديد.
+    list: publicProcedure.query(async ({ ctx }) => {
+      const [{ marketFromRequest, pricesForMarket }, list] = await Promise.all([
+        import("./marketPricing"),
+        getActivePlans(),
+      ]);
+      const market = marketFromRequest(ctx.req as never, ctx.user?.phone ?? null);
+      const prices = await pricesForMarket(market);
+      return list.map(p => {
+        const pr = prices.get(p.id);
+        return pr ? { ...p, price: String(pr.price), currency: pr.currency, market: pr.market, vatRatePct: pr.vatRatePct } : p;
+      });
+    }),
+
+    /** الأسواق المتاحة لمبدّل العملة — المبدّل يبقى ظاهراً لأن الاستنتاج يخطئ */
+    markets: publicProcedure.query(async ({ ctx }) => {
+      const { activeMarkets, marketFromRequest } = await import("./marketPricing");
+      const { MARKETS } = await import("../shared/pricing");
+      const codes = await activeMarkets();
+      return {
+        current: marketFromRequest(ctx.req as never, ctx.user?.phone ?? null),
+        available: codes.map(c => MARKETS[c]),
+      };
+    }),
     get: publicProcedure.input(z.object({ id: z.number() })).query(({ input }) => getPlanById(input.id)),
   }),
 
