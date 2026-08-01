@@ -172,7 +172,13 @@ function Navbar() {
             </Button>
           ) : (
             <>
-              <Button variant="ghost" onClick={() => navigate("/login")} className="text-navy">تسجيل الدخول</Button>
+              {/* الشريط شفّاف فوق الهيرو الكحلي حتى أول ٤٠ بكسل تمرير، فنصٌّ
+                  كحلي هنا يعني كحلي على كحلي — تباين 1.00:1، أي زرٌّ غير مرئي
+                  تماماً في أول ما يراه الزائر. اللون يتبع حالة الشريط لا يثبت. */}
+              <Button variant="ghost" onClick={() => navigate("/login")}
+                className={scrolled ? "text-navy hover:bg-navy/5" : "text-white hover:bg-white/15"}>
+                تسجيل الدخول
+              </Button>
               <Button onClick={() => navigate("/signup")} className="bg-navy-gradient text-white hover:opacity-90">ابدأ مجاناً</Button>
             </>
           )}
