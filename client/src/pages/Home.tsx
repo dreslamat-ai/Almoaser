@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   BookOpen, Bot, CheckCircle2, ChevronDown, DollarSign, FileText,
   BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
-  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle, ShieldCheck, Lock} from "lucide-react";
+  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle, ShieldCheck, Lock, AlertCircle} from "lucide-react";
 import { planCapacityLabel } from "@shared/planDisplay";
 import { PLAN_FEATURES } from "@shared/planFeatures";
 import SalesChat from "@/components/SalesChat";
@@ -1032,6 +1032,75 @@ function WhyUsSection() {
   );
 }
 
+
+// ─── الالتزام الضريبي ─────────────────────────────────────────────────────────
+// قسم حسّاس قانونياً: ادّعاء التزام أوسع من الواقع أخطر من عدم ذكره. لذلك يذكر
+// ما يفعله النظام فعلاً — وهو منع المستند غير المستوفي قبل صدوره — ويصرّح صراحةً
+// بما لا يفعله ولا يدّعيه. الشفافية هنا ميزة بيع أمام محاسب ومراجع، لا اعتذار.
+function ComplianceSection() {
+  const enforced = [
+    "لا تُصدَر فاتورة ضريبية لمنشأة قبل اكتمال الرقم الضريبي وعنوان المشتري — وهما مما تُلزم به الفاتورة الضريبية.",
+    "لا تُنشأ فاتورة والإعداد الضريبي ناقص، فلا تخرج فاتورة بلا ضريبة دون أن ينتبه أحد.",
+    "يُفحص الرقم الضريبي السعودي شكلياً وفق قاعدة الفوترة الإلكترونية: خمسة عشر رقماً تبدأ بـ 3 وتنتهي بـ 3.",
+    "يُفرَّق بين الفاتورة المبسّطة للأفراد والفاتورة الضريبية للمنشآت، فلا تُطلب بيانات مشترٍ في غير موضعها.",
+    "الضريبة تُحتسب على المبلغ بعد الخصم لا قبله، وتُفصل عن الإيراد في الحسابات لأنها أمانة تُورَّد لا دخل.",
+  ];
+  const notClaimed = [
+    "لسنا معتمدين من هيئة الزكاة والضريبة والجمارك ولا نزعم ذلك.",
+    "لا نتحقق من تسجيل رقم ضريبي لدى الهيئة — لا توجد واجهة رسمية لذلك، وفحصنا للصيغة فقط. وأي جهة تعدك بغير هذا فراجع ما تقوله.",
+    "الربط التقني مع منصة فاتورة (المرحلة الثانية) يتم من نظام ERP الخاص بك، لا من عندنا.",
+    "المسؤولية الضريبية تبقى على المكلَّف. دورنا أن نمنع المستند الناقص قبل صدوره، لا أن نحلّ محلّ محاسبك أو مراجعك.",
+  ];
+  return (
+    <section className="py-20 bg-gray-50">
+      <div className="container">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <p className="text-sm font-semibold text-gold-ink uppercase tracking-wider mb-2">الالتزام الضريبي</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-navy">
+            نمنع المستند الناقص <span className="text-gold-ink">قبل صدوره</span>
+          </h2>
+          <p className="text-muted-foreground mt-4">
+            الفاتورة الخاطئة تُكتشف عند الفحص لا عند إصدارها. النظام يوقفها عند الإنشاء ويطلب الناقص.
+          </p>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          <div className="rounded-2xl border-2 border-emerald-200 bg-white p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldCheck className="w-6 h-6 text-emerald-600" />
+              <h3 className="font-bold text-navy">ما يفرضه النظام</h3>
+            </div>
+            <ul className="space-y-3">
+              {enforced.map((t, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm leading-7">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-1.5" aria-hidden />
+                  <span className="text-foreground">{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-2xl border-2 border-gray-200 bg-white p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="w-6 h-6 text-gray-500" />
+              <h3 className="font-bold text-navy">ما لا ندّعيه</h3>
+            </div>
+            <ul className="space-y-3">
+              {notClaimed.map((t, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm leading-7">
+                  <XCircle className="w-4 h-4 text-gray-400 shrink-0 mt-1.5" aria-hidden />
+                  <span className="text-muted-foreground">{t}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-gray-100 leading-6">
+              نكتب هذا لأن من يبيع لك انضباطاً يجب أن يكون منضبطاً في وصف نفسه أولاً.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   // الباقة المختارة من بطاقات الأسعار — تُمرَّر لفورم التواصل ليُحدَّد بها تلقائياً
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
@@ -1043,6 +1112,7 @@ export default function Home() {
       <HowItWorksSection />
       <TelegramDemoSection />
       <WhyUsSection />
+      <ComplianceSection />
       <PricingSection onSelectPlan={setSelectedPlanId} />
       <ContactSection initialPlanId={selectedPlanId} />
       <Footer />
