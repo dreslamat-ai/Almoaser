@@ -411,9 +411,11 @@ export default function Subscription() {
                     variant={isPopular ? "default" : "outline"}>
                     {switchPlanMutation.isPending
                       ? "جاري التحويل للدفع..."
+                      // ترقية/تخفيض صحيحان بين باقات المحاسبة — فهي مستويات
+                      // فعلاً. باقة الخبير وحدها مفصولة أعلاه لأنها ليست مستوى.
                       : currentPlan && monthly < Number(currentPlan.price)
                         ? "تخفيض إلى هذه الباقة"
-                        : "الانتقال إلى هذه الباقة"}
+                        : "ترقية إلى هذه الباقة"}
                   </Button>
                 ) : (
                   <Button onClick={() => createMutation.mutate({ planId: plan.id, billing })} disabled={createMutation.isPending}
