@@ -154,6 +154,45 @@ export async function deductCredits(
   return newBalance;
 }
 
+/**
+ * يردّ خصماً لم يحصل العميل على مقابله.
+ *
+ * النقاط تُخصم في أول المعالجة قبل استدعاء النموذج — وهو الترتيب الصحيح لمنع
+ * تجاوز الرصيد — لكنه يعني أن كل فشل بعدها يُحاسَب عليه العميل بلا رد. المبلغ
+ * تافه والأثر ليس كذلك: أول ما يلاحظه من يدفع هو أن يُخصم منه مقابل لا شيء.
+ *
+ * يعكس فرعَي الخصم بدقة: الحساب المفتوح لم يُنقَص رصيده فلا يُزاد، لكن حركته
+ * تُسجَّل لأن عدّاد الاستهلاك يُبنى من الحركات لا من الرصيد — ولو لم تُسجَّل
+ * لبقيت الرسالة الفاشلة محسوبة عليه في التقارير.
+ */
+export async function refundCredits(
+  userId: number,
+  cost: number,
+  note?: string,
+): Promise<void> {
+  if (cost <= 0) return;
+  const db = await getDb();
+  if (!db) return;
+  const rows = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
+  const sub = rows[0];
+  if (!sub) return;
+
+  if (sub.unlimitedCredits) {
+    await logTransaction({
+      userId, subscriptionId: sub.id, type: "adjustment",
+      amount: cost, balanceAfter: sub.creditsBalance, note: note ?? "ردّ نقاط",
+    });
+    return;
+  }
+
+  const newBalance = sub.creditsBalance + cost;
+  await db.update(subscriptions).set({ creditsBalance: newBalance }).where(eq(subscriptions.id, sub.id));
+  await logTransaction({
+    userId, subscriptionId: sub.id, type: "adjustment",
+    amount: cost, balanceAfter: newBalance, note: note ?? "ردّ نقاط",
+  });
+}
+
 /** يضيف نقاطاً مشحونة (بعد نجاح الدفع) */
 export async function addTopupCredits(userId: number, credits: number, note?: string) {
   const db = await getDb();

@@ -2349,10 +2349,15 @@ export const agentRouter = router({
       const credits = await import("../credits");
       const lastUserContent = [...input.messages].reverse().find(m => m.role === "user")?.content ?? "";
       const messageCost = messageCreditCost(lastUserContent);
+      // ما خُصم فعلاً — لا ما كان يُفترض خصمه. الردّ لاحقاً يعتمد عليه: خصمٌ لم
+      // يتم (قاعدة بيانات متعذّرة مثلاً) لا يُردّ، وإلا منحنا رصيداً بلا سبب.
+      let chargedCredits = 0;
+      let replyDelivered = false;
       try {
         if (ctx.effectiveUserId) {
           await credits.deductCredits(ctx.effectiveUserId, messageCost, "message",
             messageCost > 1 ? "رسالة طويلة للمحاسب الذكي" : "رسالة للمحاسب الذكي");
+          chargedCredits = messageCost;
         }
       } catch (e) {
         if (e instanceof credits.InsufficientCreditsError) {
@@ -2362,6 +2367,18 @@ export const agentRouter = router({
         // إن تعذّر الاتصال بقاعدة البيانات لا نمنع المحادثة
         console.warn("[agent.chat] credits deduction skipped:", e instanceof Error ? e.message : e);
       }
+      // انقطاع المتصفح لا يرمي استثناءً على الخادم: الطلب يكتمل هنا بينما لا
+      // يصل شيء للعميل. الاستماع لإغلاق الاستجابة قبل انتهاء الكتابة هو الطريق
+      // الوحيد لملاحظته — وهو الحال الذي رأيناه فعلاً كرسالة "Load failed".
+      const httpRes = ctx.res;
+      if (httpRes && ctx.effectiveUserId) {
+        httpRes.once("close", () => {
+          if (replyDelivered || httpRes.writableFinished || chargedCredits <= 0) return;
+          void credits.refundCredits(ctx.effectiveUserId!, chargedCredits,
+            "ردّ نقاط: انقطع الاتصال قبل وصول الرد").catch(() => {});
+        });
+      }
+
       // ─── حفظ سجل المحادثة: إنشاء محادثة جديدة إن لم تُمرَّر، وحفظ رسالة المستخدم ───
       const dbHelpers = await import("../db");
       const lastUserMsg = [...input.messages].reverse().find(m => m.role === "user");
@@ -2542,7 +2559,8 @@ ${modeRulesFor(agentMode)}`;
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
 
       // تشغيل كامل حلقة الوكيل ضمن سياق اتصال ERPNext الخاص بالمستخدم الحالي
-      return runWithErpConfig(ctx.user.id, async () => {
+      try {
+        return await runWithErpConfig(ctx.user.id, async () => {
       // ─── تضييق إضافي بصلاحيات المستخدم في نظامه هو ───────────────────────
       // مصدر الحقيقة لما يستطيعه العميل هو ERP الخاص به، لا جدولنا. الفشل هنا
       // يعود للتضييق السابق ولا يحجب شيئاً: النظام نفسه هو الحاجز عند التنفيذ.
@@ -2675,7 +2693,15 @@ ${modeRulesFor(agentMode)}`;
         } catch { /* non-blocking */ }
       }
       return { reply: "تم تنفيذ الطلب.", toolResults, quickReplies: [] as string[], conversationId };
-      });
+        }).then(r => { replyDelivered = true; return r; });
+      } catch (e) {
+        // فشل بعد الخصم = خدمة لم تُقدَّم. الردّ لا يبتلع الخطأ، يعيده كما هو.
+        if (chargedCredits > 0 && ctx.effectiveUserId) {
+          await credits.refundCredits(ctx.effectiveUserId, chargedCredits,
+            "ردّ نقاط: تعذّر إنتاج الرد").catch(() => {});
+        }
+        throw e;
+      }
     }),
 
   // ─── سجل المحادثات ────────────────────────────────────────────────────────
