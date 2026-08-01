@@ -2,7 +2,7 @@
 // ومن webhook الخاص بـ MyFatoorah (إشعار خادم-لخادم) لضمان عدم ضياع أي دفعة
 // حتى لو أغلق العميل المتصفح قبل رجوعه لصفحة الكولباك ───────────────────────────
 import { eq } from "drizzle-orm";
-import { getDb, getPlanById, getSubscriptionByUserId, updateSubscription } from "./db";
+import { getDb, getPlanById, getSubscriptionByUserId, getExpertSubscription, createSubscription, updateSubscription } from "./db";
 import { payments } from "../drizzle/schema";
 import type { PaymentStatusResult } from "./myfatoorah";
 import { addTopupCredits } from "./credits";
@@ -42,18 +42,30 @@ export async function finalizePaymentByReference(status: PaymentStatusResult): P
   if (payment.purpose === "subscription" && payment.planId) {
     const plan = await getPlanById(payment.planId);
     planName = plan?.nameAr ?? null;
-    const sub = await getSubscriptionByUserId(payment.userId);
     const periodMs = payment.billing === "yearly" ? 365 * 24 * 3600 * 1000 : 30 * 24 * 3600 * 1000;
-    if (sub) {
-      const newEnd = new Date(Date.now() + periodMs);
-      periodEnd = newEnd.toISOString().slice(0, 10);
-      await updateSubscription(sub.id, {
-        planId: payment.planId,
-        status: "active",
-        billing: payment.billing ?? "monthly",
-        endDate: newEnd,
-        ...(plan ? { creditsBalance: plan.monthlyCredits, creditsCycleStart: new Date() } : {}),
-      });
+    const newEnd = new Date(Date.now() + periodMs);
+    periodEnd = newEnd.toISOString().slice(0, 10);
+
+    // باقة الخبير خدمة موازية: تُضاف كاشتراك ثانٍ ولا تُكتب فوق الاشتراك
+    // المحاسبي — الكتابة فوقه كانت ستُسقط فوترة العميل مقابل خدمة تقييم.
+    const isExpertPlan = plan?.mode === "expert";
+    const target = isExpertPlan
+      ? await getExpertSubscription(payment.userId)
+      : await getSubscriptionByUserId(payment.userId);
+
+    const values = {
+      planId: payment.planId,
+      status: "active" as const,
+      billing: payment.billing ?? "monthly",
+      endDate: newEnd,
+      ...(plan ? { creditsBalance: plan.monthlyCredits, creditsCycleStart: new Date() } : {}),
+    };
+
+    if (target) {
+      await updateSubscription(target.id, values);
+    } else {
+      // أول اشتراك من هذا النوع — يُنشأ بدل أن تضيع الدفعة بلا أثر
+      await createSubscription({ userId: payment.userId, ...values });
     }
   } else if (payment.purpose === "topup" && payment.credits) {
     await addTopupCredits(payment.userId, payment.credits, `شحن ${payment.credits} نقطة عبر MyFatoorah`);

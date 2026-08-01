@@ -18,7 +18,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { trimHistory, messageCreditCost, MAX_MESSAGE_CHARS, MAX_MESSAGES } from "../../shared/chatLimits";
 import { inspectCustomerCompleteness, describeMissing, type CustomerDoc, type AddressDoc } from "../customerCompleteness";
-import { identityLineFor, modeRulesFor, toolsForMode, type AgentMode } from "../agentModes";
+import { identityLineFor, modeRulesFor, toolsForSubscriptions, resolveCapabilities, type AgentMode } from "../agentModes";
 
 // ─── صلاحيات المستخدمين الفرعيين على أدوات الوكيل ─────────────────────────────
 // null = القراءة/الاستخدام العام متاحة لكل المستخدمين (مالك أو فرعي) بلا قيد
@@ -2385,15 +2385,24 @@ export const agentRouter = router({
       // ─── رؤى "المدير المالي" (تحليل استراتيجي وتوصيات تطوعية) حصرية للباقة المؤسسية (hasDirectSupport) ───
       let hasCfoSkill = false;
       let agentMode: AgentMode = "accounting";
+      let hasAccounting = true;
+      let hasExpert = false;
       try {
         if (ctx.effectiveUserId) {
           const sub = await dbHelpers.getSubscriptionByUserId(ctx.effectiveUserId);
           if (sub) {
             const plan = await dbHelpers.getPlanById(sub.planId);
             hasCfoSkill = plan?.hasDirectSupport ?? false;
-            // الوضع يُشتق من الباقة. الفشل يُبقيه "accounting" — وهو الوضع
-            // الأوسع صلاحية، فلا يُحرم عميل من أدواته بسبب تعذّر قراءة باقته.
-            if (plan?.mode === "expert") agentMode = "expert";
+            hasAccounting = plan?.mode !== "expert";
+          }
+          // الخبير خدمة موازية: من يحملها مع باقة محاسبية يأخذ الاثنين معاً
+          const expertSub = await dbHelpers.getExpertSubscription(ctx.effectiveUserId);
+          hasExpert = Boolean(expertSub);
+          if (hasExpert || !hasAccounting) {
+            // الوضع يُشتق من الاشتراكات. الفشل يُبقيه "accounting" — الأوسع
+            // صلاحية — فلا يُحرم عميل من أدواته بسبب تعذّر قراءة باقته.
+            const caps = resolveCapabilities({ hasAccounting, hasExpert });
+            agentMode = caps.mode;
           }
         }
       } catch (e) {
@@ -2528,7 +2537,7 @@ ${modeRulesFor(agentMode)}`;
       // المنصة ولا بصلاحياته في نظامه هو. تُحسب داخل سياق ERP أدناه.
       // الترتيب مقصود: وضع الباقة أولاً (حدّ المنتج)، ثم صلاحيات المنصة، ثم
       // صلاحيات نظام العميل. كل طبقة تضيّق ولا توسّع.
-      let availableTools = toolsForUser(toolsForMode(TOOLS, agentMode), ctx.user);
+      let availableTools = toolsForUser(toolsForSubscriptions(TOOLS, { hasAccounting, hasExpert }), ctx.user);
 
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
 

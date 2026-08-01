@@ -111,11 +111,50 @@ export async function getPlanById(id: number) {
 }
 
 // ─── Subscriptions ────────────────────────────────────────────────────────────
+/**
+ * الاشتراك **المحاسبي** للمستخدم.
+ *
+ * صار المستخدم يحمل اشتراكين: محاسبي وخبير (خدمة موازية). هذه الدالة يستدعيها
+ * تسعة عشر موضعاً تعني كلها الاشتراك المحاسبي — النقاط والفوترة والباقة. فبقي
+ * معناها كما هو، لكن الاختيار صار صريحاً بالانضمام إلى الباقة وتفضيل وضع
+ * accounting: مع صفّين، كان limit(1) بلا ترتيب يعيد أحدهما عشوائياً.
+ */
 export async function getSubscriptionByUserId(userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
-  return result[0];
+  const rows = await db
+    .select({ sub: subscriptions, mode: plans.mode })
+    .from(subscriptions)
+    .innerJoin(plans, eq(subscriptions.planId, plans.id))
+    .where(eq(subscriptions.userId, userId));
+  const accounting = rows.find(r => r.mode !== "expert");
+  // من لا يملك إلا اشتراك خبير يظل له اشتراك واحد — لا نُرجع undefined فتنكسر
+  // شاشات تفترض وجوده
+  return (accounting ?? rows[0])?.sub;
+}
+
+/** اشتراك باقة الخبير إن وُجد — خدمة موازية لا تحلّ محلّ المحاسبي */
+export async function getExpertSubscription(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select({ sub: subscriptions })
+    .from(subscriptions)
+    .innerJoin(plans, eq(subscriptions.planId, plans.id))
+    .where(and(eq(subscriptions.userId, userId), eq(plans.mode, "expert")))
+    .limit(1);
+  return rows[0]?.sub;
+}
+
+/** كل اشتراكات المستخدم مع أوضاعها — لعرضها وللقرارات التي تحتاجها مجتمعة */
+export async function getAllSubscriptionsForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ sub: subscriptions, plan: plans })
+    .from(subscriptions)
+    .innerJoin(plans, eq(subscriptions.planId, plans.id))
+    .where(eq(subscriptions.userId, userId));
 }
 
 export async function createSubscription(data: {

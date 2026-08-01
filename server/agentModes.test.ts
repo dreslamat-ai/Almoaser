@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   toolsForMode, modeRulesFor, identityLineFor,
   EXPERT_BLOCKED_TOOLS, GOVERNANCE_RULES, EXPERT_RULES,
+  resolveCapabilities, toolsForSubscriptions,
 } from "./agentModes";
 
 const tool = (name: string) => ({ type: "function" as const, function: { name } });
@@ -133,5 +134,47 @@ describe("identityLineFor", () => {
 
   it("شخصية الخبير لا تتأثر بمهارة المدير المالي", () => {
     expect(identityLineFor("expert", true)).toBe(identityLineFor("expert", false));
+  });
+});
+
+describe("resolveCapabilities — اشتراكان متوازيان", () => {
+  it("محاسبي وحده: بلا حجب", () => {
+    const r = resolveCapabilities({ hasAccounting: true, hasExpert: false });
+    expect(r.blockTransactions).toBe(false);
+    expect(r.mode).toBe("accounting");
+  });
+
+  it("خبير وحده: يُحجب إدخال الحركات", () => {
+    const r = resolveCapabilities({ hasAccounting: false, hasExpert: true });
+    expect(r.blockTransactions).toBe(true);
+    expect(r.mode).toBe("expert");
+  });
+
+  // جوهر الاشتراك المتوازي: من دفع ثمن الاثنين يأخذهما معاً
+  it("الاثنان معاً: لا يُحجب شيء", () => {
+    const r = resolveCapabilities({ hasAccounting: true, hasExpert: true });
+    expect(r.blockTransactions).toBe(false);
+  });
+
+  it("من يحمل الاثنين يحتفظ بأدوات الحركات وبأدوات الخبير", () => {
+    const all = [...ALL, tool("create_workflow"), tool("create_print_format")];
+    const names = toolsForSubscriptions(all, { hasAccounting: true, hasExpert: true }).map(t => t.function.name);
+    expect(names).toContain("create_invoice");
+    expect(names).toContain("create_journal_entry");
+    expect(names).toContain("create_workflow");
+    expect(names).toContain("create_print_format");
+  });
+
+  it("الخبير وحده لا يرى أدوات الحركات لكنه يرى أدواته", () => {
+    const all = [...ALL, tool("create_workflow")];
+    const names = toolsForSubscriptions(all, { hasAccounting: false, hasExpert: true }).map(t => t.function.name);
+    expect(names).not.toContain("create_invoice");
+    expect(names).not.toContain("create_journal_entry");
+    expect(names).toContain("create_workflow");
+    expect(names).toContain("get_invoices");
+  });
+
+  it("بلا اشتراك أصلاً: يُعامل كمحاسبي فلا يُحرم أحد بسبب تعذّر القراءة", () => {
+    expect(resolveCapabilities({ hasAccounting: false, hasExpert: false }).blockTransactions).toBe(false);
   });
 });

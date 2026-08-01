@@ -398,11 +398,12 @@ export default function Subscription() {
                      المحاسبية لا يضيف إليها. حتى يدعم النظام اشتراكين، الطلب
                      يمرّ عبر الفريق. */
                   <div className="space-y-2">
-                    <Button asChild className="w-full bg-navy text-white hover:bg-navy-dark">
-                      <a href="/#contact">أضِف باقة الخبير</a>
+                    <Button onClick={() => handleSwitchPlan(plan.id)} disabled={switchPlanMutation.isPending}
+                      className="w-full bg-navy text-white hover:bg-navy-dark">
+                      {switchPlanMutation.isPending ? "جاري التحويل للدفع..." : "أضِف باقة الخبير"}
                     </Button>
                     <p className="text-[11px] text-muted-foreground text-center leading-5">
-                      خدمة موازية تُضاف إلى باقتك الحالية ولا تحلّ محلّها — سجّل ونتواصل معك.
+                      خدمة موازية تُضاف إلى باقتك ولا تحلّ محلّها — تحتفظ بفوترتك ونقاطك كما هي.
                     </p>
                   </div>
                 ) : subscription ? (

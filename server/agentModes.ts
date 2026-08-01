@@ -90,6 +90,29 @@ export function toolsForMode<T extends { function: { name: string } }>(
   return tools.filter(t => !EXPERT_BLOCKED_TOOLS.has(t.function.name));
 }
 
+/**
+ * قدرات المستخدم حين يحمل اشتراكين. الخبير خدمة تُضاف لا تحلّ محلّ المحاسبي،
+ * فمن اشترى الاثنين يحصل على **اتحادهما**: يقيّد ويُرحّل كالمحاسب، ويقيّم
+ * ويصمّم دورات العمل كالخبير. حجب أحدهما عمّن دفع ثمنهما خطأ ظاهر.
+ */
+export function resolveCapabilities(input: { hasAccounting: boolean; hasExpert: boolean }): {
+  mode: AgentMode; blockTransactions: boolean;
+} {
+  // بلا اشتراك محاسبي، قيود الخبير هي الحاكمة — ولا تُدخل حركة محاسبية
+  if (input.hasExpert && !input.hasAccounting) return { mode: "expert", blockTransactions: true };
+  // الاثنان معاً، أو المحاسبي وحده: لا حجب
+  return { mode: input.hasExpert ? "expert" : "accounting", blockTransactions: false };
+}
+
+/** الأدوات بعد مراعاة الاشتراكين معاً */
+export function toolsForSubscriptions<T extends { function: { name: string } }>(
+  tools: T[], input: { hasAccounting: boolean; hasExpert: boolean },
+): T[] {
+  return resolveCapabilities(input).blockTransactions
+    ? tools.filter(t => !EXPERT_BLOCKED_TOOLS.has(t.function.name))
+    : tools;
+}
+
 /** الكتلة النصية التي تُضاف لبرومبت الوضع */
 export function modeRulesFor(mode: AgentMode): string {
   return mode === "expert" ? `${GOVERNANCE_RULES}\n\n${EXPERT_RULES}` : GOVERNANCE_RULES;
