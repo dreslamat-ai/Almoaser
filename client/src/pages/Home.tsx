@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   BookOpen, Bot, CheckCircle2, ChevronDown, DollarSign, FileText,
   BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
-  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle} from "lucide-react";
+  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle, ShieldCheck, Lock} from "lucide-react";
 import { planCapacityLabel } from "@shared/planDisplay";
 import { PLAN_FEATURES } from "@shared/planFeatures";
 import SalesChat from "@/components/SalesChat";
@@ -71,6 +71,60 @@ const SCENARIOS: Scenario[] = [
       { from: "agent", text: "✅ تم تسجيل الدفعة وتسوية الفاتورتين!\n\n💰 المبلغ: 12,000 ريال\n🏦 طريقة الدفع: تحويل بنكي\n📋 رقم سند القبض: RV-2026-0091\n\nرصيد شركة الأمل: 0 ريال (مسدّد بالكامل) ✓", delay: 4800 },
     ],
   },
+  // ─── سيناريوهات تُظهر ما يميّزنا فعلاً، لا ما ننفّذه فحسب ───────────────────
+  // الرفض المبرَّر أقوى دليل على الانضباط من نجاح مرتّب: العميل يرى الوكيل
+  // يمتنع حين يجب أن يمتنع.
+  {
+    id: 5,
+    label: "يرفض الناقص",
+    icon: "🛡️",
+    color: "bg-red-500",
+    messages: [
+      { from: "user",  text: "أصدر فاتورة لمؤسسة الرياض بـ 20,000 ريال", delay: 0 },
+      { from: "agent", text: "⏳ جاري فحص بيانات العميل قبل الإصدار...", delay: 900 },
+      { from: "agent", text: "⚠️ لا يمكنني إصدار فاتورة ضريبية لهذا العميل الآن.\n\nالناقص:\n• الرقم الضريبي للعميل\n• عنوان العميل (الشارع والمدينة)\n\nمتطلبات هيئة الزكاة والضريبة تُلزم بذكرهما. أرسل البيانات وأسجّلها ثم أُصدر الفاتورة.", delay: 2400 },
+      { from: "user",  text: "الرقم 310123456789003 والعنوان طريق الملك فهد، الرياض", delay: 4000 },
+      { from: "agent", text: "✅ سجّلت البيانات — صيغة الرقم سليمة.\n\n📌 للعلم: تحققي من الصيغة فقط؛ لا توجد واجهة رسمية للتحقق من تسجيله لدى الهيئة.\n\nالبيانات مكتملة الآن. أُصدر الفاتورة؟", delay: 5800 },
+    ],
+  },
+  {
+    id: 6,
+    label: "يحترم الصلاحيات",
+    icon: "🔒",
+    color: "bg-slate-600",
+    messages: [
+      { from: "user",  text: "سجّل قيد يومية: مدين مصروفات 5,000 دائن الصندوق 5,000", delay: 0 },
+      { from: "agent", text: "⏳ جاري التحقق من صلاحياتك في نظامكم...", delay: 800 },
+      { from: "agent", text: "🔒 حسابك لا يملك صلاحية إنشاء القيود اليومية، فلا أستطيع تنفيذ ذلك.\n\nصلاحياتك تشمل: الفواتير، سندات القبض، والتقارير.\n\nراجع مدير النظام عندكم لمنحك الصلاحية.", delay: 2200 },
+      { from: "user",  text: "طيب اعرض لي فواتير هذا الشهر", delay: 3600 },
+      { from: "agent", text: "✅ هذه ضمن صلاحياتك.\n\n📄 12 فاتورة بإجمالي 84,300 ريال\n💰 المحصّل: 61,200 ريال\n⏳ المستحق: 23,100 ريال", delay: 4900 },
+    ],
+  },
+  {
+    id: 7,
+    label: "تقييم نظامك",
+    icon: "🔍",
+    color: "bg-indigo-600",
+    messages: [
+      { from: "user",  text: "قيّم نظامي وقل لي إيه الناقص قبل ما أستلمه من المورّد", delay: 0 },
+      { from: "agent", text: "⏳ جاري فحص الإعدادات والحسابات ودورات العمل...", delay: 1000 },
+      { from: "agent", text: "📋 تقرير التقييم — جاهز\n\n✅ فُحص وثبت\n• شجرة الحسابات مكتملة (128 حساب)\n• قالب الضريبة 15% مضبوط\n\n⚠️ نواقص\n• الرقم الضريبي للشركة غير مسجّل\n• لا توجد دورة موافقة على المشتريات\n• 34 عميلاً بلا عنوان — فواتيرهم لن تكون مستوفية\n\n❓ يحتاج قرارك\n• هل التسليم يشمل تدريب الموظفين؟ (بند تعاقدي)\n\nالتقرير محفوظ في حسابك — مسوّدة لمراجعتك لا شهادة استلام.", delay: 3000 },
+    ],
+  },
+  {
+    id: 8,
+    label: "دورة عمل ونموذج",
+    icon: "⚙️",
+    color: "bg-teal-600",
+    messages: [
+      { from: "user",  text: "عايز أي فاتورة فوق 50 ألف تعدي على المدير المالي، وعايز نموذج طباعة بشعارنا", delay: 0 },
+      { from: "agent", text: "⏳ جاري قراءة الأدوار المتاحة في نظامك...", delay: 900 },
+      { from: "agent", text: "⚙️ تصميم دورة العمل:\n\nمسودة ← بانتظار الاعتماد ← معتمدة\n• المحاسب: ينشئ ويرسل للاعتماد\n• المدير المالي: يعتمد أو يرفض\n\nوللنموذج أحتاج:\n• شعار الشركة (PNG عرض 800px+)\n• الخط: أقترح Cairo — واضح على الفواتير\n\nأوافق على التصميم وأنفّذه؟", delay: 2600 },
+      { from: "user",  text: "موافق، والشعار مرفوع في النظام", delay: 4200 },
+      { from: "agent", text: "✅ أُنشئت دورة العمل وفُعّلت.\n✅ أُنشئ نموذج الطباعة بخط Cairo وشعاركم كترويسة.\n\n📌 النموذج معطّل — عاينه من نظامك وفعّله بنفسك. هو ما سيراه عملاؤك.", delay: 6000 },
+    ],
+  },
+
 ];
 
 function useInView(threshold = 0.15) {
@@ -915,6 +969,69 @@ function Footer() {
   );
 }
 
+
+// ─── ما يميّزنا ───────────────────────────────────────────────────────────────
+// تحت العرض الحيّ مباشرة: الزائر رأى الوكيل يعمل، وهنا يعرف لماذا يُؤتمن عليه.
+// كل بند هنا مبنيّ فعلاً في المنصة — لا يُضاف بند لا يقابله سلوك في الكود.
+function WhyUsSection() {
+  const points = [
+    {
+      icon: <ShieldCheck className="w-6 h-6" />,
+      title: "لا يخترع رقماً",
+      body: "لا يذكر بياناً لم يقرأه من نظامك، وينقل الأرقام كما وردت بلا إعادة حساب. وإن فشلت عملية أخبرك بنص الخطأ بدل أن يقول \"تمّت\". في المحاسبة رقم مختلَق يعني قراراً مالياً خاطئاً.",
+    },
+    {
+      icon: <Lock className="w-6 h-6" />,
+      title: "لا يتجاوز صلاحياتك",
+      body: "يقرأ صلاحيات المستخدم من نظام ERP نفسه، ولا يعرض عليه إلا ما يملكه فعلاً هناك. من لا يملك إنشاء قيد يومية في نظامه لا يستطيع ذلك عبرنا — ونظامك يبقى الحاجز الأخير.",
+    },
+    {
+      icon: <CheckCircle2 className="w-6 h-6" />,
+      title: "لا يُرحّل دون إذنك",
+      body: "ينشئ المستند كمسودة، يعرضها عليك، ويطلب موافقتك الصريحة قبل الترحيل موضّحاً أنه يقيّد في الحسابات ولا يُلغى إلا بقيد عكسي.",
+    },
+    {
+      icon: <FileText className="w-6 h-6" />,
+      title: "يمنع الفاتورة غير المستوفية",
+      body: "لا يُصدر فاتورة ضريبية لمنشأة قبل اكتمال بيانات المشتري ولا بلا إعداد ضريبي سليم — يطلب الناقص ويسجّله، بدل أن تُكتشف الفاتورة ناقصة عند الفحص.",
+    },
+    {
+      icon: <Shield className="w-6 h-6" />,
+      title: "صادق في حدود تحققه",
+      body: "يتحقق من صيغة الرقم الضريبي ويقول ذلك صراحةً — ولا يدّعي أنه تحقق منه لدى هيئة الزكاة والضريبة، لأن الهيئة لا توفّر واجهة لذلك أصلاً.",
+    },
+    {
+      icon: <BookOpen className="w-6 h-6" />,
+      title: "خبرة محاسبية لا واجهة محادثة",
+      body: "يعرف دورة حياة المستند والقيد المزدوج ومعايير IFRS ومتطلبات الفوترة الإلكترونية السعودية — ويتعامل مع ERPNext وOdoo معاً.",
+    },
+  ];
+  return (
+    <section className="py-20 bg-white">
+      <div className="container">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <p className="text-sm font-semibold text-gold-ink uppercase tracking-wider mb-2">لماذا نحن</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-navy">
+            الانضباط قبل <span className="text-gold-ink">الذكاء</span>
+          </h2>
+          <p className="text-muted-foreground mt-4">
+            أدوات كثيرة تُجيب بثقة حتى حين تكون مخطئة. في حساباتك، الامتناع في محلّه أثمن من إجابة سريعة.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {points.map((p, i) => (
+            <div key={i} className="rounded-2xl border border-border bg-gray-50/60 p-6 hover:border-gold/40 transition-colors">
+              <div className="w-11 h-11 rounded-xl bg-navy text-gold flex items-center justify-center mb-4">{p.icon}</div>
+              <h3 className="font-bold text-navy mb-2">{p.title}</h3>
+              <p className="text-sm text-muted-foreground leading-7">{p.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   // الباقة المختارة من بطاقات الأسعار — تُمرَّر لفورم التواصل ليُحدَّد بها تلقائياً
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
@@ -925,6 +1042,7 @@ export default function Home() {
       <ServicesSection />
       <HowItWorksSection />
       <TelegramDemoSection />
+      <WhyUsSection />
       <PricingSection onSelectPlan={setSelectedPlanId} />
       <ContactSection initialPlanId={selectedPlanId} />
       <Footer />
