@@ -27,6 +27,33 @@ NEW="$RELEASES/$STAMP"
 echo "▶ فحص الأنواع"
 npx tsc --noEmit || { echo "✗ فحص الأنواع فشل — أُلغي النشر ولم يتغيّر الإصدار الحيّ"; exit 1; }
 
+# ─── بوابة الاختبارات ─────────────────────────────────────────────────────────
+# فحص الأنواع يمسك الأخطاء الشكلية وحدها. سلوك خاطئ يمرّ منه سليماً، ولهذا
+# تُشغَّل الاختبارات قبل النشر لا بعده.
+#
+# **الاستثناء الوحيد** erpnext.test.ts: يتصل بخادم ERPNext حيّ، فيفشل حين يكون
+# الخادم مطفأً أو الشبكة محجوبة — أي لأسباب لا علاقة لها بالكود المنشور. يُشغَّل
+# يدوياً: npx vitest run server/erpnext.test.ts
+#
+# الحد الأدنى للعدد يمنع الثغرة الصامتة: لو كسر خطأٌ في الإعداد جمعَ الملفات
+# لمرّت البوابة على صفر اختبار وهي "ناجحة". العدد يرتفع مع نمو المشروع؛ إن
+# انخفض فقد اختفت اختبارات ويجب معرفة السبب لا خفض الرقم.
+MIN_TESTS=300
+echo "▶ الاختبارات"
+TEST_LOG=$(mktemp)
+if ! npx vitest run --exclude 'server/erpnext.test.ts' --reporter=dot > "$TEST_LOG" 2>&1; then
+  tail -30 "$TEST_LOG"
+  echo "✗ الاختبارات فشلت — أُلغي النشر ولم يتغيّر الإصدار الحيّ"
+  rm -f "$TEST_LOG"; exit 1
+fi
+PASSED=$(grep -oE 'Tests +[0-9]+ passed' "$TEST_LOG" | grep -oE '[0-9]+' | head -1)
+rm -f "$TEST_LOG"
+if [ -z "$PASSED" ] || [ "$PASSED" -lt "$MIN_TESTS" ]; then
+  echo "✗ نجح $PASSED اختباراً فقط والمتوقع $MIN_TESTS على الأقل — يُرجَّح أن ملفات لم تُجمَع. أُلغي النشر"
+  exit 1
+fi
+echo "  ✓ $PASSED اختباراً"
+
 echo "▶ البناء إلى $NEW"
 mkdir -p "$RELEASES"
 SERVER_BEFORE=$(sha256sum "$ROOT/dist/index.js" 2>/dev/null | cut -d' ' -f1 || true)

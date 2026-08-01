@@ -1223,6 +1223,23 @@ const DOC_TYPE_LABEL: Record<string, string> = {
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+// رسالة الفشل بلغة المستخدم.
+//
+// المتصفح يصف انقطاع الشبكة بنص إنجليزي من صنعه هو ("Load failed" في سفاري،
+// "Failed to fetch" في كروم)، وكنّا نطبعه كما هو داخل واجهة عربية — فيقرأ
+// العميل عطلاً في اتصاله كأنه خلل في النظام. النصوص هذه ليست رسائل موجَّهة
+// لأحد، لذا تُترجم إلى سبب مفهوم بدل عرضها.
+function humanChatError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "";
+  const isNetwork = /load failed|failed to fetch|networkerror|network request failed|the internet connection appears to be offline/i.test(raw);
+  if (isNetwork || !raw) {
+    return navigator.onLine === false
+      ? "لا يوجد اتصال بالإنترنت — تحقّق من الشبكة ثم أعد إرسال رسالتك."
+      : "انقطع الاتصال قبل أن يكتمل الرد. رسالتك لم تُحفظ ولم تُخصم منك نقاط — أعد إرسالها من فضلك.";
+  }
+  return raw;
+}
+
 export default function AgentChat() {
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1391,7 +1408,7 @@ export default function AgentChat() {
       } else {
         setMessages(prev => [...prev, {
           role: "assistant",
-          content: `⚠️ حدث خطأ: ${err instanceof Error ? err.message : "تعذّر الاتصال بالمحاسب الذكي"}`,
+          content: `⚠️ ${humanChatError(err)}`,
           ts: Date.now(),
         }]);
       }

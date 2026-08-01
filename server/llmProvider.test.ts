@@ -17,14 +17,21 @@ const baseParams = {
 
 describe("llmProvider", () => {
   const originalKey = process.env.OPENAI_API_KEY;
+  const originalRouterKey = process.env.OPENROUTER_API_KEY;
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // هذه الاختبارات تصف سلوك مسار OpenAI، وinvokeAgentLLM يجرّب OpenRouter أولاً.
+    // كانت تمرّ سابقاً لأن المفتاح غائب من البيئة صدفةً لا قصداً — فلمّا صار
+    // .env يُحمَّل انقلبت إلى فشل. الشرط يُفرض هنا صراحةً بدل الاتكال على الغياب.
+    delete process.env.OPENROUTER_API_KEY;
   });
 
   afterEach(() => {
     process.env.OPENAI_API_KEY = originalKey;
+    if (originalRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalRouterKey;
     globalThis.fetch = originalFetch;
   });
 

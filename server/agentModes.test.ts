@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   toolsForMode, modeRulesFor, identityLineFor,
-  EXPERT_BLOCKED_TOOLS, GOVERNANCE_RULES, EXPERT_RULES,
+  EXPERT_BLOCKED_TOOLS, GOVERNANCE_RULES, EXPERT_RULES, SCOPE_RULES,
   resolveCapabilities, toolsForSubscriptions,
 } from "./agentModes";
 
@@ -176,5 +176,36 @@ describe("resolveCapabilities — اشتراكان متوازيان", () => {
 
   it("بلا اشتراك أصلاً: يُعامل كمحاسبي فلا يُحرم أحد بسبب تعذّر القراءة", () => {
     expect(resolveCapabilities({ hasAccounting: false, hasExpert: false }).blockTransactions).toBe(false);
+  });
+});
+
+// حادثتان حقيقيتان: شرح "المكرونة بالصلصة" كصنف، وروى نكتة حين طُلبت
+describe("SCOPE_RULES — حدّ الموضوع واللغة", () => {
+  it("يسري على وضع المحاسبة ووضع الخبير معاً", () => {
+    expect(modeRulesFor("accounting")).toContain(SCOPE_RULES);
+    expect(modeRulesFor("expert")).toContain(SCOPE_RULES);
+  });
+
+  it("يسمّي ما خرج عن النطاق فعلاً لا فئات مجرّدة", () => {
+    for (const t of ["النكت", "الطبخ", "الطب", "الرياضة"]) expect(SCOPE_RULES).toContain(t);
+  });
+
+  // المزلق الذي وقع فيه: أسقط سؤال الطعام على "صنف في النظام" ليبرّر الإجابة
+  it("يمنع إسقاط سؤال خارجي على المحاسبة كحيلة للإجابة", () => {
+    expect(SCOPE_RULES).toContain("ولا تُسقِط السؤال على المحاسبة");
+  });
+
+  // القاعدتان تبدوان متناقضتين للموديل ما لم يُفصل بينهما صراحةً
+  it("يفصل رفض الموضوع عن قاعدة عدم الرفض الاستباقي للأدوات", () => {
+    expect(SCOPE_RULES).toContain("الصلاحيات والأدوات");
+  });
+
+  it("يمنع تسرّب لغة ثالثة داخل النص العربي", () => {
+    expect(SCOPE_RULES).toContain("لا تُدخل أي حرف من لغة ثالثة");
+  });
+
+  // الحوكمة قائمة بذاتها: النطاق يُضاف إليها ولا يزيحها
+  it("لا يزيح قواعد الحوكمة", () => {
+    expect(modeRulesFor("accounting")).toContain(GOVERNANCE_RULES);
   });
 });
