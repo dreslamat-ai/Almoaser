@@ -75,6 +75,15 @@ describe("toolsForMode — وضع الخبير", () => {
     expect(names).toContain("create_workflow");
   });
 
+  // أدوات البناء تبدأ بـ create_ لكنها إعداد وتخصيص لا حركة محاسبية — وهي
+  // جوهر ما تبيعه باقة الخبير. لا تُحجب بحجة البادئة.
+  it("يُبقي أدوات التخصيص: الحقول ونماذج الطباعة", () => {
+    const withBuild = [...ALL, tool("create_custom_field"), tool("create_print_format")];
+    const names = toolsForMode(withBuild, "expert").map(t => t.function.name);
+    expect(names).toContain("create_custom_field");
+    expect(names).toContain("create_print_format");
+  });
+
   it("يبقى للخبير عدد معتبر من الأدوات", () => {
     const kept = toolsForMode(ALL, "expert");
     expect(kept.length).toBeGreaterThan(10);

@@ -29,6 +29,8 @@ const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = {
   create_customer: "createInvoices", create_item: "createInvoices", create_supplier: "createInvoices",
   update_customer: "createInvoices",
   request_custom_app: null,
+  create_custom_field: "manageErpSettings",
+  create_print_format: "manageErpSettings",
   get_sales_report: "viewInvoices",
   get_purchase_invoices: "viewInvoices", create_purchase_invoice: "createInvoices",
   get_payments: "viewInvoices", create_payment_entry: "managePayments",
@@ -594,6 +596,47 @@ const TOOLS = [
           document_name: { type: "string", description: "رقم المستند مثل ACC-SINV-2026-00001 أو ACC-PAY-2026-00001" },
         },
         required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_custom_field",
+      description: "إضافة حقل مخصص إلى نوع مستند في نظام العميل (مثل حقل 'رقم أمر الشراء' على فاتورة المبيعات). إعداد لا حركة محاسبية. **لا تستدعِها قبل عرض التفاصيل على العميل وأخذ موافقته** — ترفض بلا confirmed: true",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", description: "نوع المستند مثل Sales Invoice" },
+          label: { type: "string", description: "التسمية الظاهرة للمستخدم" },
+          fieldname: { type: "string", description: "الاسم البرمجي بحروف إنجليزية صغيرة وشرطات سفلية" },
+          fieldtype: { type: "string", enum: ["Data", "Int", "Float", "Currency", "Date", "Datetime", "Select", "Check", "Small Text", "Text", "Link"], description: "نوع الحقل" },
+          options: { type: "string", description: "لـ Select: الخيارات مفصولة بأسطر. لـ Link: اسم الدوكتايب المرتبط" },
+          insert_after: { type: "string", description: "اسم الحقل الذي يظهر بعده" },
+          reqd: { type: "boolean", description: "هل الحقل إلزامي" },
+          confirmed: { type: "boolean", description: "true فقط بعد موافقة العميل الصريحة" },
+        },
+        required: ["doctype", "label", "fieldname", "fieldtype", "confirmed"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_print_format",
+      description: "إنشاء نموذج طباعة مخصص لنوع مستند بصيغة HTML/Jinja. **لا تستدعِها قبل عرض التصميم على العميل وأخذ موافقته** — ترفض بلا confirmed: true. النموذج يُنشأ غير مفعّل افتراضياً حتى يعتمده العميل",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", description: "نوع المستند مثل Sales Invoice" },
+          name: { type: "string", description: "اسم النموذج" },
+          html: { type: "string", description: "قالب Jinja/HTML كامل. استخدم doc.field للوصول للحقول" },
+          css: { type: "string", description: "تنسيق CSS اختياري" },
+          confirmed: { type: "boolean", description: "true فقط بعد موافقة العميل الصريحة" },
+        },
+        required: ["doctype", "name", "html", "confirmed"],
         additionalProperties: false,
       },
     },
@@ -1788,6 +1831,69 @@ async function executeTool(name: string, args: Record<string, unknown>, toolCtx?
         display: `__DOC_DELETED__${JSON.stringify({ doctype, name: docName, cancelledFirst: wasCancelled })}`,
       };
     }
+    case "create_custom_field": {
+      if (!args.confirmed) {
+        return { result: { ok: false, needs_confirmation: true,
+          message: "اعرض على العميل: نوع المستند، التسمية، نوع الحقل، وهل هو إلزامي — واحصل على موافقته ثم أعد الاستدعاء بـ confirmed: true" }, display: "" };
+      }
+      const doctype = String(args.doctype ?? "").trim();
+      const fieldname = String(args.fieldname ?? "").trim().toLowerCase();
+      const label = String(args.label ?? "").trim();
+      if (!doctype || !label) return { result: { ok: false, error: "نوع المستند والتسمية مطلوبان" }, display: "" };
+      // Frappe يشتق أسماء الأعمدة من fieldname: أي حرف خارج هذا النمط يفسد المخطط
+      if (!/^[a-z][a-z0-9_]{1,58}$/.test(fieldname)) {
+        return { result: { ok: false, error: "الاسم البرمجي يجب أن يبدأ بحرف إنجليزي صغير ويحتوي حروفاً صغيرة وأرقاماً وشرطات سفلية فقط" }, display: "" };
+      }
+      const q = (o: unknown) => encodeURIComponent(JSON.stringify(o));
+      const existing = await erpGET(`/api/resource/Custom Field?filters=${q([["dt", "=", doctype], ["fieldname", "=", fieldname]])}&fields=${q(["name"])}&limit_page_length=1`) as { data?: unknown[] };
+      if ((existing?.data ?? []).length) {
+        return { result: { ok: false, error: `الحقل ${fieldname} موجود بالفعل على ${doctype}` }, display: "" };
+      }
+      const payload: Record<string, unknown> = {
+        dt: doctype, fieldname, label, fieldtype: args.fieldtype ?? "Data",
+        reqd: args.reqd ? 1 : 0,
+      };
+      if (args.options) payload.options = args.options;
+      if (args.insert_after) payload.insert_after = args.insert_after;
+      await erpPOST("/api/resource/Custom Field", payload);
+      return {
+        result: { ok: true, doctype, fieldname, label,
+          note: "أُضيف الحقل. يظهر على المستندات الجديدة والقائمة معاً — الحقول المخصصة ليست بأثر رجعي على البيانات لكنها تظهر في الواجهة فوراً" },
+        display: `__FIELD_CREATED__${JSON.stringify({ doctype, fieldname, label, fieldtype: args.fieldtype ?? "Data" })}`,
+      };
+    }
+
+    case "create_print_format": {
+      if (!args.confirmed) {
+        return { result: { ok: false, needs_confirmation: true,
+          message: "اعرض تصميم النموذج على العميل واحصل على موافقته، ثم أعد الاستدعاء بـ confirmed: true" }, display: "" };
+      }
+      const doctype = String(args.doctype ?? "").trim();
+      const name = String(args.name ?? "").trim();
+      const html = String(args.html ?? "").trim();
+      if (!doctype || !name || html.length < 20) {
+        return { result: { ok: false, error: "نوع المستند والاسم وقالب HTML مكتمل مطلوبة" }, display: "" };
+      }
+      const existing = await erpGET(`/api/resource/Print Format/${encodeURIComponent(name)}`).catch(() => null);
+      if (existing) return { result: { ok: false, error: `يوجد نموذج طباعة بالاسم ${name} — اختر اسماً آخر أو راجعه أولاً` }, display: "" };
+
+      await erpPOST("/api/resource/Print Format", {
+        name, doc_type: doctype, html,
+        ...(args.css ? { css: args.css } : {}),
+        // standard=No يجعله نموذجاً مخصصاً قابلاً للتعديل، لا جزءاً من التطبيق
+        standard: "No",
+        print_format_type: "Jinja",
+        custom_format: 1,
+        // معطّل حتى يراه العميل ويعتمده — نموذج طباعة خاطئ يظهر للعملاء الخارجيين
+        disabled: 1,
+      });
+      return {
+        result: { ok: true, name, doctype,
+          note: "أُنشئ النموذج **معطّلاً**. اطلب من العميل معاينته من نظامه ثم تفعيله بنفسه — لا تفعّله أنت. يمكنه ذلك من Print Format > " + name },
+        display: `__PRINT_FORMAT_CREATED__${JSON.stringify({ name, doctype })}`,
+      };
+    }
+
     case "request_custom_app": {
       const text = String(args.request ?? "").trim();
       if (text.length < 10) {

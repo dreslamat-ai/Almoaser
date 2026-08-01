@@ -1037,6 +1037,38 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       );
     } catch { return null; }
   }
+  if (display.startsWith("__FIELD_CREATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__FIELD_CREATED__", "")) as { doctype: string; fieldname: string; label: string; fieldtype: string };
+      return (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <div className="flex items-center gap-2 font-bold text-emerald-900">
+            <CheckCircle2 className="w-4 h-4 shrink-0" /> أُضيف حقل: {d.label}
+          </div>
+          <p className="text-emerald-800 mt-1 text-xs">
+            على <span className="font-medium">{d.doctype}</span> · النوع {d.fieldtype} · <span className="font-mono">{d.fieldname}</span>
+          </p>
+        </div>
+      );
+    } catch { return null; }
+  }
+
+  if (display.startsWith("__PRINT_FORMAT_CREATED__")) {
+    try {
+      const d = JSON.parse(display.replace("__PRINT_FORMAT_CREATED__", "")) as { name: string; doctype: string };
+      return (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+          <div className="flex items-center gap-2 font-bold text-amber-900">
+            <FileText className="w-4 h-4 shrink-0" /> أُنشئ نموذج الطباعة: {d.name}
+          </div>
+          <p className="text-amber-800 mt-1 text-xs">
+            لمستندات <span className="font-medium">{d.doctype}</span> — <span className="font-bold">معطّل حتى تعاينه وتفعّله بنفسك</span> من نظامك.
+          </p>
+        </div>
+      );
+    } catch { return null; }
+  }
+
   if (display.startsWith("__APP_REQUEST__")) {
     return (
       <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
