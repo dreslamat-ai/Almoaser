@@ -33,13 +33,30 @@ export default function SalesChat() {
   const [input, setInput] = useState("");
   const [leadId, setLeadId] = useState<number | null>(stored?.leadId ?? null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  // الفرق بين ارتفاع النافذة وارتفاع المنطقة المرئية هو الكيبورد (وأشرطة
+  // المتصفح المتحركة). أقل من 120px غالباً شريط عنوان لا كيبورد، فنتجاهله
+  // حتى لا تقفز اللوحة مع كل تمرير.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardInset(inset > 120 ? inset : 0);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
+  }, []);
 
   const chat = trpc.sales.chat.useMutation({
     onSuccess: r => { if (r.leadId) setLeadId(r.leadId); setMessages(m => [...m, { role: "assistant", content: r.reply, planId: r.planId, planName: r.planName }]); },
     onError: e => setMessages(m => [...m, { role: "assistant", content: e.message }]),
   });
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, open]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, open, keyboardInset]);
 
   useEffect(() => {
     try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open, leadId })); } catch { /* الحفظ ليس جوهرياً */ }
@@ -66,7 +83,12 @@ export default function SalesChat() {
         <button
           onClick={() => setOpen(true)}
           aria-label="تحدث مع مستشارة الحلول"
-          className="fixed bottom-5 left-5 z-40 flex items-center gap-2 rounded-full bg-navy text-white shadow-lg px-4 h-12 hover:opacity-90 transition-opacity"
+          /* الصفحة فيها أقسام بيضاء وأخرى كحلية داكنة، ولا لون حشو واحد يظهر
+             على الاثنين: الكحلي يختفي على الفوتر والأبيض يختفي على الأقسام
+             البيضاء. الحشو الذهبي يحمل التباين على الداكن (7.8:1) والحلقة
+             الكحلية تحمله على الفاتح (17.3:1)، فيبقى الحدّ واضحاً دائماً. */
+          className="fixed left-5 z-40 flex items-center gap-2 rounded-full bg-gold text-navy font-bold ring-2 ring-navy shadow-lg px-4 h-12 hover:brightness-105 transition-all"
+          style={{ bottom: `calc(1.25rem + ${keyboardInset}px)` }}
         >
           <MessageCircle className="w-5 h-5" />
           <span className="text-sm font-medium">اسأل سارة</span>
@@ -74,8 +96,14 @@ export default function SalesChat() {
       )}
 
       {open && (
-        <div className="fixed bottom-5 left-5 z-50 w-[min(92vw,22rem)] rounded-2xl border border-border bg-white shadow-2xl flex flex-col overflow-hidden"
-          style={{ maxHeight: "min(80vh, 34rem)" }}>
+        /* الكيبورد على الجوال يقلّص المنطقة المرئية لكنه لا يحرّك العناصر
+           الثابتة، فيختفي حقل الكتابة خلفه. visualViewport هو ما يعرف ارتفاعه
+           فعلاً — نرفع اللوحة بمقداره ونقلّص ارتفاعها بالتبعية. */
+        <div className="fixed left-5 z-50 w-[min(92vw,22rem)] rounded-2xl border border-border bg-white shadow-2xl flex flex-col overflow-hidden"
+          style={{
+            bottom: `calc(1.25rem + ${keyboardInset}px)`,
+            maxHeight: `min(80dvh, 34rem, calc(100dvh - ${keyboardInset}px - 3rem))`,
+          }}>
           <div className="flex items-center justify-between gap-2 bg-navy text-white px-4 py-3 shrink-0">
             <div className="min-w-0">
               <div className="font-bold text-sm">سارة — مستشارة الحلول</div>
