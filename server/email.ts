@@ -118,9 +118,13 @@ const HAIRLINE = "#e8ecf3";
 const CANVAS = "#eef1f6";
 const FONT = "'IBM Plex Sans Arabic','Segoe UI',Tahoma,Arial,sans-serif";
 
-function logoUrl(): string {
-  // شعار العلامة لا أيقونة التطبيق: الفاتورة الضريبية مستند رسمي يصل للعميل
-  // ويُحفظ لديه، وأيقونة مربّعة صغيرة تظهر عليه كأنها زرّ لا ترويسة شركة.
+// المنتج شيء والشركة شيء: الرسائل التشغيلية تأتي من "المعاصر" وهو ما يعرفه
+// العميل، أما الفاتورة الضريبية فيصدرها الكيان القانوني — Horizon Premium
+// Services — وهو من يُحاسَب عليها. فالترويسة تتبع الغرض لا الذوق.
+function productLogoUrl(): string {
+  return `${appBaseUrl()}/icons/icon-192x192.png`;
+}
+function companyLogoUrl(): string {
   return `${appBaseUrl()}/brand/horizon-logo.png`;
 }
 
@@ -149,6 +153,8 @@ export function renderEmail(opts: {
   /** شارة صغيرة أعلى العنوان، مثل "إيصال دفع" */
   badge?: string;
   tone?: EmailTone;
+  /** ترويسة الكيان القانوني — للمستندات الضريبية وحدها */
+  brand?: "product" | "company";
 }): string {
   const { heading, intro, bodyHtml, ctaLabel, ctaUrl, footerNote, badge } = opts;
   const t = TONE[opts.tone ?? "default"];
@@ -178,8 +184,13 @@ ${preheader(opts.preview ?? intro ?? heading)}
     <tr><td style="padding:22px 28px 6px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
         <td align="right" style="vertical-align:middle;">
-          <img src="${logoUrl()}" width="132" height="66" alt="Horizon"
-               style="display:inline-block;vertical-align:middle;width:132px;height:auto;border:0;" />
+          ${opts.brand === "company"
+            ? `<img src="${companyLogoUrl()}" width="132" alt="Horizon Premium Services"
+                 style="display:inline-block;vertical-align:middle;width:132px;height:auto;border:0;" />
+               <span style="display:inline-block;vertical-align:middle;padding-right:10px;font-family:${FONT};font-size:11px;letter-spacing:1.4px;color:${MUTED};">PREMIUM SERVICES</span>`
+            : `<img src="${productLogoUrl()}" width="40" height="40" alt="المعاصر"
+                 style="display:inline-block;vertical-align:middle;width:40px;height:40px;border:0;border-radius:9px;" />
+               <span style="display:inline-block;vertical-align:middle;padding-right:10px;font-family:${FONT};font-size:16px;font-weight:bold;color:${NAVY};">المعاصر</span>`}
         </td>
         <td align="left" style="vertical-align:middle;font-family:${FONT};font-size:11px;color:${MUTED};letter-spacing:.4px;">
           Almoaser AI ERP

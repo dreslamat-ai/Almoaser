@@ -198,6 +198,8 @@ export async function emailPaymentReceipt(userId: number, input: {
     to,
     subject: isTopup ? `فاتورة شراء نقاط — ${input.amount} ${currency}` : `فاتورة الاشتراك — ${input.amount} ${currency}`,
     html: renderEmail({
+      // الفاتورة الضريبية تحمل ترويسة الكيان القانوني الذي أصدرها
+      brand: sellerState.configured ? "company" : "product",
       badge: vat > 0 && sellerState.configured ? "فاتورة ضريبية مبسّطة" : "إيصال دفع",
       tone: "success",
       preview: `تم استلام ${input.amount.toLocaleString("en-US")} ${currency} بنجاح`,
