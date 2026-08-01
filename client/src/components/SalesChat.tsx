@@ -16,12 +16,12 @@ const GREETING: Msg = {
 // نريدها للجلسة لا للأبد.
 const STORE_KEY = "sales_chat_v1";
 
-function loadStored(): { messages: Msg[]; open: boolean; leadId: number | null } | null {
+function loadStored(): { messages: Msg[]; open: boolean; leadId: number | null; activePlan: { id: number; name: string | null } | null } | null {
   try {
     const raw = sessionStorage.getItem(STORE_KEY);
     if (!raw) return null;
-    const v = JSON.parse(raw) as { messages?: Msg[]; open?: boolean; leadId?: number | null };
-    return Array.isArray(v.messages) && v.messages.length ? { messages: v.messages, open: !!v.open, leadId: v.leadId ?? null } : null;
+    const v = JSON.parse(raw) as { messages?: Msg[]; open?: boolean; leadId?: number | null; activePlan?: { id: number; name: string | null } | null };
+    return Array.isArray(v.messages) && v.messages.length ? { messages: v.messages, open: !!v.open, leadId: v.leadId ?? null, activePlan: v.activePlan ?? null } : null;
   } catch { return null; }
 }
 
@@ -32,6 +32,12 @@ export default function SalesChat() {
   const [messages, setMessages] = useState<Msg[]>(stored?.messages ?? [GREETING]);
   const [input, setInput] = useState("");
   const [leadId, setLeadId] = useState<number | null>(stored?.leadId ?? null);
+  // الباقة تبقى معروفة بعد أول ترشيح: سارة لا تعيد إصدار العلامة في كل رسالة،
+  // فبدونها يختفي الزر عن آخر رسالة ويظل معلّقاً برسالة قديمة فوق — والعميل
+  // يُسأل "جاهز تبدأ؟" بلا زر أمامه.
+  const [activePlan, setActivePlan] = useState<{ id: number; name: string | null } | null>(
+    stored?.activePlan ?? null,
+  );
   const endRef = useRef<HTMLDivElement | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
 
@@ -52,15 +58,19 @@ export default function SalesChat() {
   }, []);
 
   const chat = trpc.sales.chat.useMutation({
-    onSuccess: r => { if (r.leadId) setLeadId(r.leadId); setMessages(m => [...m, { role: "assistant", content: r.reply, planId: r.planId, planName: r.planName }]); },
+    onSuccess: r => {
+      if (r.leadId) setLeadId(r.leadId);
+      if (r.planId) setActivePlan({ id: r.planId, name: r.planName ?? null });
+      setMessages(m => [...m, { role: "assistant", content: r.reply, planId: r.planId, planName: r.planName }]);
+    },
     onError: e => setMessages(m => [...m, { role: "assistant", content: e.message }]),
   });
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, open, keyboardInset]);
 
   useEffect(() => {
-    try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open, leadId })); } catch { /* الحفظ ليس جوهرياً */ }
-  }, [messages, open, leadId]);
+    try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open, leadId, activePlan })); } catch { /* الحفظ ليس جوهرياً */ }
+  }, [messages, open, leadId, activePlan]);
 
   const send = () => {
     const text = input.trim();
@@ -116,23 +126,31 @@ export default function SalesChat() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
-            {messages.map((m, i) => (
+            {messages.map((m, i) => {
+              const isLastAssistant = m.role === "assistant" && i === messages.length - 1;
+              // زر واحد فقط، تحت آخر رسالة: تركه معلّقاً برسائل قديمة يبعثر
+              // أزراراً في المحادثة ويترك آخر سؤال "جاهز تبدأ؟" بلا زر أمامه.
+              const plan = !isLastAssistant ? null
+                : m.planId != null ? { id: m.planId, name: m.planName ?? null }
+                : activePlan;
+              return (
               <div key={i} className={m.role === "user" ? "text-left" : "text-right"}>
                 <div className={`inline-block max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap leading-6 ${
                   m.role === "user" ? "bg-navy text-white" : "bg-white border border-border text-foreground"
                 }`}>{m.content}</div>
-                {m.planId != null && (
+                {plan && (
                   <div className="mt-2">
-                    <a href={`/signup?plan=${m.planId}`}
-                      onClick={() => { try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open: true, leadId })); } catch { /* لا شيء */ } }}
+                    <a href={`/signup?plan=${plan.id}`}
+                      onClick={() => { try { sessionStorage.setItem(STORE_KEY, JSON.stringify({ messages, open: true, leadId, activePlan })); } catch { /* لا شيء */ } }}
                       className="inline-flex items-center gap-2 rounded-xl bg-navy text-white font-bold text-sm px-4 h-11 shadow-sm hover:bg-navy-dark transition-colors">
-                      ابدأ التسجيل{m.planName ? ` — ${m.planName}` : ""}
+                      ابدأ التسجيل{plan.name ? ` — ${plan.name}` : ""}
                       <ArrowLeft className="w-4 h-4" />
                     </a>
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
             {chat.isPending && (
               <div className="text-right">
                 <div className="inline-flex items-center gap-2 rounded-2xl bg-white border border-border px-3 py-2 text-sm text-muted-foreground">
