@@ -31,6 +31,7 @@ const EXPECTED = [
   "get_suppliers",
   "get_workflow_options",
   "get_workflows",
+  "list_documents",
   "print_document",
   "request_custom_app",
   "save_report",

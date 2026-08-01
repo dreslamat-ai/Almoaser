@@ -30,6 +30,8 @@ import { executeTool } from "../agent/executeTool";
 import { executeOdooTool } from "../odooTools";
 import { translateErpError, getDefaultCompany, submitDoc } from "../agent/erpHelpers";
 import { resolvePrintFormatCandidates } from "../agent/printFormats";
+import { PLATFORM_TOOLS, PLATFORM_TOOL_NAMES, canUsePlatformTools, executePlatformTool } from "../agent/platformTools";
+import { outcomeOf, verifyReply, summarizeOutcomes, type ToolOutcome } from "../agent/outcomeGuard";
 
 // ─── Agent Router ─────────────────────────────────────────────────────────────
 export const agentRouter = router({
@@ -135,6 +137,11 @@ export const agentRouter = router({
 
       const identityLine = identityLineFor(agentMode, hasCfoSkill);
 
+      // أدوات المنصة لمالكها وحده: تفعيل اشتراك، منح نقاط، إنشاء كوبون، تقارير.
+      // الدور مقروء من قاعدة البيانات ضمن سياق الطلب — لا من شيء يرسله العميل.
+      // يُحسب قبل رسالة النظام لأنها تذكر هذه الأدوات وقواعد التأكيد الخاصة بها.
+      const isPlatformAdmin = canUsePlatformTools(ctx.user);
+
       const SYSTEM = `أنت "المحاسب الذكي" من المعاصر AI — خبير مالي متعدد الأدوار ومساعد ذكاء اصطناعي متخصص في نظام Almoaser AI ERP (المبني على Frappe). ${identityLine}
 
 ## هويتك المهنية
@@ -236,6 +243,17 @@ ${buildExpertSkillsSection(hasCfoSkill)}
 - **لا تتحدث عن الأزرار ولا تعد بها.** لا تقل "تفضل الأزرار" ولا "اضغط على الخيارات" — أصدِر السطر وحده والواجهة تتولّى عرضه. الكلام عن أزرار لم تُصدرها يجعل المستخدم يبحث عمّا لا وجود له.
 - لا تذكر هذا السطر أو صيغته في نص الرد أبداً — هو للواجهة فقط
 
+${isPlatformAdmin ? `
+## أدوات إدارة المنصة — لك وحدك
+لديك أدوات تخص **منصة المعاصر نفسها** لا نظام ERP: عملاؤها واشتراكاتهم وإيرادها وكوبوناتها وعملاؤها المحتملون. أسماؤها تبدأ بـplatform_.
+
+**فرّق بين النظامين في ردّك.** "الفواتير" قد تعني فواتير نظام ERP المتصل، وقد تعني اشتراكات عملاء المعاصر — إن التبس الأمر اسأل قبل أن تنفّذ. الخلط بينهما يعطي رقماً صحيحاً عن الشيء الخطأ.
+
+**قبل أي أداة تُغيّر حالة** (تفعيل اشتراك، منح نقاط، تمديد، كوبون، إيقاف حساب): اعرض ما ستفعله بالتفصيل — لمن، وكم، وأثره — واطلب تأكيداً صريحاً بأزرار، ثم نفّذ بعد الموافقة وحدها. هذه عمليات على حسابات عملاء يدفعون، وبعضها لا يُلغى بضغطة.
+
+**اقرأ قبل أن تكتب.** لا تخمّن معرّف مستخدم: استدعِ platform_users أولاً واعرض من وجدت ليؤكد أنه المقصود. تفعيل اشتراك لمعرّف خاطئ يمنح باقة لعميل ويحرم آخر.
+` : ""}
+
 ## تاريخ اليوم
 اليوم هو ${new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. استخدمه عند حساب التواريخ والفترات.
 
@@ -265,7 +283,16 @@ ${modeRulesFor(agentMode)}`;
       // صلاحيات نظام العميل. كل طبقة تضيّق ولا توسّع.
       let availableTools = toolsForUser(toolsForSubscriptions(TOOLS, { hasAccounting, hasExpert }), ctx.user);
 
+      // التوسيع صريح: TypeScript يستنتج من TOOLS نوعاً حرفياً يعدّد خصائص كل
+      // أداة، فيرفض ضمّ أدوات بخصائص أخرى. الشكل واحد فعلاً — مخطط OpenAI —
+      // والفارق في الاستنتاج لا في البنية.
+      if (isPlatformAdmin) {
+        availableTools = [...availableTools, ...(PLATFORM_TOOLS as unknown as typeof availableTools)];
+      }
+
       const toolResults: Array<{ tool_call_id: string; tool_name: string; display: string }> = [];
+      // نتيجة كل أداة كما رجعت — عليها تُبنى المراجعة قبل تسليم الرد
+      const outcomes: ToolOutcome[] = [];
 
       // تشغيل كامل حلقة الوكيل ضمن سياق اتصال ERPNext الخاص بالمستخدم الحالي
       try {
@@ -312,7 +339,17 @@ ${modeRulesFor(agentMode)}`;
             : Array.isArray(msg.content)
               ? msg.content.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text ?? "" : "").join("")
               : "";
-          const { text: replyText, quickReplies } = extractQuickReplies(rawReply);
+          const { text: rawText, quickReplies } = extractQuickReplies(rawReply);
+
+          // مراجعة قبل التسليم: لا يُعلَن نجاحٌ لا تسنده نتيجة أداة ناجحة.
+          // المراجع حتمي لا نموذج ثانٍ — يقارن ادّعاء النص بما رجع فعلاً، فلا
+          // يمكن إقناعه بما لم يحدث. هذا هو الفارق بين خطأ يُصحَّح وكذبٍ يُصدَّق.
+          const verdict = verifyReply(rawText, outcomes);
+          if (!verdict.ok) {
+            console.error(`[agent.chat] مُنع ادّعاء نجاح: ${verdict.reason} — user=${ctx.user.id}`);
+          }
+          const replyText = verdict.ok ? rawText : verdict.replacement;
+
           if (conversationId && replyText) {
             try {
               await dbHelpers.addMessage(conversationId, "assistant", replyText,
@@ -349,6 +386,15 @@ ${modeRulesFor(agentMode)}`;
                   const doc = { doctype: args.doctype as string, name: args.document_name as string };
                   return { result: doc, display: `__DOCUMENT_PRINT__${JSON.stringify(doc)}` };
                 })()
+              : PLATFORM_TOOL_NAMES.has(tc.function.name)
+                ? await (async () => {
+                    // فحص ثانٍ عند التنفيذ لا عند العرض فقط: قائمة الأدوات تُبنى
+                    // مرة، والتنفيذ يقع بعدها — والفجوة بينهما لا تُترك مفتوحة.
+                    if (!canUsePlatformTools(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "أدوات إدارة المنصة للمسؤول وحده" });
+                    const { appRouter: r } = await import("../routers");
+                    const adminCaller = r.createCaller({ req: ctx.req, res: ctx.res, user: ctx.user, effectiveUserId: ctx.effectiveUserId });
+                    return executePlatformTool(tc.function.name, args, adminCaller as never);
+                  })()
               : activeConfig.provider === "odoo" && activeConfig.database
                 ? await executeOdooTool(tc.function.name, args, activeConfig as ErpConfig & { database: string })
                 : await executeTool(tc.function.name, args, { userId: ctx.effectiveUserId ?? ctx.user.id, conversationId });
@@ -391,17 +437,21 @@ ${modeRulesFor(agentMode)}`;
             toolResult = JSON.stringify({ error: translateErpError(rawErr) });
           }
           toolResults.push({ tool_call_id: tcId, tool_name: tc.function.name, display: displayData });
+          outcomes.push(outcomeOf(tc.function.name, toolResult));
           llmMessages.push({ role: "tool", content: toolResult, tool_call_id: tcId });
         }
       }
 
+      // كان هنا "تم تنفيذ الطلب." ثابتاً يُعاد بلا قراءة نتيجة أداة واحدة —
+      // فأُبلغ عميل بالنجاح ولم يحدث شيء. الملخّص الآن مبنيّ من النتائج نفسها.
+      const fallbackReply = summarizeOutcomes(outcomes);
       if (conversationId) {
         try {
-          await dbHelpers.addMessage(conversationId, "assistant", "تم تنفيذ الطلب.",
+          await dbHelpers.addMessage(conversationId, "assistant", fallbackReply,
             toolResults.length ? JSON.stringify({ toolResults, quickReplies: [] }) : undefined);
         } catch { /* non-blocking */ }
       }
-      return { reply: "تم تنفيذ الطلب.", toolResults, quickReplies: [] as string[], conversationId };
+      return { reply: fallbackReply, toolResults, quickReplies: [] as string[], conversationId };
         }).then(r => { replyDelivered = true; return r; });
       } catch (e) {
         // فشل بعد الخصم = خدمة لم تُقدَّم. الردّ لا يبتلع الخطأ، يعيده كما هو.

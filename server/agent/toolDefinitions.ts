@@ -351,7 +351,7 @@ export const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"], description: "نوع المستند" },
+          doctype: { type: "string", description: "اسم DocType بالإنجليزية كما في ERPNext — أي نوع مستند: Sales Invoice, Purchase Invoice, Payment Entry, Journal Entry, Customer, Supplier, Item, Delivery Note, Sales Order, Purchase Order, Purchase Receipt, Stock Entry, Quotation, Lead, Address, Contact, Warehouse, Cost Center — أو أي DocType آخر في النظام" },
           document_name: { type: "string", description: "رقم المستند مثل ACC-SINV-2026-00001 أو ACC-PAY-2026-00001" },
         },
         required: ["doctype", "document_name"],
@@ -556,7 +556,7 @@ export const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"], description: "نوع المستند" },
+          doctype: { type: "string", description: "اسم DocType بالإنجليزية كما في ERPNext — أي نوع مستند: Sales Invoice, Purchase Invoice, Payment Entry, Journal Entry, Customer, Supplier, Item, Delivery Note, Sales Order, Purchase Order, Purchase Receipt, Stock Entry, Quotation, Lead, Address, Contact, Warehouse, Cost Center — أو أي DocType آخر في النظام" },
           document_name: { type: "string", description: "رقم المستند مثل ACC-SINV-2026-00001 أو ACC-PAY-2026-00001" },
         },
         required: ["doctype", "document_name"],
@@ -572,7 +572,7 @@ export const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry", "Customer", "Supplier", "Item"], description: "نوع المستند أو السجل" },
+          doctype: { type: "string", description: "اسم DocType بالإنجليزية كما في ERPNext — أي نوع مستند: Sales Invoice, Purchase Invoice, Payment Entry, Journal Entry, Customer, Supplier, Item, Delivery Note, Sales Order, Purchase Order, Purchase Receipt, Stock Entry, Quotation, Lead, Address, Contact, Warehouse, Cost Center — أو أي DocType آخر في النظام" },
           document_name: { type: "string", description: "معرّف المستند: رقم الفاتورة أو اسم العميل/المورد/الصنف كما هو في النظام" },
           fields: {
             type: "object",
@@ -593,10 +593,32 @@ export const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry"], description: "نوع المستند" },
+          doctype: { type: "string", description: "اسم DocType بالإنجليزية كما في ERPNext — أي نوع مستند: Sales Invoice, Purchase Invoice, Payment Entry, Journal Entry, Customer, Supplier, Item, Delivery Note, Sales Order, Purchase Order, Purchase Receipt, Stock Entry, Quotation, Lead, Address, Contact, Warehouse, Cost Center — أو أي DocType آخر في النظام" },
           document_name: { type: "string", description: "رقم المستند المعتمد" },
         },
         required: ["doctype", "document_name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_documents",
+      description: "سرد سجلات أي DocType في النظام مع مرشّحات. استخدمها قبل الحذف لمعرفة ما يرتبط بالسجل: حذف عميل يفشل إن كان له إشعار تسليم أو أمر بيع، وهذه الأداة تكشفها. أمثلة: قائمة إشعارات التسليم لعميل، أوامر البيع المفتوحة، السجلات المرتبطة بأي مستند.",
+      parameters: {
+        type: "object",
+        properties: {
+          doctype: { type: "string", description: "اسم DocType بالإنجليزية — Delivery Note أو Sales Order أو أي نوع آخر" },
+          filters: {
+            type: "object",
+            description: "مرشّحات كأزواج حقل=قيمة، مثل {\"customer\": \"CUST-0001\"} أو {\"docstatus\": 1}",
+            additionalProperties: true,
+          },
+          fields: { type: "array", items: { type: "string" }, description: "الحقول المطلوبة — الافتراضي name فقط" },
+          limit: { type: "number", description: "أقصى عدد سجلات (الافتراضي 20)" },
+        },
+        required: ["doctype"],
         additionalProperties: false,
       },
     },
@@ -609,7 +631,7 @@ export const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          doctype: { type: "string", enum: ["Sales Invoice", "Purchase Invoice", "Payment Entry", "Journal Entry", "Customer", "Supplier", "Item"], description: "نوع المستند أو السجل" },
+          doctype: { type: "string", description: "اسم DocType بالإنجليزية كما في ERPNext — أي نوع مستند: Sales Invoice, Purchase Invoice, Payment Entry, Journal Entry, Customer, Supplier, Item, Delivery Note, Sales Order, Purchase Order, Purchase Receipt, Stock Entry, Quotation, Lead, Address, Contact, Warehouse, Cost Center — أو أي DocType آخر في النظام" },
           document_name: { type: "string", description: "معرّف المستند المراد حذفه" },
         },
         required: ["doctype", "document_name"],

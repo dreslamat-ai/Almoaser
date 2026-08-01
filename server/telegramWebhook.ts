@@ -25,14 +25,28 @@ type TgMessage = {
 const MAX_TG_CHARS = 3800; // حد تيليجرام 4096 — نترك هامشاً للوسوم
 
 /**
- * المحادثة الجارية لكل دردشة.
+ * معرّف المحادثة لكل دردشة — والسياق نفسه يُقرأ من قاعدة البيانات لا من هنا.
  *
- * في الذاكرة عمداً: هذه قناة تشغيلية لشخص واحد، وربطها بجدول يضيف هجرة وصيانة
- * مقابل لا شيء. إعادة التشغيل تبدأ محادثة جديدة — وهو سلوك مقبول هنا، بل
- * مفهوم: النشر يعني بداية نظيفة.
+ * كان السجل كلّه في الذاكرة، فمسحه أول نشر: أكّد المستخدم حذفاً بـ"نعم" فردّ
+ * الوكيل أنه لم يُطلب منه حذف شيء في هذه المحادثة. النسيان بين رسالتين في
+ * عملية تُتلف بيانات ليس عيب راحة — هو ما يجعل التأكيد بلا معنى.
+ *
+ * المعرّف وحده يبقى في الذاكرة، وفقدُه يبدأ محادثة جديدة لا يفقد محادثة قائمة.
  */
-const threads = new Map<number, { conversationId?: number; history: Array<{ role: "user" | "assistant"; content: string }> }>();
-const MAX_HISTORY = 12;
+const threads = new Map<number, { conversationId?: number }>();
+const MAX_HISTORY = 16;
+
+/** آخر رسائل المحادثة من القاعدة — تنجو من إعادة التشغيل */
+async function loadHistory(conversationId?: number): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+  if (!conversationId) return [];
+  const { getMessagesByConversationId } = await import("./db");
+  const rows = await getMessagesByConversationId(conversationId).catch(() => []);
+  return rows
+    .filter(r => r.role === "user" || r.role === "assistant")
+    .slice(-MAX_HISTORY)
+    .map(r => ({ role: r.role as "user" | "assistant", content: String(r.content ?? "") }))
+    .filter(m => m.content.trim().length > 0);
+}
 
 function ownerChatId(): number | null {
   const raw = process.env.TELEGRAM_CHAT_ID?.trim();
@@ -136,9 +150,8 @@ async function handleOwnerMessage(chatId: number, text: string): Promise<void> {
   const user = rows[0];
   if (!user) { await sendTelegram("لم أجد حساب المالك — اضبط TELEGRAM_OWNER_EMAIL."); return; }
 
-  const thread = threads.get(chatId) ?? { history: [] };
-  thread.history.push({ role: "user", content: text });
-  if (thread.history.length > MAX_HISTORY) thread.history = thread.history.slice(-MAX_HISTORY);
+  const thread = threads.get(chatId) ?? {};
+  const history = [...(await loadHistory(thread.conversationId)), { role: "user" as const, content: text }];
 
   const { appRouter } = await import("./routers");
   const { resolveOrgOwnerId } = await import("./organizations");
@@ -153,12 +166,12 @@ async function handleOwnerMessage(chatId: number, text: string): Promise<void> {
 
   try {
     const r = await caller.agent.chat({
-      messages: thread.history,
+      messages: history,
       conversationId: thread.conversationId,
     } as never) as { reply: string; conversationId?: number };
 
+    // الوكيل يحفظ الرسالتين في القاعدة، فلا نكرّرهما هنا — نحتفظ بالمعرّف فقط
     thread.conversationId = r.conversationId ?? thread.conversationId;
-    thread.history.push({ role: "assistant", content: r.reply });
     threads.set(chatId, thread);
 
     // نفس مستخرِج الواجهة: الخيارات التي تظهر كأزرار على الشاشة تظهر أزراراً هنا
@@ -178,9 +191,6 @@ async function handleOwnerMessage(chatId: number, text: string): Promise<void> {
     }
   } catch (e) {
     const reason = e instanceof Error ? e.message : "خطأ غير معروف";
-    // آخر رسالة لم تُجَب تُزال من السياق: إبقاؤها يجعل المحاولة التالية تعيدها
-    thread.history.pop();
-    threads.set(chatId, thread);
     await sendTelegram(`تعذّر تنفيذ الطلب: ${tg(reason)}`);
   }
 }

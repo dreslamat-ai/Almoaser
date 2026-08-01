@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   toolsForMode, modeRulesFor, identityLineFor,
-  EXPERT_BLOCKED_TOOLS, GOVERNANCE_RULES, EXPERT_RULES, SCOPE_RULES,
+  EXPERT_BLOCKED_TOOLS, GOVERNANCE_RULES, EXPERT_RULES, SCOPE_RULES, SYSTEM_REACH_RULES,
   resolveCapabilities, toolsForSubscriptions,
 } from "./agentModes";
 
@@ -216,5 +216,31 @@ describe("تعليمات الأزرار السريعة", () => {
     const src = await import("fs").then(fs => fs.readFileSync("server/routers/agent.ts", "utf8"));
     expect(src).toContain("لا تتحدث عن الأزرار ولا تعد بها");
     expect(src).toContain("بعد عرض قائمة بما تستطيع فعله");
+  });
+});
+
+// قيل لعميل إن حذف إشعار التسليم غير مدعوم وهو مدعوم — القائمة المغلقة كانت
+// في تعريف الأداة، فاعتذر الوكيل بصدق عن قيد صنعناه نحن
+describe("SYSTEM_REACH_RULES — مدى الأدوات في نظام العميل", () => {
+  it("ينصّ على أن الأدوات تعمل على أي DocType", () => {
+    expect(SYSTEM_REACH_RULES).toContain("أي DocType");
+    expect(SYSTEM_REACH_RULES).toContain("إشعارات التسليم");
+  });
+
+  it("يمنع الاعتذار قبل المحاولة", () => {
+    expect(SYSTEM_REACH_RULES).toContain("لا تعتذر بعدم امتلاك أداة قبل أن تجرّب");
+  });
+
+  it("يصف الترتيب الصحيح عند فشل الحذف بسبب ارتباط", () => {
+    expect(SYSTEM_REACH_RULES).toContain("list_documents");
+  });
+
+  it("يجعل الحدّ صلاحيات نظام العميل لا قائمة أدواتنا", () => {
+    expect(SYSTEM_REACH_RULES).toContain("صلاحياتك في نظامه");
+  });
+
+  it("يسري على الوضعين", () => {
+    expect(modeRulesFor("accounting")).toContain(SYSTEM_REACH_RULES);
+    expect(modeRulesFor("expert")).toContain(SYSTEM_REACH_RULES);
   });
 });

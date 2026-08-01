@@ -587,6 +587,28 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
         display: `__DOC_CANCELLED__${JSON.stringify({ doctype, name: result?.name ?? docName })}`,
       };
     }
+    case "list_documents": {
+      // الحذف في ERPNext يفشل حين يرتبط بالسجل مستند آخر، ورسالة الخطأ تسمّيه
+      // بلا أن تدلّ على مكانه. هذه الأداة تجعل الوكيل يكشف الارتباط قبل أن
+      // يحاول، بدل أن يعتذر بأن الأداة غير متاحة وهي متاحة.
+      const doctype = String(args.doctype ?? "").trim();
+      if (!doctype) throw new Error("اسم DocType مطلوب");
+      const fields = Array.isArray(args.fields) && args.fields.length
+        ? (args.fields as string[]).map(String)
+        : ["name"];
+      const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
+      const qs = new URLSearchParams({
+        fields: JSON.stringify(fields),
+        limit_page_length: String(limit),
+      });
+      if (args.filters && typeof args.filters === "object") {
+        qs.set("filters", JSON.stringify(args.filters));
+      }
+      const res = await erpGET(`/api/resource/${encodeURIComponent(doctype)}?${qs}`) as { data?: unknown[] };
+      const rows = res?.data ?? [];
+      return { result: { doctype, count: rows.length, rows }, display: `${doctype}: ${rows.length} سجل` };
+    }
+
     case "delete_document": {
       const doctype = args.doctype as string;
       const docName = args.document_name as string;
