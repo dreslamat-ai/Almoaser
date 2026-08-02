@@ -56,9 +56,41 @@ ls -1t "$DEST"/almoaser-*.sql.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r
 
 echo "✓ $(basename "$OUT") — $(du -h "$OUT" | cut -f1) — محفوظ منها $(ls -1 "$DEST"/almoaser-*.sql.gz | wc -l)"
 
-# ─── النسخ خارج الخادم ───────────────────────────────────────────────────────
-# ما سبق يحمي من التلف والحذف الخاطئ، لا من فقد الخادم نفسه. لإكمالها أضف بعد
-# ضبط rclone على وجهة تختارها (مساحة تخزين أو حساب آخر):
-#   rclone copy "$OUT" remote:almoaser-backups/ --transfers=1
-# ولأن الملف يحوي بيانات عملاء مالية وكلمات مرور ERP مشفّرة، الوجهة يجب أن
-# تكون خاصة ومُعمّاة، لا مجلداً عاماً.
+# ─── نسخة خارج الخادم ────────────────────────────────────────────────────────
+#
+# ما سبق يحمي من التلف والحذف الخاطئ لا من فقد الخادم. هذه الخطوة تعالج ذلك.
+#
+# **تُعمّى قبل الرفع.** الملف يحوي بيانات عملاء مالية وكلمات مرور ERP، ورفعه
+# لأي تخزين يجعله في مكانين. المعمّى بمفتاح لا يوجد إلا هنا يبقى بلا قيمة حتى
+# لو تسرّب التخزين — وهو الفارق بين نسخة احتياطية وتسريب مؤجَّل.
+REMOTE=${BACKUP_REMOTE:-r2:almoaser-backups}
+PASSFILE=${BACKUP_PASSFILE:-/home/eipsys/.config/backup-passphrase}
+
+if command -v rclone >/dev/null 2>&1 && [ -r "$PASSFILE" ]; then
+  ENC="$OUT.gpg"
+  if gpg --batch --yes --symmetric --cipher-algo AES256 \
+         --passphrase-file "$PASSFILE" -o "$ENC" "$OUT" 2>/dev/null; then
+    chmod 600 "$ENC"
+    if rclone copy "$ENC" "$REMOTE/db/" --no-traverse 2>/dev/null; then
+      echo "  ↑ رُفعت معمّاة إلى $REMOTE/db/"
+      # الحذف البعيد بعد نجاح الرفع لا قبله، وبنفس مدة الاحتفاظ المحلية
+      rclone delete "$REMOTE/db/" --min-age "${KEEP}d" 2>/dev/null || true
+    else
+      # الفشل يُعلن: نسخة خارجية يُظنّ أنها تُرفع وهي لا تُرفع أسوأ من غيابها
+      echo "  ⚠ تعذّر الرفع الخارجي — النسخة المحلية سليمة"
+    fi
+    rm -f "$ENC"
+  else
+    echo "  ⚠ تعذّرت التعمية — لم تُرفع نسخة خارجية (لا نرفع نصاً واضحاً)"
+  fi
+fi
+
+# ─── استرجاع نسخة خارجية ─────────────────────────────────────────────────────
+#   rclone copy r2:almoaser-backups/db/<الملف>.gpg /tmp/
+#   gpg --batch --passphrase-file /home/eipsys/.config/backup-passphrase \
+#       -o /tmp/db.sql.gz -d /tmp/<الملف>.gpg
+#   zcat /tmp/db.sql.gz | mysql --defaults-extra-file=<cnf> <db>
+#
+# **المفتاح نفسه ليس في النسخة الاحتياطية** — ولا يجوز أن يكون. احتفظ بنسخة منه
+# خارج هذا الخادم وإلا صارت كل النسخ غير قابلة للفتح حين تحتاجها.
+# ─────────────────────────────────────────────────────────────────────────────
