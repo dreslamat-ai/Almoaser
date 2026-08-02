@@ -44,11 +44,15 @@ echo "▶ البناء"
 VITE_BASE_PATH=${DEV_BASE_PATH:-/dev/} npx vite build --logLevel warn
 npx esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
 
+# المنفذ يُمرَّر صراحةً لا يُترك لـ.env: هذه الصدفة تورّث PORT من خدمة الكونسول
+# (3210)، وdotenv لا يدهس متغيّراً موجوداً — فبدأت البيئة على 3211 بينما nginx
+# يوجّه إلى 3001، ويظهر ذلك 502 كأن التطبيق لم يعمل وهو يعمل في مكان آخر.
+export PORT=3001
 if pm2 describe almoaser-dev >/dev/null 2>&1; then
   pm2 restart almoaser-dev --update-env >/dev/null
   echo "✓ أُعيد تشغيل بيئة التطوير"
 else
-  pm2 start dist/index.js --name almoaser-dev --cwd "$DEV_DIR" >/dev/null
+  pm2 start dist/index.js --name almoaser-dev --cwd "$DEV_DIR" --update-env >/dev/null
   pm2 save >/dev/null 2>&1 || true
   echo "✓ بدأت بيئة التطوير"
 fi
