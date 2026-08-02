@@ -229,6 +229,10 @@ export default defineConfig({
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
+  // المسار الأساسي للأصول. الإنتاج يخدم من الجذر فيبقى "/"؛ وبيئة التطوير
+  // تُخدَم تحت /dev على نفس النطاق، فالأصول يجب أن تُطلب من /dev/assets وإلا
+  // ذهب المتصفح إلى أصول الإنتاج وحمّل نسختين مختلطتين.
+  base: process.env.VITE_BASE_PATH || "/",
   envDir: path.resolve(import.meta.dirname),
   root: path.resolve(import.meta.dirname, "client"),
   publicDir: path.resolve(import.meta.dirname, "client", "public"),

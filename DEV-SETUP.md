@@ -37,24 +37,36 @@ bash scripts/seed-dev-db.sh
 
 ---
 
-## ٢) نطاق فرعي للوصول من المتصفح — اختياري
+## ٢) الوصول من المتصفح على `erpsys.cloud/dev`
 
-بدونه تصل البيئة عبر نفق SSH:
+مجلد على نفس النطاق لا نطاق فرعي — لا شهادة جديدة ولا سجل DNS.
+
+**أمر واحد بصلاحية root:**
 
 ```bash
-ssh -N -L 3001:127.0.0.1:3001 eipsys@eipsys.top
-# ثم افتح http://localhost:3001
+sudo cp /home/eipsys/work/almoaser-dev/deploy/nginx.ssl.conf_dev \
+        /home/almoaser-ai/conf/web/erpsys.cloud/nginx.ssl.conf_dev && \
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-وللوصول من الجوال يلزم نطاق. من Hestia ← **WEB** ← Add Domain:
+قالب Hestia يحتوي `include .../nginx.ssl.conf_*;` فيلتقط الملف تلقائياً.
+و`nginx -t` قبل إعادة التحميل مقصود: إعدادٌ خاطئ يُعاد تحميله يُسقط
+**erpsys.cloud نفسه** لا بيئة التطوير وحدها.
 
-- Domain: `dev.erpsys.cloud`
-- بعد إضافته: Edit ← Proxy Template ← اختر قالباً يوجّه إلى المنفذ **3001**
-  (نسخة من `nodeapp3000` باسم `nodeapp3001`، أو أي قالب proxy يقبل تحديد المنفذ)
-- فعّل SSL (Let's Encrypt)
+**ملاحظة على التحديث:** إعادة توليد إعدادات النطاق من Hestia (تغيير قالب،
+تجديد شهادة أحياناً) لا تحذف هذا الملف لأنه خارج القالب — لكن راجعه إن اختفى
+المسار فجأة.
 
-**احمِ البيئة بكلمة مرور** إن أصبحت عامة — نسخة التطوير تحمل كوداً غير مُراجَع
-ولا يصح أن تفهرسها محركات البحث ولا أن يفتحها عميل ظنّاً أنها المنصة.
+**الحماية:** المقطع يمنع الفهرسة (`X-Robots-Tag`). إن أردت منع الدخول أصلاً
+أضف داخل `location /dev/`:
+
+```nginx
+auth_basic "dev";
+auth_basic_user_file /home/almoaser-ai/conf/web/erpsys.cloud/.htpasswd-dev;
+```
+
+وأنشئ الملف بـ `htpasswd -c`. نسخة التطوير تحمل كوداً غير مُراجَع، ولا يصح أن
+يفتحها عميل ظنّاً أنها المنصة.
 
 ---
 
@@ -65,7 +77,7 @@ cd /home/eipsys/work/almoaser-dev
 
 git switch -c feature/اسم-التعديل     # فرع لكل تعديل
 # ... عدّل ...
-bash scripts/dev-up.sh                # بناء وتشغيل على 3001
+bash scripts/dev-up.sh                # بناء وتشغيل على 3001 وerpsys.cloud/dev
 # ... راجع النتيجة بنفسك ...
 git add -A && git commit -m "..."
 bash scripts/promote.sh               # اختبارات ← دمج في main ← نشر للإنتاج

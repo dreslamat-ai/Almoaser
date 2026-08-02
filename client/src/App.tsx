@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Redirect, Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Router as WouterRouter, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -96,7 +96,11 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <DocumentTitle />
-          <Router />
+          {/* قاعدة المسارات: بلا هذا تفتح /dev فيبحث الراوتر عن مسار اسمه
+              "/dev" ولا يجده، فتظهر صفحة "غير موجود" على تطبيق يعمل. */}
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

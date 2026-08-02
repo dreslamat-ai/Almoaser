@@ -33,13 +33,15 @@ if [ "$DEV_DB" = "$PROD_DB" ]; then
 fi
 echo "▶ قاعدة التطوير: $DEV_DB   (الإنتاج: $PROD_DB)"
 
-[ -d node_modules ] || { echo "▶ تثبيت الحزم"; npm ci --silent 2>&1 | tail -3; }
+[ -d node_modules ] || { echo "▶ تثبيت الحزم"; pnpm install --frozen-lockfile 2>&1 | tail -3; }
 
 echo "▶ فحص الأنواع"
 npx tsc --noEmit || { echo "✗ فحص الأنواع فشل"; exit 1; }
 
 echo "▶ البناء"
-npx vite build --logLevel warn
+# المسار الأساسي يُمرَّر للبناء: الواجهة تُخدَم تحت /dev على نفس النطاق، فلو
+# بُنيت على الجذر طلبت أصولها من /assets فحمّلت أصول الإنتاج فوق كود التطوير.
+VITE_BASE_PATH=${DEV_BASE_PATH:-/dev/} npx vite build --logLevel warn
 npx esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
 
 if pm2 describe almoaser-dev >/dev/null 2>&1; then
@@ -52,4 +54,5 @@ else
 fi
 
 sleep 2
-curl -s -o /dev/null -w "  الفحص: HTTP %{http_code} على 127.0.0.1:3001\n" http://127.0.0.1:3001/ || true
+curl -s -o /dev/null -w "  محلياً : HTTP %{http_code} على 127.0.0.1:3001\n" http://127.0.0.1:3001/ || true
+curl -s -o /dev/null -w "  عام    : HTTP %{http_code} على https://erpsys.cloud/dev/\n" https://erpsys.cloud/dev/ || true

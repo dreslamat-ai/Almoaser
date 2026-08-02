@@ -1,0 +1,32 @@
+# بيئة التطوير على erpsys.cloud/dev
+#
+# يُركَّب في: /home/almoaser-ai/conf/web/erpsys.cloud/nginx.ssl.conf_dev
+# قالب Hestia يحتوي أصلاً: include .../nginx.ssl.conf_*;  فيُلتقط تلقائياً.
+#
+# الشرطة المائلة في نهاية proxy_pass تحذف البادئة /dev/ قبل تمرير الطلب، فيرى
+# التطبيق مساراته الطبيعية. والمتصفح يطلب /dev/assets و/dev/api لأن الواجهة
+# بُنيت بـVITE_BASE_PATH=/dev/ — بدون ذلك يذهب إلى أصول الإنتاج فتختلط نسختان.
+
+# /dev بلا شرطة لا يطابق location /dev/ — فيُحوَّل بدل أن يعطي 404
+location = /dev { return 301 /dev/; }
+
+location /dev/ {
+    proxy_pass http://127.0.0.1:3001/;
+    proxy_http_version 1.1;
+
+    # WebSocket: الواجهة تستعمله في التطوير
+    proxy_set_header Upgrade    $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # رد الوكيل قد يستغرق عشرين ثانية — المهلة الافتراضية تقطعه
+    proxy_read_timeout 300s;
+
+    # لا تُفهرَس: نسخة التطوير تحمل كوداً غير مُراجَع، وظهورها في نتائج البحث
+    # يجعل زائراً يفتحها ظنّاً أنها المنصة
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+}
