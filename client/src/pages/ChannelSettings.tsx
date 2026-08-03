@@ -230,7 +230,7 @@ export default function ChannelSettings() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">إعدادات القنوات</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">ربط نظام ERPNext وواتساب وتيليجرام بوكيل الذكاء الاصطناعي</p>
+            <p className="text-xs text-muted-foreground mt-0.5">ربط نظام ERPNext وواتساب وتيليجرام بالمحاسب الذكي</p>
           </div>
           <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
             {saveMutation.isPending ? "جارٍ الحفظ..." : "حفظ الإعدادات"}

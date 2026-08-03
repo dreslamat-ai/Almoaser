@@ -79,7 +79,7 @@ export default function Reports() {
             })}
             {reports && reports.length === 0 && (
               <p className="p-10 text-center text-muted-foreground text-sm">
-                لا توجد تقارير بعد. اطلب من الوكيل الخبير تقييم نظامك وسيُحفظ التقرير هنا.
+                لا توجد تقارير بعد. اطلب من المحاسب الذكي تقييم نظامك وسيُحفظ التقرير هنا.
               </p>
             )}
           </div>

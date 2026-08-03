@@ -290,7 +290,7 @@ export default function Dashboard() {
               <MessageCircle className="w-6 h-6 text-gold" />
             </div>
             <div className="flex-1">
-            <h3 className="font-bold text-lg">وكيل AI جاهز لمساعدتك</h3>
+            <h3 className="font-bold text-lg">المحاسب الذكي جاهز لمساعدتك</h3>
               <p className="text-white/70 text-sm">أرسل أوامرك عبر تليجرام وسينفذها النظام الذكي فوراً بإشراف محاسبينا</p>
             </div>
             <a href="https://t.me/AlmoaserBot" target="_blank" rel="noopener noreferrer">

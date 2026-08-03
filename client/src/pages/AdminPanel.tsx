@@ -991,7 +991,7 @@ export function AdminConsole() {
         {tab === "apps" && (
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="p-3 text-xs text-muted-foreground border-b border-gray-50">
-              طلبات العملاء للتطبيقات والتخصيصات. الوكيل يسجّل الطلب ولا يَعِد بسعر ولا موعد — البيع يتم منك مباشرة.
+              طلبات العملاء للتطبيقات والتخصيصات. المحاسب الذكي يسجّل الطلب ولا يَعِد بسعر ولا موعد — البيع يتم منك مباشرة.
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

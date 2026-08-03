@@ -6,6 +6,7 @@ import { sendLeadDigest } from "./leadFollowUp";
 import { alertIfLowBalance } from "./providerBalance";
 import { getUnbilledApps, BILLED_APPS } from "./llmUsage";
 import { checkErpConnections } from "./erpHealth";
+import { maybeSendDailyReport } from "./dailyReport";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
 
@@ -22,6 +23,7 @@ export function startScheduledJobs(): void {
   startBalanceWatch();
   startUnbilledWatch();
   startErpHealthWatch();
+  startDailyReport();
 }
 
 // ─── مراقبة رصيد المزوّدين ───────────────────────────────────────────────────
@@ -157,4 +159,18 @@ function startErpHealthWatch(): void {
   };
   setTimeout(() => { void tick(); }, 4 * 60 * 1000);
   setInterval(() => { void tick(); }, ERP_HEALTH_MS);
+}
+
+// ─── تقرير الصباح ────────────────────────────────────────────────────────────
+// يُفحص كل ربع ساعة ويُرسل مرّة واحدة عند التاسعة — نفس نمط تذكير العملاء
+// المحتملين، فما ثبت أنه يعمل لا يُعاد اختراعه.
+function startDailyReport(): void {
+  const tick = async () => {
+    const r = await maybeSendDailyReport().catch(e => ({ sent: false, reason: e instanceof Error ? e.message : "خطأ" }));
+    if (r.sent) console.log("[scheduler] أُرسل تقرير الصباح");
+    else if (r.reason && !["خارج الموعد", "أُرسل اليوم"].includes(r.reason)) {
+      console.warn("[scheduler] لم يُرسل تقرير الصباح:", r.reason);
+    }
+  };
+  setInterval(() => { void tick(); }, 15 * 60 * 1000);
 }

@@ -7,7 +7,7 @@
  * وتُعرَّف هنا مرّة: كانت أيقونة `Sparkles` مكرّرة في ثلاثة مواضع، فتغييرها
  * يعني تتبّعها في كلٍّ منها وسهوٌ في واحد يترك المحادثة بوجهين.
  */
-export function SaraAvatar({ className = "size-8" }: { className?: string }) {
+export function SaraAvatar({ className = "size-8", bordered = true }: { className?: string; bordered?: boolean }) {
   return (
     <img
       src="/brand/sara-avatar.jpg"
@@ -15,7 +15,7 @@ export function SaraAvatar({ className = "size-8" }: { className?: string }) {
       width={32}
       height={32}
       loading="lazy"
-      className={`${className} shrink-0 rounded-full object-cover border border-border`}
+      className={`${className} shrink-0 rounded-full object-cover${bordered ? " border border-border" : ""}`}
     />
   );
 }
