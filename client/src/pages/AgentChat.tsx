@@ -597,7 +597,7 @@ function ItemsTable({ items }: { items: Item[] }) {
   return (
     <div className="mt-2 rounded-xl border border-border overflow-hidden text-sm">
       <div className="bg-muted/50 px-3 py-2 flex items-center gap-2 border-b border-border">
-        <Package className="w-4 h-4 text-violet-500" />
+        <Package className="w-4 h-4 text-gold-ink" />
         <span className="font-semibold text-foreground">الأصناف ({items.length})</span>
       </div>
       <div className="overflow-x-auto">
@@ -1074,10 +1074,10 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
   if (display.startsWith("__APP_REQUEST__")) {
     return (
       <div className="rounded-xl border border-navy/15 bg-navy/5 p-3 text-sm">
-        <div className="flex items-center gap-2 font-bold text-sky-900">
+        <div className="flex items-center gap-2 font-bold text-navy">
           <CheckCircle2 className="w-4 h-4 shrink-0" /> سُجّل طلبك
         </div>
-        <p className="text-sky-800 mt-1 text-xs">وصل طلبك لإدارة المنصة وسيتم التواصل معك لمناقشة التفاصيل.</p>
+        <p className="text-navy/70 mt-1 text-xs">وصل طلبك لإدارة المنصة وسيتم التواصل معك لمناقشة التفاصيل.</p>
       </div>
     );
   }
@@ -1110,13 +1110,13 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
       const d = JSON.parse(display.replace("__REPORT_SAVED__", "")) as { id: number; kind: string; title: string };
       return (
         <div className="rounded-xl border border-navy/15 bg-navy/5 p-3 text-sm">
-          <div className="flex items-center gap-2 font-bold text-sky-900">
+          <div className="flex items-center gap-2 font-bold text-navy">
             <FileText className="w-4 h-4 shrink-0" /> حُفظ التقرير: {d.title}
           </div>
-          <p className="text-sky-800 mt-1 text-xs">
+          <p className="text-navy/70 mt-1 text-xs">
             محفوظ في حسابك بانتظار مراجعتك — تقدر تقرّه أو ترفضه من صفحة التقارير.
           </p>
-          <a href="/reports" className="inline-block mt-2 text-xs font-medium text-sky-700 underline">فتح التقارير</a>
+          <a href="/reports" className="inline-block mt-2 text-xs font-medium text-navy underline">فتح التقارير</a>
         </div>
       );
     } catch { return null; }
@@ -1268,23 +1268,18 @@ export default function AgentChat() {
   const extractMutation = trpc.agent.extractDocument.useMutation();
   const utils = trpc.useUtils();
   const conversationsQuery = trpc.agent.listConversations.useQuery(undefined, { enabled: historyOpen });
-  const createConvMutation = trpc.agent.createConversation.useMutation();
   const deleteConvMutation = trpc.agent.deleteConversation.useMutation({
     onSuccess: () => { void utils.agent.listConversations.invalidate(); },
   });
 
-  const startNewConversation = (createInDb = false) => {
+  // **زرٌّ واحد لا زرّان.** كان «محادثة جديدة» و«مسح» ينادِيان هذه الدالة
+  // نفسها، بينهما قيمة منطقية واحدة: هل يُنشأ صفُّ محادثة في القاعدة فوراً.
+  // والفرق لا يراه العميل — كلاهما يفرغ الشاشة — بينما الإنشاء المبكر يترك
+  // محادثاتٍ فارغة في السجلّ لمن فتح ولم يكتب. الخادم ينشئها عند أوّل رسالة.
+  const startNewConversation = () => {
     setMessages([]);
     setConversationId(undefined);
     setHistoryOpen(false);
-    if (createInDb) {
-      createConvMutation.mutate(undefined, {
-        onSuccess: (data) => {
-          setConversationId(data.conversationId);
-          void utils.agent.listConversations.invalidate();
-        },
-      });
-    }
   };
 
   const openConversation = async (id: number) => {
@@ -1521,8 +1516,11 @@ export default function AgentChat() {
              ينفّذ طلباتك مباشرة على نظامك
            </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end shrink-0">
-            <NotificationBell />
+          {/* **شكلٌ واحد لكل الأزرار.** كانت ستّة عناصر بأربعة أشكال: جرسٌ
+              شفّاف، وحبّة نقاطٍ دائرية، وزرّ أيقونة محدّد، وزرّا نصّ محدّدان،
+              وزرّ شبح — فبدا الصفّ مبعثراً لا مصمّماً. الآن ارتفاعٌ واحد
+              وحافةٌ واحدة، وكلّها ظاهرة: لا قائمة «⋯» تُخفي ما كان ظاهراً. */}
+          <div className="flex items-center gap-1.5 flex-wrap justify-start sm:justify-end shrink-0">
             {creditsInfo && (() => {
               // الرصيد المفتوح لا "ينخفض" — تحذير الانخفاض لا معنى له معه
               const low = !creditsInfo.unlimited && creditsInfo.monthlyCredits > 0 && creditsInfo.balance / creditsInfo.monthlyCredits <= 0.15;
@@ -1530,38 +1528,40 @@ export default function AgentChat() {
                 <button
                   onClick={() => navigate("/subscription")}
                   title="رصيد النقاط — اضغط لإدارة الاشتراك"
-                  className={`flex items-center gap-1 text-xs px-2.5 py-1 [@media(pointer:coarse)]:min-h-11 rounded-full border font-medium transition-colors ${
-                    low ? "text-red-600 border-red-200 bg-red-50 hover:bg-red-100" : "text-gold-dark border-gold/30 bg-gold/10 hover:bg-gold/15"
+                  className={`inline-flex items-center gap-1.5 h-10 [@media(pointer:coarse)]:h-11 px-3 rounded-lg border text-xs font-medium transition-colors ${
+                    low ? "text-red-600 border-red-200 bg-red-50 hover:bg-red-100" : "text-gold-ink border-gold/30 bg-gold/10 hover:bg-gold/15"
                   }`}
                 >
-                  <Coins className="w-3.5 h-3.5" />
+                  <Coins className="w-4 h-4" />
                   {creditsInfo.unlimited
                     ? <span>غير محدود</span>
                     : <>{creditsInfo.balance} <span className="opacity-60">/ {creditsInfo.monthlyCredits}</span></>}
                 </button>
               );
             })()}
-            <Button variant="outline" size="sm" className="text-xs gap-1 px-2 [@media(pointer:coarse)]:min-w-11"
+            <NotificationBell />
+            <button
               onClick={toggleSound}
               aria-label={soundEnabled ? "كتم صوت الإشعار" : "تفعيل صوت الإشعار"}
-              title={soundEnabled ? "كتم صوت الإشعار" : "تفعيل صوت الإشعار"}>
-              {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5 text-muted-foreground" />}
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs gap-1"
-              onClick={() => setHistoryOpen(o => !o)}>
-              <History className="w-3.5 h-3.5" /> السجل
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs gap-1"
-              onClick={() => startNewConversation(true)}
-              disabled={createConvMutation.isPending}>
-              <Plus className="w-3.5 h-3.5" /> محادثة جديدة
-            </Button>
-            {messages.length > 0 && (
-              <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground"
-                onClick={() => startNewConversation()}>
-                <Trash2 className="w-3.5 h-3.5" /> مسح
-              </Button>
-            )}
+              title={soundEnabled ? "كتم صوت الإشعار" : "تفعيل صوت الإشعار"}
+              className="inline-flex items-center justify-center h-10 w-10 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 rounded-lg border border-border bg-white text-navy hover:bg-muted transition-colors"
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+            </button>
+            <button
+              onClick={() => setHistoryOpen(o => !o)}
+              className={`inline-flex items-center gap-1.5 h-10 [@media(pointer:coarse)]:h-11 px-3 rounded-lg border text-xs font-medium transition-colors ${
+                historyOpen ? "border-navy/30 bg-navy/5 text-navy" : "border-border bg-white text-navy hover:bg-muted"
+              }`}
+            >
+              <History className="w-4 h-4" /> السجل
+            </button>
+            <button
+              onClick={startNewConversation}
+              className="inline-flex items-center gap-1.5 h-10 [@media(pointer:coarse)]:h-11 px-3 rounded-lg bg-navy text-white text-xs font-medium hover:bg-navy-dark transition-colors"
+            >
+              <Plus className="w-4 h-4" /> محادثة جديدة
+            </button>
           </div>
         </div>
 
@@ -1707,7 +1707,7 @@ export default function AgentChat() {
                 <SaraAvatar className="w-8 h-8" />
                 <div className="bg-muted/60 border border-border rounded-2xl rounded-tl-sm px-4 py-3 min-w-[15rem]">
                   <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-violet-600 shrink-0" />
+                    <Loader2 className="w-4 h-4 animate-spin text-gold-ink shrink-0" />
                     <span key={thinkingStage} className="text-sm text-foreground animate-fade-in-up">
                       {pendingQuickReply
                         ? `جارٍ تنفيذ: «${pendingQuickReply}»`
@@ -1731,36 +1731,44 @@ export default function AgentChat() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
+          {/* ─── حقل الكتابة ────────────────────────────────────────────
+              كان ثلاثة أزرار محدَّدة مربّعة تحفّ بالحقل من جانبيه، فبدا شريط
+              أدوات مُلحقاً بمربّع نصّ لا حقلَ محادثة. الآن سطحٌ واحد يحمل
+              النصّ والأيقونات داخله، والإطار يضيء عند التركيز فيُقرأ موضعُ
+              الكتابة من الشكل لا من التخمين. */}
           <div className="border-t border-border p-3 shrink-0">
-            <div className="flex gap-2 items-end">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={e => void handleImageSelected(e)}
-              />
-              <Button
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => void handleImageSelected(e)}
+            />
+            <div className={`flex items-end gap-1 rounded-2xl border bg-white px-2 py-1.5 transition-colors ${
+              recording ? "border-red-300 ring-2 ring-red-100" : "border-navy/15 focus-within:border-gold focus-within:ring-2 focus-within:ring-gold/20"
+            }`}>
+              <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={chatMutation.isPending || extracting || recording}
-                size="icon"
-                variant="outline"
-                className="h-11 w-11 shrink-0"
                 title="ارفع صورة فاتورة أو سند قبض"
+                aria-label="ارفع صورة فاتورة أو سند قبض"
+                className="inline-flex items-center justify-center h-11 w-11 shrink-0 rounded-full text-muted-foreground hover:text-navy hover:bg-muted transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
               >
-                {extracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
-              </Button>
-              <Button
+                {extracting ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
+              </button>
+              <button
                 onClick={() => (recording ? stopRecording() : void startRecording())}
                 disabled={chatMutation.isPending || transcribing || extracting}
-                size="icon"
-                variant={recording ? "destructive" : "outline"}
-                className={`h-11 w-11 shrink-0 ${recording ? "animate-pulse" : ""}`}
                 title={recording ? "إيقاف التسجيل وإرسال" : "تحدث مع المحاسب الذكي بالصوت"}
+                aria-label={recording ? "إيقاف التسجيل وإرسال" : "تحدث مع المحاسب الذكي بالصوت"}
+                className={`inline-flex items-center justify-center h-11 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+                  recording
+                    ? "bg-red-600 text-white hover:bg-red-700 motion-safe:animate-pulse"
+                    : "text-muted-foreground hover:text-navy hover:bg-muted"
+                }`}
               >
-                {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </Button>
+                {transcribing ? <Loader2 className="w-5 h-5 animate-spin" /> : recording ? <Square className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              </button>
               <Textarea
                 value={input}
                 // القصّ هنا لا مجرد تحذير: السيرفر يرفض ما يتجاوز الحد، ورفضٌ
@@ -1768,28 +1776,31 @@ export default function AgentChat() {
                 onChange={e => setInput(e.target.value.slice(0, MAX_MESSAGE_CHARS))}
                 maxLength={MAX_MESSAGE_CHARS}
                 onKeyDown={handleKey}
-                aria-label="اكتب رسالتك للمحاسب الذكي" placeholder={recording ? "🎙️ جارٍ التسجيل... اضغط زر الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص..." : "اكتب أمرك أو تحدث بالصوت أو ارفع صورة فاتورة..."}
-                className="flex-1 min-h-[44px] max-h-32 resize-none text-sm"
+                aria-label="اكتب رسالتك للمحاسب الذكي"
+                placeholder={recording ? "جارٍ التسجيل… اضغط الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص…" : "اكتب أمرك، أو تحدّث بالصوت، أو ارفع صورة فاتورة…"}
+                // الحقل بلا إطار: الإطار على السطح الحاوي كلّه، وإطارٌ داخل إطار
+                // هو ما كان يجعل الشكل قديماً
+                className="flex-1 min-h-[44px] max-h-32 resize-none text-sm border-0 bg-transparent shadow-none focus-visible:ring-0 px-1 py-2.5"
                 rows={1}
                 disabled={chatMutation.isPending || recording || transcribing}
               />
-              <Button
+              <button
                 onClick={() => void send()}
                 aria-label="إرسال الرسالة"
                 disabled={!input.trim() || chatMutation.isPending}
-                size="icon"
-                className="h-11 w-11 shrink-0"
+                className="inline-flex items-center justify-center h-11 w-11 shrink-0 rounded-full bg-navy text-white hover:bg-navy-dark transition-colors disabled:opacity-30"
               >
-                {chatMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </Button>
+                {chatMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1.5 text-center">
-              <MessageSquare className="w-3 h-3 inline ml-1" />
-              Enter للإرسال · 🎙️ تحدث بالصوت · 📷 ارفع صورة فاتورة/سند — المحاسب الذكي يفهم وينفذ مباشرة على Almoaser AI ERP
+
+            {/* سطرٌ واحد قصير بدل جملةٍ فيها رمزان تعبيريان واسم المنتج كاملاً */}
+            <p className="text-[11px] text-muted-foreground mt-2 text-center">
+              Enter للإرسال · Shift+Enter لسطر جديد
             </p>
             {/* التكلفة تُعرض قبل الإرسال لا بعده — لا يُفاجأ العميل بخصم نقطتين */}
             {input.length > LONG_MESSAGE_CHARS && (
-              <p className="text-xs text-amber-700 mt-1 text-center">
+              <p className="text-[11px] text-amber-700 mt-1 text-center">
                 رسالة طويلة — ستُحتسب بنقطتين ({input.length.toLocaleString("ar-SA")} من {MAX_MESSAGE_CHARS.toLocaleString("ar-SA")} حرف)
               </p>
             )}

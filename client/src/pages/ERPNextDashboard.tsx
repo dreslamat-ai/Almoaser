@@ -21,10 +21,10 @@ function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     Paid: { label: "مدفوعة", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
     Unpaid: { label: "غير مدفوعة", className: "bg-red-100 text-red-700 border-red-200" },
-    Overdue: { label: "متأخرة", className: "bg-orange-100 text-orange-700 border-orange-200" },
+    Overdue: { label: "متأخرة", className: "bg-amber-100 text-amber-700 border-amber-200" },
     Draft: { label: "مسودة", className: "bg-gray-100 text-gray-600 border-gray-200" },
     Cancelled: { label: "ملغاة", className: "bg-gray-100 text-gray-500 border-gray-200" },
-    Return: { label: "مرتجع", className: "bg-purple-100 text-purple-700 border-purple-200" },
+    Return: { label: "مرتجع", className: "bg-slate-100 text-slate-700 border-slate-200" },
   };
   const cfg = map[status] ?? { label: status, className: "bg-gray-100 text-gray-600 border-gray-200" };
   return (

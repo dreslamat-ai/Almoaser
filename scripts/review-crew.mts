@@ -339,6 +339,36 @@ async function agentUi(): Promise<Result> {
     f.push("لا احترام لـprefers-reduced-motion — الحركة الدائمة تُتعب من يطلب تقليلها");
   }
 
+
+  // ١٢) ألوان زخرفية خارج الهوية — بأسماء لوحة Tailwind لا بالسداسي.
+  //
+  // فحص السداسي أعلاه لا يراها إطلاقاً: `text-violet-600` صنفٌ لا لون مكتوب،
+  // فمرّ بنفسجيٌّ في شاشة المحادثة أشهراً في هويةٍ كحلية وذهبية. والدلالية
+  // مستثناة: الأخضر نجاح، والأحمر خطأ، والكهرماني تحذير — وظيفةٌ لا زينة.
+  const OFF_PALETTE = /\b(?:text|bg|border|ring|from|to|via)-(violet|purple|indigo|fuchsia|pink|sky|cyan|lime|orange)-[0-9]{2,3}\b/g;
+  for (const p of pages) {
+    const src = read(p).replace(/ui-agent:mockup-start[\s\S]*?ui-agent:mockup-end/g, "");
+    const hits = Array.from(src.matchAll(OFF_PALETTE)).map(m => m[1]);
+    if (hits.length) {
+      f.push(`${hits.length} لوناً خارج الهوية في ${p} (${[...new Set(hits)].join("، ")})`);
+    }
+  }
+
+  // ١٣) هدف اللمس ٤٤ بكسل — ما دونه يُخطئه الإصبع فيضغط جاره.
+  //
+  // القاعدة مكتوبة في نظام العمل ولم يكن يقيسها أحد: رُفعت الأهداف يدوياً
+  // في commit ثم أُنقصت في تصميمٍ لاحق بلا أن ينبّه شيء. الشرط هنا: كل زرّ
+  // بارتفاع أقلّ من h-11 يجب أن يحمل استثناء المؤشّر الخشن معه.
+  for (const p of pages) {
+    const src = read(p).replace(/ui-agent:mockup-start[\s\S]*?ui-agent:mockup-end/g, "");
+    let small = 0;
+    for (const m of src.matchAll(/<button[^>]*className=\{?["`][^"`]*\bh-(\d+(?:\.\d+)?)\b[^"`]*["`]/g)) {
+      const h = Number(m[1]);
+      if (h < 11 && !/pointer:coarse/.test(m[0])) small++;
+    }
+    if (small >= 3) f.push(`${small} زرّاً دون ٤٤ بكسل بلا استثناء للمس في ${p}`);
+  }
+
   return { ok: f.length === 0, findings: f.slice(0, 12) };
 }
 
