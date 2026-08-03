@@ -115,8 +115,9 @@ export function registerTelegramWebhook(app: Express): void {
 
       if (text === "/start" || text === "/help") {
         await sendTelegram(
-          "<b>المحاسب الذكي</b>\nاكتب طلبك مباشرة وسأنفّذه على نظامك:\n\n"
-          + "• اعرض آخر ١٠ فواتير\n• أنشئ فاتورة لعميل\n• كم رصيد العميل فلان؟\n\n"
+          "<b>مساعد إدارة المنصة</b>\nاكتب طلبك وسأنفّذه فوراً:\n\n"
+          + "• حال المنصة النهاردة\n• الاستهلاك والرصيد\n• مين ربطه واقع؟\n"
+          + "• دوّر على عميل بالإيميل\n• مدّد اشتراك #12 شهر\n• صلّح ربط #4572\n\n"
           + "<code>/new</code> يبدأ محادثة جديدة.",
         );
         return;
@@ -164,38 +165,28 @@ async function handleOwnerMessage(chatId: number, text: string): Promise<void> {
     effectiveUserId: await resolveOrgOwnerId(user),
   });
 
+  // ─── وكيل الإدارة لا وكيل المحاسبة ──────────────────────────────────────
+  // كان المالك يُوجَّه إلى `agent.chat` — وكيل نظام العميل. فيُسأل عن اشتراك
+  // أو استهلاك فيجيب عن ERPNext، ويعتذر عن أفعالٍ إدارية ليست من أدواته أصلاً.
+  // المالك يدير منصّة لا يمسك دفاتر عميل، فله أدواته هو.
   try {
-    const r = await caller.agent.chat({
-      messages: history,
-      conversationId: thread.conversationId,
-    } as never) as { reply: string; conversationId?: number; quickReplies?: string[] };
-
-    // الوكيل يحفظ الرسالتين في القاعدة، فلا نكرّرهما هنا — نحتفظ بالمعرّف فقط
-    thread.conversationId = r.conversationId ?? thread.conversationId;
-    threads.set(chatId, thread);
-
-    // الخيارات تُؤخذ من حقلها في الرد لا تُستخرج من نصّه: agent.chat ينزع سطر
-    // العلامة قبل أن يعيد `reply`، فمحاولة استخراجه بعدها ترجع فارغة دائماً —
-    // وهو سبب غياب الأزرار عن تيليجرام بينما كانت تظهر في الموقع.
-    // ويبقى الاستخراج احتياطاً لردٍّ وصل من مسار لا ينزعه.
-    const quickReplies = r.quickReplies?.length
-      ? r.quickReplies
-      : extractQuickReplies(r.reply).quickReplies;
-    const parts = chunkForTelegram(agentReplyToTelegram(r.reply));
-
-    // نتيجة الإرسال تُفحص: فشلٌ صامت هنا يعني أن العميل نفّذ عملية على نظامه
-    // ولم يصله تأكيدها — وهو أسوأ من فشل معلن، لأنه سيعيد الطلب ظانّاً أنه لم يتم.
-    for (let i = 0; i < parts.length; i++) {
-      // الأزرار مع الجزء الأخير وحده: لو رافقت كل جزء لتكرّرت اللوحة
-      const isLast = i === parts.length - 1;
-      const sent = await sendTelegram(parts[i], isLast ? { quickReplies } : {});
-      if (!sent.ok) {
-        console.error("[telegram] تعذّر تسليم رد الوكيل:", sent.error);
-        break;
+    const { runAdminAgent } = await import("./adminAgent");
+    const admin = await runAdminAgent(caller as never, history);
+    if (admin.reply) {
+      const parts = chunkForTelegram(agentReplyToTelegram(admin.reply));
+      for (let i = 0; i < parts.length; i++) {
+        const sent = await sendTelegram(parts[i]);
+        if (!sent.ok) console.warn("[telegram] تعذّر إرسال الردّ:", sent.error ?? "");
       }
+      return;
     }
-  } catch (e) {
-    const reason = e instanceof Error ? e.message : "خطأ غير معروف";
-    await sendTelegram(`تعذّر تنفيذ الطلب: ${tg(reason)}`);
+    console.warn("[telegram] وكيل الإدارة لم يردّ:", admin.error);
+    await sendTelegram(`تعذّر تنفيذ الطلب الآن — ${tg(admin.error ?? "خطأ غير معروف")}`);
+    return;
+  } catch (e: unknown) {
+    console.error("[telegram] وكيل الإدارة تعثّر:", e instanceof Error ? e.message : String(e));
+    await sendTelegram("تعثّر مساعد الإدارة. جرّب مرة أخرى.");
+    return;
   }
+
 }

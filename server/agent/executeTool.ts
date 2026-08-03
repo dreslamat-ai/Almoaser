@@ -196,6 +196,22 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
       };
       const data = await postDocWithCostCenterRetry("/api/resource/Sales%20Invoice", invoiceDoc, company) as { data: { name: string; grand_total: number; total_taxes_and_charges?: number; net_total?: number } };
       const invoiceName = data?.data?.name ?? "SINV-???";
+
+      // إشعار إدارة المنصة: الفاتورة أهمّ ما يقع في حساب العميل، وكانت الوحيدة
+      // التي لا تُشعِر — يُشعَر عن طلب تطبيق وعن تقرير محفوظ ولا يُشعَر عن فاتورة.
+      // لا يُفشل الإشعارُ الفاتورةَ: هي مسجَّلة في نظام العميل على أي حال.
+      try {
+        const { notifyAdmins } = await import("../notifications");
+        await notifyAdmins({
+          type: "invoice_created",
+          title: `فاتورة جديدة ${invoiceName}`,
+          body: `${resolvedCustomer} — ${Number(data?.data?.grand_total ?? 0).toLocaleString("ar-SA")} ريال`,
+          link: "/erp/invoices",
+        });
+      } catch (e) {
+        console.warn("[create_invoice] تعذّر إشعار الإدارة:", e instanceof Error ? e.message : e);
+      }
+
       return {
         result: data?.data,
         display: `__INVOICE_CREATED__${JSON.stringify({ name: invoiceName, customer: resolvedCustomer, items: resolvedItems, grand_total: data?.data?.grand_total, net_total: data?.data?.net_total, total_taxes: data?.data?.total_taxes_and_charges, tax_template: taxTemplate })}`,

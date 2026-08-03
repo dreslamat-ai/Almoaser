@@ -1276,6 +1276,53 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+    // تعديل ربط مستخدم بنظامه — طلبه المالك ليصلح ربطاً انكسر بلا انتظار العميل.
+    // **يُختبر قبل الحفظ:** حفظ بيانات لا تعمل يترك العميل معطّلاً وهو يظنّ أنه
+    // أُصلح، وهو ما وقع أصلاً حين انكسر ربطٌ ولم يعلم به أحد.
+    setUserErpConnection: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        url: z.string().trim().min(4),
+        username: z.string().trim().min(1),
+        password: z.string().min(1),
+        provider: z.enum(["erpnext", "odoo"]).default("erpnext"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const cleanUrl = normalizeErpUrl(input.url);
+        if (!cleanUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "رابط غير صالح" });
+
+        const test = await testConnectionByProvider(input.provider, cleanUrl, input.username, input.password);
+        if (!test.ok) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: test.error ?? "فشل اختبار الاتصال — لم يُحفظ شيء" });
+        }
+
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" });
+
+        const values = {
+          provider: input.provider, url: cleanUrl, username: input.username,
+          passwordEnc: encryptPassword(input.password), lastVerifiedAt: new Date(),
+        };
+        const existing = await db.select().from(erpnextConnections).where(eq(erpnextConnections.userId, input.userId)).limit(1);
+        if (existing[0]) {
+          await db.update(erpnextConnections).set(values).where(eq(erpnextConnections.userId, input.userId));
+        } else {
+          await db.insert(erpnextConnections).values({ ...values, userId: input.userId });
+        }
+
+        const { logAdminAction } = await import("./adminAudit");
+        const target = await getUserById(input.userId);
+        await logAdminAction({
+          adminId: ctx.user.id, adminName: ctx.user.name ?? undefined,
+          action: "set_user_erp_connection", targetUserId: input.userId,
+          targetUserEmail: target?.email ?? undefined,
+          details: `${cleanUrl} · ${input.username}`,
+        }).catch(() => {});
+
+        return { success: true, loggedInAs: test.loggedInAs, url: cleanUrl };
+      }),
     setUserActive: protectedProcedure
       .input(z.object({ userId: z.number(), isActive: z.boolean() }))
       .mutation(async ({ ctx, input }) => {

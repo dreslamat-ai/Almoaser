@@ -48,10 +48,33 @@ describe("agentReplyToTelegram", () => {
   });
 });
 
-// كانت الأزرار تُستخرج من نصّ الرد بعد أن نزعها agent.chat — فترجع فارغة دائماً
-describe("مصدر الأزرار في تيليجرام", () => {
-  it("لا يعتمد على وجود العلامة في النص", () => {
-    const src = readFileSync(new URL("./telegramWebhook.ts", import.meta.url), "utf8");
-    expect(src).toContain("r.quickReplies?.length");
+// كان بوت المالك يوجّه رسائله إلى `agent.chat` — وكيل نظام العميل — فيجيب عن
+// ERPNext حين يُسأل عن اشتراك أو استهلاك. صار يوجّهها إلى وكيل الإدارة.
+describe("وجهة رسائل المالك", () => {
+  const src = readFileSync(new URL("./telegramWebhook.ts", import.meta.url), "utf8");
+
+  it("تذهب إلى وكيل الإدارة", () => {
+    expect(src).toContain("runAdminAgent");
+  });
+
+  // المسار القديم حُذف لا عُطِّل: كودٌ ميت يبقى يُقرأ كأنه حيّ، ويعود بسهو
+  it("لا يبقى مسار وكيل المحاسبة", () => {
+    expect(src).not.toContain("caller.agent.chat");
+  });
+});
+
+// أدوات المالك تُنفَّذ عبر نفس المستدعي الذي يبنيه الموقع، فتسري الصلاحيات
+// وسجل التدقيق — ولا يوجد طريق خلفي يلتفّ عليهما.
+describe("أدوات وكيل الإدارة", () => {
+  const src = readFileSync(new URL("./adminAgent.ts", import.meta.url), "utf8");
+
+  it("لا أداة حذف", () => {
+    const names = Array.from(src.matchAll(/name: "([a-z_]+)"/g)).map(m => m[1]);
+    expect(names.length).toBeGreaterThan(5);
+    for (const n of names) expect(/delete|remove|destroy|drop|purge/.test(n)).toBe(false);
+  });
+
+  it("لا يُنشئ فواتير عملاء — ذلك عمل وكيل آخر", () => {
+    expect(src).not.toContain("create_invoice");
   });
 });

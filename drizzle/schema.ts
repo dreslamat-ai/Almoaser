@@ -466,6 +466,8 @@ export const adminActionLog = mysqlTable("admin_action_log", {
     "extend_days", "set_user_role", "set_user_active",
     // اطّلاع مالك المنصة على محادثة عميل — قراءة لا تعديل، لكنها تمسّ بيانات مالية
     "view_customer_conversation",
+    // الإدارة تكتب كلمة سرّ في حساب عميل — فعلٌ يبقى له أثر
+    "set_user_erp_connection",
   ]).notNull(),
   targetUserId: int("targetUserId").notNull(),
   targetUserEmail: varchar("targetUserEmail", { length: 320 }),
