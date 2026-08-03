@@ -8,6 +8,8 @@ import { estimateCostUsd } from "./llmPricing";
 export async function logLlmUsage(params: {
   userId?: number;
   provider: string; // "openrouter:model-id" | "openai" | "builtin"
+  /** من أنفق — الافتراضي المنصة نفسها */
+  app?: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }): Promise<void> {
   try {
@@ -26,6 +28,7 @@ export async function logLlmUsage(params: {
       completionTokens,
       totalTokens,
       costUsd: costUsd.toFixed(6),
+      app: (params.app ?? "sara").slice(0, 40),
     });
   } catch (e) {
     console.warn("[llmUsage] failed to log usage:", e instanceof Error ? e.message : e);
@@ -70,6 +73,47 @@ export async function getLlmCostSummary() {
       calls: Number(r.calls),
     })),
   };
+}
+
+/**
+ * الاستهلاك موزّعاً على التطبيقات، ولكل تطبيق موديلاته.
+ *
+ * يجيب سؤال «مين بيستهلك إيه؟» الذي لا تجيبه لوحة المزوّد: المفتاح مشترك
+ * بين سارة وشهد، فكل ما يعرضه OpenRouter مجموعٌ واحد.
+ */
+export async function getLlmUsageByApp(days = 30) {
+  const db = await getDb();
+  if (!db) return [] as Array<{ app: string; costUsd: number; totalTokens: number; calls: number; models: Array<{ model: string; provider: string; costUsd: number; totalTokens: number; calls: number }> }>;
+
+  const rows = await db
+    .select({
+      app: llmUsageLog.app,
+      model: llmUsageLog.model,
+      provider: llmUsageLog.provider,
+      costUsd: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)`,
+      totalTokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)`,
+      calls: sql<string>`count(*)`,
+    })
+    .from(llmUsageLog)
+    .where(rangeSince(24 * days))
+    .groupBy(llmUsageLog.app, llmUsageLog.model, llmUsageLog.provider)
+    .orderBy(desc(sql`sum(${llmUsageLog.costUsd})`));
+
+  const byApp = new Map<string, { app: string; costUsd: number; totalTokens: number; calls: number; models: Array<{ model: string; provider: string; costUsd: number; totalTokens: number; calls: number }> }>();
+  for (const r of rows) {
+    const key = r.app ?? "sara";
+    if (!byApp.has(key)) byApp.set(key, { app: key, costUsd: 0, totalTokens: 0, calls: 0, models: [] });
+    const entry = byApp.get(key)!;
+    const cost = Number(r.costUsd);
+    const tokens = Number(r.totalTokens);
+    const calls = Number(r.calls);
+    entry.costUsd += cost;
+    entry.totalTokens += tokens;
+    entry.calls += calls;
+    entry.models.push({ model: r.model, provider: r.provider, costUsd: cost, totalTokens: tokens, calls });
+  }
+
+  return Array.from(byApp.values()).sort((a, b) => b.costUsd - a.costUsd);
 }
 
 /** آخر حركات استهلاك النماذج (للتفصيل عند الحاجة) */

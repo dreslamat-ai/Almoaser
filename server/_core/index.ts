@@ -10,6 +10,7 @@ import { serveStatic, setupVite } from "./vite";
 import { startScheduledJobs } from "../scheduler";
 import { registerMyFatoorahWebhook } from "../myfatoorahWebhook";
 import { registerTelegramWebhook } from "../telegramWebhook";
+import { registerLlmUsageIngest } from "../llmUsageIngest";
 
 /**
  * إنهاء لطيف: نتوقف عن قبول الجديد ونمهل الجاري أن يكتمل.
@@ -81,6 +82,7 @@ async function startServer() {
   // لو لم يعد العميل لصفحة الكولباك بعد الدفع
   registerMyFatoorahWebhook(app);
   registerTelegramWebhook(app);
+  registerLlmUsageIngest(app);
   // tRPC API
   app.use(
     "/api/trpc",

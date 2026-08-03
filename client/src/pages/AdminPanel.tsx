@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Users, FileText, CheckCircle2, Shield, Clock, Building2, Phone, Mail, Calendar, Zap,
-  ChevronDown, ChevronUp, Coins, Hash, StickyNote, Gift, PlusCircle, CalendarPlus, Receipt, Ban,
-  Search, DollarSign, TrendingUp, Download, Cpu, RefreshCw,
-} from "lucide-react";
+import { Ban, Building2, Calendar, CalendarPlus, CheckCircle2, ChevronDown, ChevronUp, Clock, Coins, Cpu, DollarSign, Download, FileText, Gift, Hash, Mail, Phone, PlusCircle, Receipt, RefreshCw, Search, Shield, StickyNote, TrendingUp, Users, Wallet, Zap } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState, Fragment } from "react";
 import { toast } from "sonner";
@@ -296,7 +292,11 @@ export function AdminConsole() {
     { conversationId: openChatId ?? 0 },
     { enabled: isAuthenticated && user?.role === "admin" && openChatId != null });
   const { data: revenueSummary } = trpc.admin.revenueSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", ...liveQueryOptions });
-  const { data: llmCostSummary } = trpc.admin.llmCostSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && tab === "revenue", ...liveQueryOptions });
+  const { data: llmCostSummary } = trpc.admin.llmCostSummary.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && (tab === "revenue" || tab === "llm"), ...liveQueryOptions });
+  const { data: llmByApp } = trpc.admin.llmUsageByApp.useQuery({ days: 30 }, { enabled: isAuthenticated && user?.role === "admin" && tab === "llm", ...liveQueryOptions });
+  //الرصيد يُعرض في التبويبين: في «الإيرادات» ليُراجَع مع الأرقام، وفي
+  //«تفاصيل النماذج» ليُقرأ مع من أنفقه.
+  const { data: balances } = trpc.admin.providerBalances.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" && (tab === "revenue" || tab === "llm"), ...liveQueryOptions });
 
   // آخر لحظة وصلت فيها بيانات الاستهلاك، وحالة الجلب لأي من الاستعلامين
   const liveUpdatedAt = Math.max(usageQuery.dataUpdatedAt, insightsQuery.dataUpdatedAt);
@@ -376,7 +376,7 @@ export function AdminConsole() {
       {insights && <PlatformInsights data={insights} />}
 
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["tasks", "المهام"], ["users", "المستخدمون"], ["leads", "عملاء محتملون"], ["apps", "طلبات التطبيقات"], ["coupons", "الكوبونات"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
+        {[["registrations", "طلبات التسجيل"], ["subscriptions", "الاشتراكات"], ["usage", "الاستهلاك"], ["revenue", "الإيرادات والتكلفة"], ["llm", "تفاصيل النماذج"], ["tasks", "المهام"], ["users", "المستخدمون"], ["leads", "عملاء محتملون"], ["apps", "طلبات التطبيقات"], ["coupons", "الكوبونات"], ["reports", "التقارير"], ["chats", "محادثات العملاء"], ["audit", "سجل التدقيق"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 [@media(pointer:coarse)]:min-h-11 rounded-xl text-sm font-medium transition-all ${tab === v ? "bg-navy text-white shadow-md" : "bg-white text-muted-foreground border border-gray-200 hover:border-navy"}`}>
             {l}
@@ -759,6 +759,28 @@ export function AdminConsole() {
                 <div className="text-2xl font-bold text-navy">${(llmCostSummary?.last30Days ?? 0).toFixed(4)}</div>
                 <div className="text-sm text-muted-foreground">تكلفة النماذج (آخر 30 يوماً)</div>
               </div>
+              {balances?.balances.map(b => (
+                <div key={b.provider} className={`bg-white rounded-2xl p-5 border shadow-sm ${
+                  b.remainingUsd !== null && b.remainingUsd <= (balances?.thresholdUsd ?? 5)
+                    ? "border-red-200 bg-red-50/40" : "border-gray-100"}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
+                    b.remainingUsd !== null && b.remainingUsd <= (balances?.thresholdUsd ?? 5)
+                      ? "bg-red-100 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div className="text-2xl font-bold text-navy" dir="ltr">
+                    {b.remainingUsd !== null ? `$${b.remainingUsd.toFixed(2)}` : "—"}
+                  </div>
+                  <div className="text-sm text-muted-foreground">رصيد {b.provider} المتبقّي</div>
+                  {b.grantedUsd !== null && (
+                    <div className="text-xs text-muted-foreground mt-1" dir="ltr">
+                      ${(b.usedUsd ?? 0).toFixed(2)} / ${b.grantedUsd.toFixed(2)}
+                    </div>
+                  )}
+                  {/* السبب يُعرض كما هو: «تعذّر» ليس «صفر» ولا «بخير» */}
+                  {b.error && <div className="text-xs text-amber-700 mt-1">{b.error}</div>}
+                </div>
+              ))}
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm sm:col-span-2 lg:col-span-4">
                 <div className="text-sm text-muted-foreground">
                   هامش تقديري للشهر الحالي: إيرادات الشهر {(revenueSummary?.byMonth[0]?.paidRevenue ?? 0).toLocaleString("ar-SA")} ريال
@@ -827,6 +849,88 @@ export function AdminConsole() {
             </div>
           </div>
         )}
+        {/* ── تفاصيل النماذج: من أنفق وعلى ماذا ───────────────────────────
+            لوحة المزوّد تعرض مجموعاً واحداً لأن المفتاح مشترك بين سارة وشهد.
+            الفصل هنا أو لا يكون. والإجماليات تبقى في «الإيرادات والتكلفة»
+            كما هي — هذا التبويب يفصّل ولا يحلّ محلّها. */}
+        {tab === "llm" && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {balances?.balances.map(b => {
+                const low = b.remainingUsd !== null && b.remainingUsd <= (balances?.thresholdUsd ?? 5);
+                return (
+                  <div key={b.provider} className={`bg-white rounded-2xl p-5 border shadow-sm ${low ? "border-red-200 bg-red-50/40" : "border-gray-100"}`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${low ? "bg-red-100 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div className="text-2xl font-bold text-navy" dir="ltr">
+                      {b.remainingUsd !== null ? `$${b.remainingUsd.toFixed(2)}` : "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">رصيد {b.provider} المتبقّي</div>
+                    {b.grantedUsd !== null && (
+                      <div className="text-xs text-muted-foreground mt-1" dir="ltr">
+                        ${(b.usedUsd ?? 0).toFixed(2)} / ${b.grantedUsd.toFixed(2)}
+                      </div>
+                    )}
+                    {b.error && <div className="text-xs text-amber-700 mt-1">{b.error}</div>}
+                    {low && <div className="text-xs font-medium text-red-700 mt-2">قارب النفاد — يلزم الشحن</div>}
+                  </div>
+                );
+              })}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm sm:col-span-2">
+                <div className="text-sm text-muted-foreground">
+                  ينبّهك النظام على تيليجرام حين ينزل أي رصيد عن
+                  <b className="text-navy" dir="ltr"> ${(balances?.thresholdUsd ?? 5).toFixed(2)}</b>،
+                  مرّة كل ساعة ما دام منخفضاً.
+                </div>
+                <div className="text-xs text-muted-foreground mt-2">
+                  العتبة من <code dir="ltr">LLM_BALANCE_ALERT_USD</code> — ترفعها حين يكبر الشغل.
+                  وعند نفاد OpenRouter تتوقّف سارة وشهد معاً، فالمفتاح واحد بينهما.
+                </div>
+              </div>
+            </div>
+
+            {llmByApp?.map(a => (
+              <div key={a.app} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium text-navy flex items-center gap-2">
+                    <Cpu className="w-4 h-4" />
+                    {a.app === "sara" ? "سارة — منصة المعاصر AI" : a.app === "shahd" ? "شهد — AlmoaserPos" : a.app}
+                  </span>
+                  <span className="text-sm text-muted-foreground" dir="ltr">${a.costUsd.toFixed(4)}</span>
+                  <span className="text-xs text-muted-foreground">{a.calls.toLocaleString("ar-SA")} استدعاء · {a.totalTokens.toLocaleString("ar-SA")} توكن</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px] text-sm">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>{["الموديل", "المزود", "الاستدعاءات", "التوكنز", "التكلفة (دولار)"].map(h => (
+                        <th key={h} className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {a.models.map(m => (
+                        <tr key={`${a.app}-${m.provider}-${m.model}`}>
+                          <td className="px-4 py-2 font-medium text-navy" dir="ltr">{m.model}</td>
+                          <td className="px-4 py-2 text-muted-foreground">{m.provider}</td>
+                          <td className="px-4 py-2">{m.calls.toLocaleString("ar-SA")}</td>
+                          <td className="px-4 py-2">{m.totalTokens.toLocaleString("ar-SA")}</td>
+                          <td className="px-4 py-2 font-medium text-navy" dir="ltr">${m.costUsd.toFixed(4)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+
+            {(llmByApp?.length ?? 0) === 0 && (
+              <div className="bg-white rounded-xl border border-gray-100 px-4 py-10 text-center text-muted-foreground text-sm">
+                لا استهلاك مسجَّل في آخر ثلاثين يوماً
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === "leads" && (
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="p-3 text-xs text-muted-foreground border-b border-gray-50">

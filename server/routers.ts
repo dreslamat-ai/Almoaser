@@ -1383,6 +1383,21 @@ export const appRouter = router({
       const { getLlmCostSummary } = await import("./llmUsage");
       return getLlmCostSummary();
     }),
+    // تفصيل الاستهلاك: من أنفق وعلى أي موديل — يجيب ما لا تجيبه لوحة المزوّد
+    // لأن المفتاح مشترك بين سارة وشهد فما يعرضه مجموعٌ واحد
+    llmUsageByApp: protectedProcedure
+      .input(z.object({ days: z.number().int().min(1).max(365).optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { getLlmUsageByApp } = await import("./llmUsage");
+        return getLlmUsageByApp(input?.days ?? 30);
+      }),
+    // رصيد المزوّدين المتبقّي وعتبة التنبيه — الرقم الذي يُتّخذ عليه قرار الشحن
+    providerBalances: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getProviderBalances } = await import("./providerBalance");
+      return getProviderBalances();
+    }),
     // تصدير تقرير مالي كامل (CSV) لكل المدفوعات والمنح الإدارية
     exportFinancialReport: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

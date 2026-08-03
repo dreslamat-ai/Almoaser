@@ -483,6 +483,9 @@ export const llmUsageLog = mysqlTable("llm_usage_log", {
   userId: int("userId").references(() => users.id),
   // المزود والموديل الفعلي المستخدم، مثل openrouter أو openai أو builtin
   provider: varchar("provider", { length: 40 }).notNull(),
+  // من أنفق: sara أو shahd أو غيرهما. المفتاح واحد بين التطبيقين، فما يعرضه
+  // المزوّد مجموعٌ لا يُفصل — والفصل هنا أو لا يكون.
+  app: varchar("app", { length: 40 }).default("sara").notNull(),
   model: varchar("model", { length: 120 }).notNull(),
   promptTokens: int("promptTokens").default(0).notNull(),
   completionTokens: int("completionTokens").default(0).notNull(),
