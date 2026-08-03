@@ -222,3 +222,21 @@
     outline-offset: 2px;
   }
 }
+
+@layer base {
+  /* ── التوسيط على الجوال ────────────────────────────────────────────────
+     الشاشة الضيّقة تجعل النصّ المحاذى لليمين يبدو معلّقاً على حافة والفراغ
+     كلّه في جهة. التوسيط يُعيد التوازن.
+
+     **والمحاذاة تبقى لما يُقرأ سطراً سطراً:** الجداول والنماذج والفقرات
+     الطويلة ورسائل المحادثة. التوسيط فيها يُتعب العين لأن كل سطر يبدأ من
+     موضع مختلف — ويُفقد فقاعةَ المحادثة معنى الجهة التي تقول من يتكلّم. */
+  @media (max-width: 767px) {
+    .m-card, .m-title, .m-sub, .m-eyebrow, .m-stat, .m-stat__label { text-align: center; }
+    .m-card { align-items: center; }
+    .m-icon { margin-inline: auto; }
+
+    table, form, label, input, select, textarea,
+    .table-wrap, .prose, [data-chat-bubble] { text-align: start; }
+  }
+}
