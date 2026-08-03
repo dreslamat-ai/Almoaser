@@ -76,6 +76,21 @@ const BACKLOG: Item[] = [
     description: "المعاين صار يقيس عشر صفحات مُرنْدَرة بدل مسح كل القوالب نصّياً — أدقّ اليوم (صفر جدول عريض) لكن قالبٌ جديد لا تفتحه الصفحات العشر لن يُرى.",
     priority: "low",
   },
+  {
+    title: "[AlmoaserPos] صفحة الدفع بعد التسجيل بنفس مرض الصفحتين",
+    description: "superadmin::subscription.pay — بطاقة 1110 ومحتواها في اليمين وحده، ونصّ إنجليزي (1 Months / SAR 500.00)، وأزرار 34 بكسل. آخر خطوة في رحلة التسجيل التي أُصلحت، فالتناقض بينها وبين ما قبلها ظاهر.",
+    priority: "high",
+  },
+  {
+    title: "[AlmoaserPos] التحويل لبوابة الدفع صار يعمل بعد إصلاح package_id",
+    description: "كان `?package_id=` يسقط صامتاً فلا يُختار اشتراك بعد التسجيل. بعد الإصلاح يعمل التحويل إلى صفحة الدفع (تُحقّق منها بقراءة: GET /subscription/3/register-pay ردّ 200 بحساب مالك عادي). راقب أوّل تسجيلات حقيقية.",
+    priority: "high",
+  },
+  {
+    title: "[AlmoaserPos] layouts/auth و auth2 مكرّران",
+    description: "auth ليس ميتاً — يخدم صفحة الدفع بعد التسجيل عبر $layout نصّاً في SubscriptionController:151. دمجهما يمسّ ست صفحات لعملاء.",
+    priority: "low",
+  },
 ];
 
 const email = process.env.TELEGRAM_OWNER_EMAIL?.trim();
