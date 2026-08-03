@@ -84,6 +84,21 @@ export function judgeToolsImplemented(declared: string[], implemented: string[])
   return declared.filter(n => !have.has(n)).map(n => `أداة معلنة بلا تنفيذ: ${n}`);
 }
 
+/**
+ * ترتيب سلسلة الموديلات: الأسرع والأرخص أوّلاً.
+ *
+ * **ولا يُختبر بإفساد المصدر:** القيمة تأتي من `.env` وهو يتقدّم على
+ * الافتراضي المكتوب في الشيفرة — فإفسادُ الشيفرة لا يغيّر ما يُقرأ. الجمع
+ * يبقى حيّاً والحكم هنا يُعطى قائمةً مصطنعة.
+ */
+export function judgeModelChain(chain: string[]): string[] {
+  if (!chain.length) return ["سلسلة الموديلات فارغة"];
+  if (!/deepseek/.test(chain[0])) {
+    return [`سلسلة الموديلات تبدأ بـ${chain[0]} — الأسرع والأرخص يجب أن يكون أوّلاً`];
+  }
+  return [];
+}
+
 /** قائمة التطبيقات التي يجوز أن تدخل المقارنة المالية للمنصّة */
 export function judgeBilledApps(apps: readonly string[]): string[] {
   const f: string[] = [];
@@ -136,6 +151,17 @@ async function agentArchitect(): Promise<Result> {
   } catch (e) {
     f.push(`تعذّر فحص الفصل المالي: ${e instanceof Error ? e.message.slice(0, 80) : "خطأ"}`);
   }
+
+  // ٦) ترتيب سلسلة الموديلات: الأسرع أوّلاً.
+  //
+  // الترتيب المقلوب لا يُعلن عن نفسه — لا خطأ ولا سجلّ، فقط ثوانٍ أطول
+  // وفاتورةٌ أكبر. قِيس: 47.8ث مقابل 67.6ث لأربعة أسئلة، و$0.00278 مقابل
+  // $0.00596 للنداء، وجوابٌ أدقّ (الكبير قال «لا فواتير غير مدفوعة» وهناك
+  // أربعُ متأخّرات). يُفحص `.env` لأنه يتقدّم على الافتراضي في الشيفرة.
+  try {
+    const { getOpenRouterModels } = await import("../server/llmProvider");
+    f.push(...judgeModelChain(getOpenRouterModels()));
+  } catch { /* تعذّر التحميل — يُبلَّغ عنه في فحصٍ آخر */ }
 
   // ٣) نقطة تبليغ الاستهلاك لا تُفتح بلا سرّ
   if (exists("server/llmUsageIngest.ts")) {
@@ -682,13 +708,16 @@ const JUDGE_TESTS: Array<{ label: string; run: () => string[] }> = [
   { label: "وكيل الإدارة يُنشئ فواتير عملاء", run: () => judgeAdminTools(["create_invoice"]) },
   { label: "وكيل الإدارة بلا أدوات", run: () => judgeAdminTools([]) },
   { label: "أداة معلنة بلا تنفيذ", run: () => judgeToolsImplemented(["list_tasks", "ghost_tool"], ["list_tasks"]) },
+  { label: "انقلاب ترتيب الموديلات", run: () => judgeModelChain(["qwen/qwen3.5-397b-a17b", "deepseek/deepseek-v4-flash"]) },
+  { label: "سلسلة موديلات فارغة", run: () => judgeModelChain([]) },
   { label: "شهد داخل المقارنة المالية", run: () => judgeBilledApps(["sara", "shahd"]) },
   { label: "sara خارج المقارنة", run: () => judgeBilledApps(["other"]) },
   { label: "قائمة محسوبين فارغة", run: () => judgeBilledApps([]) },
   // والعكس: حكمٌ يُنذر على السليم لا يقلّ ضرراً
   { label: "لا إنذار على الحال السليم", run: () => {
       const bad = [...judgeAdminTools(["list_tasks", "create_task", "llm_usage"]), ...judgeBilledApps(["sara"]),
-                   ...judgeToolsImplemented(["a", "b"], ["a", "b", "c"])];
+                   ...judgeToolsImplemented(["a", "b"], ["a", "b", "c"]),
+                   ...judgeModelChain(["deepseek/x", "qwen/y"])];
       return bad.length ? [] : ["__سليم__"];
     } },
 ];
