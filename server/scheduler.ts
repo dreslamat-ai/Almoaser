@@ -4,6 +4,7 @@
 import { checkExpiringSubscriptions } from "./notifications";
 import { sendLeadDigest } from "./leadFollowUp";
 import { alertIfLowBalance } from "./providerBalance";
+import { getUnbilledApps, BILLED_APPS } from "./llmUsage";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
 
@@ -18,6 +19,7 @@ export function startScheduledJobs(): void {
   setInterval(run, CHECK_INTERVAL_MS);
   startLeadDigest();
   startBalanceWatch();
+  startUnbilledWatch();
 }
 
 // ─── مراقبة رصيد المزوّدين ───────────────────────────────────────────────────
@@ -36,6 +38,44 @@ function startBalanceWatch(): void {
   //بعد دقيقتين من الإقلاع: بعد استقرار الشبكة، وقبل أن يمضي وقت طويل
   setTimeout(tick, 2 * 60 * 1000);
   setInterval(tick, BALANCE_CHECK_MS);
+}
+
+// ─── تطبيق جديد ينفق من مفتاحنا ──────────────────────────────────────────────
+// **خارج المقارنة عن قصد، لا خارج العلم.** تكلفة أي تطبيق غير سارة لا تُحمَّل
+// على هامش هذه المنصة لأن إيراده ليس هنا — لكن أن يمرّ شهر وأحدٌ ينفق من
+// مفتاحنا بلا أن يظهر في حساب أسوأ من ضمّه خطأً. يُنبَّه مرة لكل تطبيق جديد.
+const announced = new Set<string>();
+
+function startUnbilledWatch(): void {
+  const tick = async () => {
+    try {
+      const apps = await getUnbilledApps(30);
+      const fresh = apps.filter(a => !announced.has(a.app));
+      if (!fresh.length) return;
+
+      const { sendTelegram } = await import("./telegram");
+      for (const a of fresh) { announced.add(a.app); }
+
+      const lines = fresh.map(a => `• ${a.app}: $${a.costUsd.toFixed(4)} · ${a.calls} استدعاء`);
+      const r = await sendTelegram(
+        `ℹ️ تطبيق ينفق من مفتاح النماذج وهو **خارج** المقارنة المالية\n\n${lines.join("\n")}\n\n` +
+        `المحسوب على إيراد المنصة: ${BILLED_APPS.join("، ")}\n` +
+        `تفاصيله في لوحة الأدمن ← تفاصيل النماذج. لضمّه للمقارنة أضِفه إلى BILLED_APPS.`,
+        { disablePreview: true },
+      );
+      if (!r.ok) {
+        //لم يصل التنبيه: تُنسى العلامة ليُعاد في الدورة التالية
+        for (const a of fresh) { announced.delete(a.app); }
+        console.warn("[scheduler] تعذّر التنبيه عن تطبيق غير محسوب:", r.error);
+      } else {
+        console.log(`[scheduler] تطبيقات خارج المقارنة: ${fresh.map(a => a.app).join("، ")}`);
+      }
+    } catch (e) {
+      console.warn("[scheduler] فحص التطبيقات غير المحسوبة فشل:", e instanceof Error ? e.message : e);
+    }
+  };
+  setTimeout(() => { void tick(); }, 3 * 60 * 1000);
+  setInterval(() => { void tick(); }, 6 * 60 * 60 * 1000);
 }
 
 // ─── تذكير العملاء المحتملين ─────────────────────────────────────────────────

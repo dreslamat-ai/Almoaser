@@ -752,12 +752,12 @@ export function AdminConsole() {
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
                 <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3"><Cpu className="w-5 h-5" /></div>
                 <div className="text-2xl font-bold text-navy">${(llmCostSummary?.today ?? 0).toFixed(4)}</div>
-                <div className="text-sm text-muted-foreground">تكلفة النماذج (آخر 24 ساعة)</div>
+                <div className="text-sm text-muted-foreground">تكلفة نماذج سارة (آخر 24 ساعة)</div>
               </div>
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3"><DollarSign className="w-5 h-5" /></div>
                 <div className="text-2xl font-bold text-navy">${(llmCostSummary?.last30Days ?? 0).toFixed(4)}</div>
-                <div className="text-sm text-muted-foreground">تكلفة النماذج (آخر 30 يوماً)</div>
+                <div className="text-sm text-muted-foreground">تكلفة نماذج سارة (آخر 30 يوماً)</div>
               </div>
               {balances?.balances.map(b => (
                 <div key={b.provider} className={`bg-white rounded-2xl p-5 border shadow-sm ${
@@ -784,17 +784,23 @@ export function AdminConsole() {
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm sm:col-span-2 lg:col-span-4">
                 <div className="text-sm text-muted-foreground">
                   هامش تقديري للشهر الحالي: إيرادات الشهر {(revenueSummary?.byMonth[0]?.paidRevenue ?? 0).toLocaleString("ar-SA")} ريال
-                  − تكلفة نماذج آخر 30 يوماً {((llmCostSummary?.last30Days ?? 0) * 3.75).toFixed(2)} ريال (بسعر صرف تقريبي 3.75 ريال/دولار)
+                  − تكلفة نماذج سارة آخر 30 يوماً {((llmCostSummary?.last30Days ?? 0) * 3.75).toFixed(2)} ريال (بسعر صرف تقريبي 3.75 ريال/دولار)
                 </div>
                 <div className="text-xl font-bold text-navy mt-1">
                   {((revenueSummary?.byMonth[0]?.paidRevenue ?? 0) - (llmCostSummary?.last30Days ?? 0) * 3.75).toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ريال
+                </div>
+                {/* الرقم هنا أقلّ ممّا يعرضه المزوّد عمداً — والفرق يُفسَّر لا يُترك للتخمين */}
+                <div className="text-xs text-muted-foreground mt-2">
+                  تكلفة <b className="text-navy">سارة وحدها</b>. شهد تعمل على منتج آخر بإيرادٍ ليس هنا،
+                  فتكلفتها خارج هذه المقارنة — تجدها في <b className="text-navy">تفاصيل النماذج</b>.
+                  ولذلك يكون هذا الرقم أقلّ ممّا يعرضه المزوّد: المفتاح مشترك بينهما.
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-navy flex items-center gap-2">
-                <Cpu className="w-4 h-4" /> تكلفة النماذج الذكية حسب الموديل (تحديث كل 30 ثانية)
+                <Cpu className="w-4 h-4" /> تكلفة نماذج سارة حسب الموديل (تحديث كل 30 ثانية)
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[600px] text-sm">
@@ -886,6 +892,10 @@ export function AdminConsole() {
                 <div className="text-xs text-muted-foreground mt-2">
                   العتبة من <code dir="ltr">LLM_BALANCE_ALERT_USD</code> — ترفعها حين يكبر الشغل.
                   وعند نفاد OpenRouter تتوقّف سارة وشهد معاً، فالمفتاح واحد بينهما.
+                </div>
+                <div className="text-xs text-muted-foreground mt-2 pt-2 border-t border-gray-100">
+                  المحسوب على إيراد هذه المنصة: <b className="text-navy">سارة</b> وحدها.
+                  وأي تطبيق آخر يبقى خارج المقارنة المالية ويصلك تنبيه على تيليجرام عند أول إنفاق له.
                 </div>
               </div>
             </div>

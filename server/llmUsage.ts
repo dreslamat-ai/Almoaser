@@ -1,5 +1,5 @@
 // ─── تسجيل وتلخيص استهلاك نماذج الذكاء الاصطناعي (تكلفة بالدولار) ────────────
-import { sql, desc } from "drizzle-orm";
+import { sql, desc, and, inArray } from "drizzle-orm";
 import { getDb } from "./db";
 import { llmUsageLog } from "../drizzle/schema";
 import { estimateCostUsd } from "./llmPricing";
@@ -39,15 +39,35 @@ function rangeSince(hours: number) {
   return sql`${llmUsageLog.createdAt} > (NOW() - INTERVAL ${sql.raw(String(hours))} HOUR)`;
 }
 
-/** ملخص تكلفة النماذج (اليوم / الشهر / الإجمالي) مع تفصيل لكل موديل — للوحة الأدمن */
-export async function getLlmCostSummary() {
+/**
+ * التطبيقات التي **تُحمَّل تكلفتها على إيراد هذه المنصة**.
+ *
+ * سارة وحدها: إيراد erpsys.cloud إيرادُ اشتراكاتها هي. وشهد تعيش في منتج آخر
+ * بإيرادٍ آخر لا يظهر هنا، فتحميل تكلفتها على هامش هذه المنصة يجعل المقارنة
+ * تقيس شيئين لا يقابل أحدهما الآخر.
+ *
+ * وأي تطبيق جديد يبقى **خارج** المقارنة حتى يُضاف هنا عمداً — والضمّ الصامت
+ * هو ما أوقعنا في الخطأ أول مرة.
+ */
+export const BILLED_APPS = ["sara"] as const;
+
+/**
+ * ملخص تكلفة النماذج (اليوم / الشهر / الإجمالي) مع تفصيل لكل موديل.
+ *
+ * @param apps التطبيقات المحسوبة — الافتراضي ما يُحمَّل على هذه المنصة وحده
+ */
+export async function getLlmCostSummary(apps: readonly string[] = BILLED_APPS) {
   const db = await getDb();
   if (!db) return { today: 0, last30Days: 0, allTime: 0, byModel: [] as Array<{ model: string; provider: string; costUsd: number; totalTokens: number; calls: number }> };
 
+  //شرط التطبيق يُطبَّق على كل رقم بلا استثناء: بطاقةٌ واحدة تفلت منه تجعل
+  //الأرقام على الشاشة تتناقض فيما بينها.
+  const billed = inArray(llmUsageLog.app, [...apps]);
+
   const [todayRows, monthRows, allRows, byModelRows] = await Promise.all([
-    db.select({ total: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)` }).from(llmUsageLog).where(rangeSince(24)),
-    db.select({ total: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)` }).from(llmUsageLog).where(rangeSince(24 * 30)),
-    db.select({ total: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)` }).from(llmUsageLog),
+    db.select({ total: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)` }).from(llmUsageLog).where(and(billed, rangeSince(24))),
+    db.select({ total: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)` }).from(llmUsageLog).where(and(billed, rangeSince(24 * 30))),
+    db.select({ total: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)` }).from(llmUsageLog).where(billed),
     db
       .select({
         model: llmUsageLog.model,
@@ -57,6 +77,7 @@ export async function getLlmCostSummary() {
         calls: sql<string>`count(*)`,
       })
       .from(llmUsageLog)
+      .where(billed)
       .groupBy(llmUsageLog.model, llmUsageLog.provider)
       .orderBy(desc(sql`sum(${llmUsageLog.costUsd})`)),
   ]);
@@ -121,4 +142,30 @@ export async function getRecentLlmUsage(limit = 50) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(llmUsageLog).orderBy(desc(llmUsageLog.createdAt)).limit(limit);
+}
+
+/**
+ * تطبيقات ظهرت في السجل ولم تُدرَج في المقارنة المالية.
+ *
+ * تكلفتها **خارج** الهامش عن قصد، لكن ألّا يُعلَم بها أسوأ من ضمّها: يمرّ
+ * شهران وأحدٌ ينفق من مفتاحنا بلا أن يظهر في حساب.
+ */
+export async function getUnbilledApps(days = 30): Promise<Array<{ app: string; costUsd: number; calls: number }>> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({
+      app: llmUsageLog.app,
+      costUsd: sql<string>`coalesce(sum(${llmUsageLog.costUsd}), 0)`,
+      calls: sql<string>`count(*)`,
+    })
+    .from(llmUsageLog)
+    .where(rangeSince(24 * days))
+    .groupBy(llmUsageLog.app);
+
+  return rows
+    .filter(r => !BILLED_APPS.includes((r.app ?? "") as (typeof BILLED_APPS)[number]))
+    .map(r => ({ app: r.app, costUsd: Number(r.costUsd), calls: Number(r.calls) }))
+    .sort((a, b) => b.costUsd - a.costUsd);
 }
