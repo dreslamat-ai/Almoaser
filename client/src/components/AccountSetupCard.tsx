@@ -62,7 +62,7 @@ export default function AccountSetupCard() {
                 <p className={`text-sm font-medium ${step.done ? "text-emerald-900 line-through" : "text-navy"}`}>
                   {step.title}
                   {!step.done && step.critical && (
-                    <span className="mr-2 text-[10px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">
+                    <span className="mr-2 text-[11px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 align-middle">
                       مطلوب
                     </span>
                   )}

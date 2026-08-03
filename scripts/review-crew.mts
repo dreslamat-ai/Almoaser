@@ -294,24 +294,43 @@ async function agentUi(): Promise<Result> {
     f.push("قواعد التوسيط على الجوال سقطت من index.css");
   }
 
-  // ٨) لا نصّ أصغر من 12px — يُقرأ بالعدسة لا بالعين
+  // ٨) لا نصّ أصغر من 11px — يُقرأ بالعدسة لا بالعين.
+  //
+  // **ويُستثنى ما أُعلن رسماً.** صفحة البداية فيها هاتف مرسوم بداخله فاتورة
+  // مصغّرة: نصّها صغير عمداً لأنه صورة لواجهة لا واجهة، وتكبيره يُفسد الرسم.
+  // إنذارٌ يصرخ على شيء سليم يُعلّم تجاهلَ صراخه كلّه — فالمقياس يتخطّى ما
+  // بين ui-agent:mockup-start و mockup-end، والاستثناء مكتوب في الشيفرة لا
+  // في رأس المراجع.
   for (const p of pages) {
-    const tiny = Array.from(read(p).matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g))
+    const src = read(p).replace(/ui-agent:mockup-start[\s\S]*?ui-agent:mockup-end/g, "");
+    const tiny = Array.from(src.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g))
       .map(m => Number(m[1])).filter(n => n < 11);
     if (tiny.length) f.push(`${tiny.length} نصّ أصغر من 11px في ${p}`);
   }
 
-  // ٩) لا لون مكتوب بالسداسي في المكوّنات — الهوية في المتغيّرات لا في الملفات
+  // ٩) لا لون مكتوب بالسداسي مبعثراً في المكوّنات — الهوية في المتغيّرات.
+  //
+  // **ويُستثنى لونان لا يُنسبان إلينا:** لونٌ مُسمّى في ثابت أعلى الملف
+  // (`const X = "#..."`) — وهو الشكل الصحيح لأن recharts يرسم على SVG ولا
+  // يقبل أصناف Tailwind، فجمعُها في أسماء يجعل التغيير في موضع واحد؛ ولون
+  // علامة تجارية لخدمة خارجية (واتساب، تليجرام) — ليس لنا أن نغيّره.
+  const BRAND_HEX = /#(25D366|0088cc|1DA1F2|4267B2)\b/i;
   for (const p of pages) {
     if (!/pages\/|components\//.test(p)) continue;
-    const hex = (read(p).match(/#[0-9a-fA-F]{6}\b/g) ?? []).length;
-    if (hex >= 3) f.push(`${hex} لوناً سداسياً مكتوباً في ${p} — الهوية في المتغيّرات`);
+    // الرسم المُعلن يُتخطّى هنا كذلك: ألوان هاتف تليجرام المرسوم في صفحة
+    // البداية هي ألوان تليجرام، ليست هويّتنا ولا يصحّ ربطها بمتغيّراتها.
+    const src = read(p).replace(/ui-agent:mockup-start[\s\S]*?ui-agent:mockup-end/g, "");
+    const loose = (src.match(/#[0-9a-fA-F]{6}\b/g) ?? []).filter(h => !BRAND_HEX.test(h)).length;
+    const named = (src.match(/^const [A-Z_0-9]+ = "#[0-9a-fA-F]{6}"/gm) ?? []).length;
+    if (loose - named >= 3) {
+      f.push(`${loose - named} لوناً سداسياً مبعثراً في ${p} — اجمعها في ثوابت مسمّاة`);
+    }
   }
 
   // ١٠) كل حقل إدخال له عنوان منطوق — النموذج بلا تسمية لا يُملأ بقارئ شاشة
   for (const p of pages) {
     const src = read(p);
-    const bare = Array.from(src.matchAll(/<Input(?![^>]*(?:aria-label|id=|placeholder))[^>]*\/>/g)).length;
+    const bare = Array.from(src.matchAll(/<Input(?![A-Za-z])(?![^>]*(?:aria-label|id=|placeholder))[^>]*\/>/g)).length;
     if (bare >= 3) f.push(`${bare} حقل إدخال بلا تسمية في ${p}`);
   }
 

@@ -179,7 +179,7 @@ export default function ErpInvoices() {
                           <td className="p-3 text-xs text-muted-foreground">{inv.posting_date}</td>
                           <td className="p-3 font-semibold">{(inv.grand_total ?? 0).toLocaleString("ar-SA")}</td>
                           <td className="p-3 text-xs">{(inv.outstanding_amount ?? 0).toLocaleString("ar-SA")}</td>
-                          <td className="p-3"><Badge variant="outline" className={`text-[10px] ${st.cls}`}>{st.label}</Badge></td>
+                          <td className="p-3"><Badge variant="outline" className={`text-[11px] ${st.cls}`}>{st.label}</Badge></td>
                           <td className="p-3">
                             <Button
                               variant="outline"

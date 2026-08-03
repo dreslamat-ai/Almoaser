@@ -134,7 +134,7 @@ export default function Subscription() {
                         التحويل إلى سنوي
                       </Button>
                     </div>
-                    <p className="text-[10px] text-white/50 mt-1.5">الأسعار لا تشمل ضريبة القيمة المضافة (15%)</p>
+                    <p className="text-[11px] text-white/50 mt-1.5">الأسعار لا تشمل ضريبة القيمة المضافة (15%)</p>
                   </div>
                 );
               })()}
@@ -332,7 +332,7 @@ export default function Subscription() {
               className={`px-4 py-1.5 [@media(pointer:coarse)]:min-h-11 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-navy text-white" : "text-muted-foreground"}`}>شهري</button>
             <button onClick={() => setBilling("yearly")}
               className={`px-4 py-1.5 [@media(pointer:coarse)]:min-h-11 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${billing === "yearly" ? "bg-navy text-white" : "text-muted-foreground"}`}>
-              سنوي <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-ink"}`}>-15%</span>
+              سنوي <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-ink"}`}>-15%</span>
             </button>
           </div>
         </div>

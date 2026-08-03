@@ -82,6 +82,17 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
+// ─── ألوان الرسوم ────────────────────────────────────────────────────────
+// recharts يرسم على SVG بقيم لونية صريحة لا بأصناف Tailwind، فلا سبيل إلى
+// تمرير متغيّرات الهوية إليه مباشرة. تُجمع هنا بأسماء تقول وظيفتها، فتغيير
+// الهوية يمرّ بموضع واحد بدل أن يُطارَد في كل خاصية داخل الملف.
+const CHART_NAVY = "#22335a";        // = --color-navy
+const CHART_GRID = "#e2e8f0";
+const CHART_AXIS_INK = "#94a3b8";
+const STATUS_PAID = "#10b981";
+const STATUS_UNPAID = "#ef4444";
+const STATUS_OTHER = CHART_AXIS_INK;
+
 export default function ERPNextDashboard() {
   const [, setLocation] = useLocation();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -106,9 +117,9 @@ export default function ERPNextDashboard() {
   }>;
 
   const pieData = stats ? [
-    { name: "مدفوعة", value: stats.paidInvoices, color: "#10b981" },
-    { name: "غير مدفوعة", value: stats.unpaidInvoices, color: "#ef4444" },
-    { name: "أخرى", value: Math.max(0, stats.totalInvoices - stats.paidInvoices - stats.unpaidInvoices), color: "#94a3b8" },
+    { name: "مدفوعة", value: stats.paidInvoices, color: STATUS_PAID },
+    { name: "غير مدفوعة", value: stats.unpaidInvoices, color: STATUS_UNPAID },
+    { name: "أخرى", value: Math.max(0, stats.totalInvoices - stats.paidInvoices - stats.unpaidInvoices), color: STATUS_OTHER },
   ].filter(d => d.value > 0) : [];
 
   const handleRefresh = () => {
@@ -201,15 +212,15 @@ export default function ERPNextDashboard() {
                   <AreaChart data={stats.monthlyRevenue} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22335a" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#22335a" stopOpacity={0} />
+                        <stop offset="5%" stopColor={CHART_NAVY} stopOpacity={0.25} />
+                        <stop offset="95%" stopColor={CHART_NAVY} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: CHART_AXIS_INK }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: CHART_AXIS_INK }} axisLine={false} tickLine={false} />
                     <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="amount" stroke="#22335a" strokeWidth={2.5} fill="url(#grad)" dot={{ r: 3, fill: "#22335a" }} />
+                    <Area type="monotone" dataKey="amount" stroke={CHART_NAVY} strokeWidth={2.5} fill="url(#grad)" dot={{ r: 3, fill: CHART_NAVY }} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
