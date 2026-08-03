@@ -44,8 +44,8 @@ export default function Invoices() {
                   <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-4 font-mono text-sm text-navy">{inv.invoiceNumber}</td>
                     <td className="px-5 py-4 font-bold text-navy">{Number(inv.amount).toLocaleString("ar-SA")} {inv.currency}</td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString("ar-SA")}</td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("ar-SA") : "—"}</td>
+                    <td className="px-5 py-4 text-sm text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</td>
+                    <td className="px-5 py-4 text-sm text-muted-foreground">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("ar-SA-u-ca-gregory") : "—"}</td>
                     <td className="px-5 py-4"><span className={`text-xs px-3 py-1 rounded-full font-medium ${statusColors[inv.status]}`}>{statusLabels[inv.status]}</span></td>
                     <td className="px-5 py-4"><Button variant="ghost" size="sm" className="text-navy"><Download className="w-4 h-4" /></Button></td>
                   </tr>

@@ -1512,16 +1512,14 @@ export default function AgentChat() {
        {/* يُكدَّس على الجوال بدل الالتفاف: الالتفاف كان يترك العنوان في عمود
            ضيق يتكسّر على ثلاثة أسطر بينما تتزاحم الأزرار الستة بجانبه. */}
        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shrink-0">
+         {/* الاسم وحالة الاتصال في ترويسة التخطيط أعلاه — تكرارهما هنا كان
+             يعرض «المحاسب الذكي» مرّتين و«متصل» مرّتين في شاشة واحدة. يبقى
+             السطر الذي يقول ما لا تقوله الترويسة: أن الأوامر تُنفَّذ فعلاً. */}
          <div className="flex items-center gap-3 min-w-0">
-            <img
-              src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
-              alt="المعاصر AI"
-              className="w-10 h-10 rounded-xl object-contain bg-white border border-border shrink-0"
-            />
-           <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-bold text-foreground truncate">المعاصر AI — المحاسب الذكي</h1>
-             <p className="text-xs text-muted-foreground truncate">متصل بـ Almoaser AI ERP · ينفذ العمليات مباشرة</p>
-            </div>
+           <SaraAvatar className="w-10 h-10" />
+           <p className="text-sm text-muted-foreground min-w-0">
+             ينفّذ طلباتك مباشرة على نظامك
+           </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end shrink-0">
             <NotificationBell />
@@ -1543,10 +1541,6 @@ export default function AgentChat() {
                 </button>
               );
             })()}
-            <Badge variant="outline" className="text-xs gap-1 text-emerald-800 border-emerald-200 bg-emerald-50">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              متصل
-            </Badge>
             <Button variant="outline" size="sm" className="text-xs gap-1 px-2 [@media(pointer:coarse)]:min-w-11"
               onClick={toggleSound}
               aria-label={soundEnabled ? "كتم صوت الإشعار" : "تفعيل صوت الإشعار"}

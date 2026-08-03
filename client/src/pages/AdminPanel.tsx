@@ -169,7 +169,7 @@ function SubscriptionActionsPanel({ userId, plans }: { userId: number; plans: Ar
               <tbody className="divide-y divide-gray-50">
                 {paymentHistory?.map(p => (
                   <tr key={p.id}>
-                    <td className="px-3 py-2 text-muted-foreground">{new Date(p.createdAt).toLocaleDateString("ar-SA")}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{new Date(p.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</td>
                     <td className="px-3 py-2">{p.purpose === "subscription" ? "اشتراك" : "شحن نقاط"}</td>
                     <td className="px-3 py-2 font-medium text-navy">{Number(p.amount).toLocaleString("ar-SA")} {p.currency}</td>
                     <td className="px-3 py-2">
@@ -205,7 +205,7 @@ function SubscriptionActionsPanel({ userId, plans }: { userId: number; plans: Ar
                         {inv.status === "paid" ? "مدفوعة" : inv.status === "overdue" ? "متأخرة" : inv.status === "cancelled" ? "ملغاة" : "معلقة"}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString("ar-SA")}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -414,7 +414,7 @@ export function AdminConsole() {
                       {r.planId ? (plans?.find(p => p.id === r.planId)?.nameAr ?? `#${r.planId}`) : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3 flex-shrink-0" />{new Date(r.createdAt).toLocaleDateString("ar-SA")}</span>
+                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3 flex-shrink-0" />{new Date(r.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${regStatusColors[r.status] ?? "badge-pending"}`}>
@@ -464,7 +464,7 @@ export function AdminConsole() {
                             {s.status === "active" ? "نشط" : s.status === "trial" ? "تجريبي" : "ملغي"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(s.createdAt).toLocaleDateString("ar-SA")}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(s.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </td>
@@ -495,7 +495,7 @@ export function AdminConsole() {
                               </div>
                               <div className="bg-white rounded-xl p-3 border border-gray-100">
                                 <div className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><Calendar className="w-3.5 h-3.5" /> نهاية الفترة/الدورة</div>
-                                <div className="text-sm font-medium text-navy">{s.endDate ? new Date(s.endDate).toLocaleDateString("ar-SA") : "غير محدد"}</div>
+                                <div className="text-sm font-medium text-navy">{s.endDate ? new Date(s.endDate).toLocaleDateString("ar-SA-u-ca-gregory") : "غير محدد"}</div>
                               </div>
                               {s.notes && (
                                 <div className="bg-white rounded-xl p-3 border border-gray-100 sm:col-span-2 lg:col-span-3">
@@ -635,7 +635,7 @@ export function AdminConsole() {
                         {statusLabels[t.status] ?? t.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString("ar-SA")}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</td>
                   </tr>
                 ))}
                 {(tasks?.length ?? 0) === 0 && (
@@ -680,9 +680,9 @@ export function AdminConsole() {
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium badge-cancelled mr-1">معطّل</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(u.lastSignedIn).toLocaleDateString("ar-SA")}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(u.lastSignedIn).toLocaleDateString("ar-SA-u-ca-gregory")}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3 flex-shrink-0" />{new Date(u.createdAt).toLocaleDateString("ar-SA")}</span>
+                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3 flex-shrink-0" />{new Date(u.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</span>
                     </td>
                     <td className="px-4 py-3">
                       {u.id !== user?.id ? (
@@ -967,7 +967,7 @@ export function AdminConsole() {
                       <td className="p-3">{l.city ?? "—"}</td>
                       <td className="p-3 text-xs">{l.activity ?? "—"}</td>
                       <td className="p-3">{l.employees ?? "—"}</td>
-                      <td className="p-3 text-xs text-muted-foreground">{new Date(l.createdAt).toLocaleDateString("ar-SA")}</td>
+                      <td className="p-3 text-xs text-muted-foreground">{new Date(l.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</td>
                       <td className="p-3">
                         <select className="border rounded-lg px-2 h-9 text-xs" value={l.status}
                           onChange={e => setLeadStatusM.mutate({ id: l.id, status: e.target.value as "new" | "contacted" | "converted" | "declined" })}>
@@ -1010,7 +1010,7 @@ export function AdminConsole() {
                     return (
                       <tr key={r.id} className="border-t border-gray-50 align-top">
                         <td className="p-3 max-w-md"><div className="whitespace-pre-wrap">{r.requestText}</div>
-                          <div className="text-[11px] text-muted-foreground mt-1">{new Date(r.createdAt).toLocaleString("ar-SA")}</div>
+                          <div className="text-[11px] text-muted-foreground mt-1">{new Date(r.createdAt).toLocaleString("ar-SA-u-ca-gregory")}</div>
                         </td>
                         <td className="p-3">
                           <div>{r.orgName ?? r.ownerName ?? "—"}</div>
@@ -1116,7 +1116,7 @@ export function AdminConsole() {
                           {c.firstPurchaseOnly ? <div className="text-amber-700">عملاء جدد</div> : null}
                           {c.newAccountWithinDays ? <div className="text-muted-foreground">خلال {c.newAccountWithinDays} يوم</div> : null}
                         </td>
-                        <td className="p-3 text-xs text-muted-foreground">{c.validUntil ? new Date(c.validUntil).toLocaleDateString("ar-SA") : "—"}</td>
+                        <td className="p-3 text-xs text-muted-foreground">{c.validUntil ? new Date(c.validUntil).toLocaleDateString("ar-SA-u-ca-gregory") : "—"}</td>
                         <td className="p-3 text-xs">{c.isActive ? "مفعّل" : "موقوف"}</td>
                         <td className="p-3">
                           <Button size="sm" variant="outline" className="text-xs"
@@ -1170,7 +1170,7 @@ export function AdminConsole() {
                         </td>
                         <td className="p-3 text-xs">{st[r.status] ?? r.status}</td>
                         <td className="p-3 text-xs text-muted-foreground">
-                          {new Date(r.createdAt).toLocaleString("ar-SA")}
+                          {new Date(r.createdAt).toLocaleString("ar-SA-u-ca-gregory")}
                         </td>
                       </tr>
                     );
@@ -1212,7 +1212,7 @@ export function AdminConsole() {
                           </td>
                           <td className="p-3">{c.messageCount}</td>
                           <td className="p-3 text-xs text-muted-foreground">
-                            {new Date(c.updatedAt).toLocaleString("ar-SA")}
+                            {new Date(c.updatedAt).toLocaleString("ar-SA-u-ca-gregory")}
                           </td>
                           <td className="p-3">
                             <Button size="sm" variant="outline" className="text-xs"
@@ -1247,7 +1247,7 @@ export function AdminConsole() {
                         m.role === "user" ? "bg-navy text-white" : "bg-gray-100 text-foreground"
                       }`}>{m.content}</div>
                       <div className="text-[10px] text-muted-foreground mt-0.5">
-                        {new Date(m.createdAt).toLocaleString("ar-SA")}
+                        {new Date(m.createdAt).toLocaleString("ar-SA-u-ca-gregory")}
                       </div>
                     </div>
                   ))}
@@ -1271,7 +1271,7 @@ export function AdminConsole() {
               <tbody className="divide-y divide-gray-50">
                 {auditLog?.map(a => (
                   <tr key={a.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(a.createdAt).toLocaleString("ar-SA")}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(a.createdAt).toLocaleString("ar-SA-u-ca-gregory")}</td>
                     <td className="px-4 py-3 text-sm font-medium text-navy">{a.adminName ?? `#${a.adminId}`}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium badge-trial">{adminActionLabels[a.action] ?? a.action}</span>

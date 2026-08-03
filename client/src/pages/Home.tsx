@@ -484,7 +484,7 @@ function TelegramDemoSection() {
                           </div>
                           <p className="text-gray-100 text-xs px-3 pb-1">{msg.text}</p>
                           <p className="text-[9px] text-gray-500 px-3 pb-2 text-left">
-                            {new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                            {new Date().toLocaleTimeString("ar-SA-u-ca-gregory", { hour: "2-digit", minute: "2-digit" })}
                           </p>
                         </div>
                       ) : (
@@ -499,7 +499,7 @@ function TelegramDemoSection() {
                           )}
                           {msg.text}
                           <p className={`text-[9px] mt-1 text-left ${msg.from === "user" ? "text-white/50" : "text-gray-500"}`}>
-                            {new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                            {new Date().toLocaleTimeString("ar-SA-u-ca-gregory", { hour: "2-digit", minute: "2-digit" })}
                             {msg.from === "user" && " ✓✓"}
                           </p>
                         </div>

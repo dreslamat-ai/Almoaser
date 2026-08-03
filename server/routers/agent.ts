@@ -255,7 +255,7 @@ ${isPlatformAdmin ? `
 ` : ""}
 
 ## تاريخ اليوم
-اليوم هو ${new Date().toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. استخدمه عند حساب التواريخ والفترات.
+اليوم هو ${new Date().toLocaleDateString("ar-SA-u-ca-gregory", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. استخدمه عند حساب التواريخ والفترات.
 
 ${modeRulesFor(agentMode)}`;
 

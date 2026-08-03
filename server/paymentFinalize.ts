@@ -71,6 +71,28 @@ export async function finalizePaymentByReference(status: PaymentStatusResult): P
     await addTopupCredits(payment.userId, payment.credits, `شحن ${payment.credits} نقطة عبر MyFatoorah`);
   }
 
+  // ─── فاتورة الخدمة ────────────────────────────────────────────────────
+  // **لم يكن أحد يكتب في `service_invoices` قط.** الصفحة تقرأ منه، والجدول
+  // فارغ منذ إنشائه — فمن يدفع يرى «لا توجد فواتير بعد». شكا عميلٌ اشترى
+  // نقاطاً بمئة وخمسة عشر ريالاً ولم يجد لها أثراً.
+  //
+  // ولا يوقف فشلُها الدفعَ: المال حُصّل والاشتراك فُعّل، والفاتورة سجلٌّ
+  // يُستدرك لا شرطٌ للتفعيل.
+  try {
+    const { createServiceInvoice } = await import("./serviceInvoice");
+    await createServiceInvoice({
+      userId: payment.userId,
+      amount: Number(payment.amount),
+      purpose: payment.purpose,
+      planName,
+      credits: payment.credits ?? null,
+      billing: payment.billing ?? null,
+      paidAt: new Date(),
+    });
+  } catch (e) {
+    console.warn("[paymentFinalize] تعذّر إنشاء فاتورة الخدمة:", e instanceof Error ? e.message : e);
+  }
+
   // إيصال الدفع/التجديد بالبريد — لا يوقف إتمام الدفع إن فشل الإرسال
   void import("./emailFlows")
     .then(m => m.emailPaymentReceipt(payment.userId, {

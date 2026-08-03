@@ -69,7 +69,7 @@ export default function Reports() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-foreground truncate">{r.title}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {KIND_LABELS[r.kind] ?? "تقرير"} · {new Date(r.createdAt).toLocaleDateString("ar-SA")}
+                      {KIND_LABELS[r.kind] ?? "تقرير"} · {new Date(r.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}
                     </div>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full border shrink-0 ${st.cls}`}>{st.label}</span>
@@ -91,7 +91,7 @@ export default function Reports() {
                 <h2 className="font-bold text-navy truncate">{report?.title ?? "..."}</h2>
                 {report && (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {KIND_LABELS[report.kind] ?? "تقرير"} · {new Date(report.createdAt).toLocaleString("ar-SA")}
+                    {KIND_LABELS[report.kind] ?? "تقرير"} · {new Date(report.createdAt).toLocaleString("ar-SA-u-ca-gregory")}
                   </p>
                 )}
               </div>
@@ -133,7 +133,7 @@ export default function Reports() {
                   {(STATUS[report.status] ?? STATUS.draft).label}
                 </span>
                 <span className="text-xs text-muted-foreground mr-2">
-                  {new Date(report.reviewedAt).toLocaleString("ar-SA")}
+                  {new Date(report.reviewedAt).toLocaleString("ar-SA-u-ca-gregory")}
                 </span>
                 {report.reviewNote && <p className="text-muted-foreground mt-2 whitespace-pre-wrap">{report.reviewNote}</p>}
               </div>

@@ -1582,7 +1582,7 @@ export const appRouter = router({
           if (key in monthlyMap) monthlyMap[key] = (monthlyMap[key] ?? 0) + (inv.grand_total ?? 0);
         }
         const monthlyRevenue = Object.entries(monthlyMap).map(([month, amount]) => ({
-          month: new Date(month + "-01").toLocaleDateString("ar-SA", { month: "short", year: "2-digit" }),
+          month: new Date(month + "-01").toLocaleDateString("ar-SA-u-ca-gregory", { month: "short", year: "2-digit" }),
           amount: Math.round(amount * 100) / 100,
         }));
 

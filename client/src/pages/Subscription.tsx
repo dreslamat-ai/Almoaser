@@ -310,7 +310,7 @@ export default function Subscription() {
                     <span className="text-muted-foreground">{t.note ?? t.type}</span>
                     <div className="flex items-center gap-3">
                       <span className={`font-bold ${t.amount > 0 ? "text-green-600" : "text-red-500"}`}>{t.amount > 0 ? `+${t.amount}` : t.amount}</span>
-                      <span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString("ar-SA")}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</span>
                     </div>
                   </div>
                 ))}

@@ -146,7 +146,7 @@ export default function Dashboard() {
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${task.status === "completed" ? "bg-green-500" : task.status === "in_progress" ? "bg-blue-500" : "bg-yellow-500"}`} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-navy truncate">{task.title}</div>
-                      <div className="text-xs text-muted-foreground">{new Date(task.createdAt).toLocaleDateString("ar-SA")}</div>
+                      <div className="text-xs text-muted-foreground">{new Date(task.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</div>
                     </div>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${task.status === "completed" ? "badge-completed" : task.status === "in_progress" ? "badge-in_progress" : "badge-pending"}`}>
                       {task.status === "completed" ? "مكتمل" : task.status === "in_progress" ? "جاري" : "معلق"}

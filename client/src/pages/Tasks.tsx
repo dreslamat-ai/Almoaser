@@ -50,7 +50,7 @@ function TaskComments({ taskId, taskTitle }: { taskId: number; taskTitle: string
                   <span className={`text-xs font-semibold ${c.authorRole === "admin" ? "text-navy" : "text-gray-700"}`}>
                     {c.authorRole === "admin" ? "المحاسب" : (c.authorName ?? "أنت")}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">{new Date(c.createdAt).toLocaleString("ar-SA")}</span>
+                  <span className="text-[10px] text-muted-foreground">{new Date(c.createdAt).toLocaleString("ar-SA-u-ca-gregory")}</span>
                 </div>
                 <p className="text-gray-800 whitespace-pre-wrap">{c.content}</p>
               </div>
@@ -167,7 +167,7 @@ export default function Tasks() {
                   <div className="flex items-center gap-3 mt-2">
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{taskTypeLabels[task.type]}</span>
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{priorityLabels[task.priority]}</span>
-                    <span className="text-xs text-muted-foreground">{new Date(task.createdAt).toLocaleDateString("ar-SA")}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(task.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
