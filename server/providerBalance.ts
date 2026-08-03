@@ -132,8 +132,8 @@ export async function getProviderBalances(): Promise<{
 
 // ─── التنبيه ────────────────────────────────────────────────────────────────
 
-/** آخر ساعة أُنذر فيها لكل مزوّد — مفتاحه اليوم والساعة */
-const lastAlert = new Map<string, string>();
+//الحالة في ملفّ لا في الذاكرة: النشر يعيد التشغيل فيمسح الذاكرة ويُعاد
+//التنبيه — وقعت سبعٌ وثمانون إعادة تشغيل في يوم واحد.
 
 /**
  * ينبّه حين يقارب الرصيد النفاد.
@@ -149,12 +149,13 @@ export async function alertIfLowBalance(): Promise<string[]> {
   if (!low.length) return [];
 
   const { sendTelegram } = await import("./telegram");
+  const { shouldAlert, undoAlert } = await import("./alertState");
   const hourKey = new Date().toISOString().slice(0, 13);
   const sent: string[] = [];
 
   for (const b of low) {
-    if (lastAlert.get(b.provider) === hourKey) continue;
-    lastAlert.set(b.provider, hourKey);
+    const key = `balance:${b.provider}`;
+    if (!shouldAlert(key, hourKey)) continue;
 
     const remaining = (b.remainingUsd ?? 0).toFixed(2);
     const text =
@@ -165,8 +166,8 @@ export async function alertIfLowBalance(): Promise<string[]> {
       `عند النفاد تتوقّف سارة وشهد معاً — المفتاح مشترك بينهما.`;
 
     const r = await sendTelegram(text, { disablePreview: true });
-    if (r.ok) sent.push(b.provider);
-    else console.warn("[providerBalance] تعذّر التنبيه:", r.error);
+    if (r.ok) { sent.push(b.provider); }
+    else { undoAlert(key); console.warn("[providerBalance] تعذّر التنبيه:", r.error); }
   }
 
   return sent;

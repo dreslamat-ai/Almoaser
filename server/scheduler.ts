@@ -48,17 +48,18 @@ function startBalanceWatch(): void {
 // **خارج المقارنة عن قصد، لا خارج العلم.** تكلفة أي تطبيق غير سارة لا تُحمَّل
 // على هامش هذه المنصة لأن إيراده ليس هنا — لكن أن يمرّ شهر وأحدٌ ينفق من
 // مفتاحنا بلا أن يظهر في حساب أسوأ من ضمّه خطأً. يُنبَّه مرة لكل تطبيق جديد.
-const announced = new Set<string>();
+
 
 function startUnbilledWatch(): void {
   const tick = async () => {
     try {
       const apps = await getUnbilledApps(30);
-      const fresh = apps.filter(a => !announced.has(a.app));
+      const { shouldAlert, undoAlert } = await import("./alertState");
+      //«once» نافذةٌ ثابتة: يُنذَر عن التطبيق مرّة واحدة لا مرّة لكل نشر
+      const fresh = apps.filter(a => shouldAlert(`unbilled:${a.app}`, "once"));
       if (!fresh.length) return;
 
       const { sendTelegram } = await import("./telegram");
-      for (const a of fresh) { announced.add(a.app); }
 
       const lines = fresh.map(a => `• ${a.app}: $${a.costUsd.toFixed(4)} · ${a.calls} استدعاء`);
       const r = await sendTelegram(
@@ -69,7 +70,7 @@ function startUnbilledWatch(): void {
       );
       if (!r.ok) {
         //لم يصل التنبيه: تُنسى العلامة ليُعاد في الدورة التالية
-        for (const a of fresh) { announced.delete(a.app); }
+        for (const a of fresh) { undoAlert(`unbilled:${a.app}`); }
         console.warn("[scheduler] تعذّر التنبيه عن تطبيق غير محسوب:", r.error);
       } else {
         console.log(`[scheduler] تطبيقات خارج المقارنة: ${fresh.map(a => a.app).join("، ")}`);
@@ -121,26 +122,26 @@ function startLeadDigest(): void {
 // الاعتماد يقع مرة واحدة عند الحفظ ثم لا يُعاد أبداً، وكلمة السرّ تتغيّر على
 // الطرف الآخر بلا أن تُخبرنا. فيُفحص دورياً: من ينكسر نعرفه قبل أن يشتكي.
 const ERP_HEALTH_MS = 6 * 60 * 60 * 1000;
-const brokenAnnounced = new Set<number>();
+
 
 function startErpHealthWatch(): void {
   const tick = async () => {
     try {
-      const { broken, ok } = await checkErpConnections();
+      const { broken, ok, healthyIds } = await checkErpConnections();
 
-      //من عاد يعمل يُنسى، فينبَّه من جديد لو انكسر ثانيةً
-      for (const id of Array.from(brokenAnnounced)) {
-        if (!broken.some(b => b.id === id)) brokenAnnounced.delete(id);
-      }
+      const { shouldAlert, undoAlert, forgetAlert } = await import("./alertState");
 
-      const fresh = broken.filter(b => !brokenAnnounced.has(b.id));
+      //من عاد يعمل تُنسى علامته، فيُنذَر عنه من جديد إن انكسر ثانيةً.
+      //بلا هذا يُنذَر مرّة واحدة في عمر النظام ثم يصمت عن كل انكسار تالٍ.
+      for (const id of healthyIds) forgetAlert(`erp:${id}`);
+
+      const fresh = broken.filter(b => shouldAlert(`erp:${b.id}`, "broken"));
       if (!fresh.length) {
         if (broken.length) console.log(`[erpHealth] ${broken.length} اتصال معطوب (أُنذر عنها)`);
         return;
       }
 
       const { sendTelegram } = await import("./telegram");
-      for (const b of fresh) brokenAnnounced.add(b.id);
 
       const lines = fresh.map(b => `• ${b.email} — ${b.url}\n  ${b.reason}`);
       const r = await sendTelegram(
@@ -150,7 +151,7 @@ function startErpHealthWatch(): void {
         { disablePreview: true },
       );
       if (!r.ok) {
-        for (const b of fresh) brokenAnnounced.delete(b.id);
+        for (const b of fresh) undoAlert(`erp:${b.id}`);
         console.warn("[erpHealth] تعذّر التنبيه:", r.error);
       }
     } catch (e) {

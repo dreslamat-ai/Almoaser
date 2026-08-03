@@ -13,9 +13,9 @@ export type BrokenConnection = { id: number; userId: number; email: string; url:
 
 const LOGIN_TIMEOUT_MS = 15_000;
 
-export async function checkErpConnections(): Promise<{ ok: number; broken: BrokenConnection[] }> {
+export async function checkErpConnections(): Promise<{ ok: number; broken: BrokenConnection[]; healthyIds: number[] }> {
   const db = await getDb();
-  if (!db) return { ok: 0, broken: [] };
+  if (!db) return { ok: 0, broken: [], healthyIds: [] };
 
   const [rows] = (await db.execute(sql.raw(
     `SELECT c.id, c.userId, c.url, c.username, c.passwordEnc, c.provider, u.email
@@ -24,10 +24,12 @@ export async function checkErpConnections(): Promise<{ ok: number; broken: Broke
 
   let ok = 0;
   const broken: BrokenConnection[] = [];
+  //المعرّفات السليمة تُعاد أيضاً: من تعافى يجب أن تُنسى علامة إنذاره
+  const healthyIds: number[] = [];
 
   for (const r of rows) {
     //Odoo تُفحص بمسار آخر؛ فحصها بمسار ERPNext يعطي 404 يُقرأ عطلاً وهو ليس كذلك
-    if (r.provider && r.provider !== "erpnext") { ok++; continue; }
+    if (r.provider && r.provider !== "erpnext") { ok++; healthyIds.push(r.id); continue; }
 
     let password = "";
     try {
@@ -44,7 +46,7 @@ export async function checkErpConnections(): Promise<{ ok: number; broken: Broke
         body: JSON.stringify({ usr: r.username, pwd: password }),
         signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
       });
-      if (res.ok) { ok++; continue; }
+      if (res.ok) { ok++; healthyIds.push(r.id); continue; }
       broken.push({
         id: r.id, userId: r.userId, email: r.email, url: r.url,
         reason: res.status === 401
@@ -59,7 +61,7 @@ export async function checkErpConnections(): Promise<{ ok: number; broken: Broke
     }
   }
 
-  return { ok, broken };
+  return { ok, broken, healthyIds };
 }
 
 // ─── حالة ربط مستخدم واحد ────────────────────────────────────────────────────
