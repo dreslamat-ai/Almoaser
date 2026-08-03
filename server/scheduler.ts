@@ -5,6 +5,7 @@ import { checkExpiringSubscriptions } from "./notifications";
 import { sendLeadDigest } from "./leadFollowUp";
 import { alertIfLowBalance } from "./providerBalance";
 import { getUnbilledApps, BILLED_APPS } from "./llmUsage";
+import { checkErpConnections } from "./erpHealth";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
 
@@ -20,6 +21,7 @@ export function startScheduledJobs(): void {
   startLeadDigest();
   startBalanceWatch();
   startUnbilledWatch();
+  startErpHealthWatch();
 }
 
 // ─── مراقبة رصيد المزوّدين ───────────────────────────────────────────────────
@@ -105,4 +107,54 @@ function startLeadDigest(): void {
   };
   // كل ربع ساعة: يكفي لالتقاط الساعة المقصودة بلا استيقاظ لا لزوم له
   setInterval(() => { void tick(); }, 15 * 60 * 1000);
+}
+
+// ─── صحّة اتصالات العملاء بـERPNext ──────────────────────────────────────────
+//
+// **لماذا وُجد هذا:** عميلٌ حقيقي أمضى جلسة كاملة يحاول إضافة عميل وإنشاء
+// فاتورة، والوكيل يردّ في كل مرة بأن بيانات الدخول غير صحيحة. لم يكن أحد
+// يعلم. وحين فُحصت الاتصالات كلها وُجد اثنان معطوبان من ستة — بلا أي أثر في
+// أي سجل، ولا شكوى إلا من واحد تكلّم.
+//
+// الاعتماد يقع مرة واحدة عند الحفظ ثم لا يُعاد أبداً، وكلمة السرّ تتغيّر على
+// الطرف الآخر بلا أن تُخبرنا. فيُفحص دورياً: من ينكسر نعرفه قبل أن يشتكي.
+const ERP_HEALTH_MS = 6 * 60 * 60 * 1000;
+const brokenAnnounced = new Set<number>();
+
+function startErpHealthWatch(): void {
+  const tick = async () => {
+    try {
+      const { broken, ok } = await checkErpConnections();
+
+      //من عاد يعمل يُنسى، فينبَّه من جديد لو انكسر ثانيةً
+      for (const id of Array.from(brokenAnnounced)) {
+        if (!broken.some(b => b.id === id)) brokenAnnounced.delete(id);
+      }
+
+      const fresh = broken.filter(b => !brokenAnnounced.has(b.id));
+      if (!fresh.length) {
+        if (broken.length) console.log(`[erpHealth] ${broken.length} اتصال معطوب (أُنذر عنها)`);
+        return;
+      }
+
+      const { sendTelegram } = await import("./telegram");
+      for (const b of fresh) brokenAnnounced.add(b.id);
+
+      const lines = fresh.map(b => `• ${b.email} — ${b.url}\n  ${b.reason}`);
+      const r = await sendTelegram(
+        `🔴 اتصال عميل بـERPNext لا يعمل\n\n${lines.join("\n\n")}\n\n` +
+        `سليم ${ok} · معطوب ${broken.length}\n` +
+        `العميل يرى «تعذّر الوصول إلى النظام» في كل محاولة، ولا يستطيع إنشاء شيء.`,
+        { disablePreview: true },
+      );
+      if (!r.ok) {
+        for (const b of fresh) brokenAnnounced.delete(b.id);
+        console.warn("[erpHealth] تعذّر التنبيه:", r.error);
+      }
+    } catch (e) {
+      console.warn("[erpHealth] الفحص فشل:", e instanceof Error ? e.message : e);
+    }
+  };
+  setTimeout(() => { void tick(); }, 4 * 60 * 1000);
+  setInterval(() => { void tick(); }, ERP_HEALTH_MS);
 }

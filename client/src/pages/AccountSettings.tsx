@@ -54,12 +54,27 @@ export default function AccountSettings() {
     readCert.mutate({ fileBase64: btoa(bin), mimeType: file.type || "application/pdf" });
   };
 
+  // ─── تعبئة النموذج من الخادم: **مرّة واحدة لا مع كل وصول بيانات** ──────────
+  //
+  // كان التأثير يعتمد على `subscription` و`user`، وReact Query تعيد الجلب كلما
+  // عادت النافذة إلى الواجهة. فمن يفتح تبويباً آخر لينسخ رقمه الضريبي ثم يعود،
+  // يجد ما كتبه قد استُبدل بما في الخادم — أي بالفراغ. شكا منها عميلٌ فعلاً:
+  // «بعبّي البيانات وأفتح تاب تاني وأرجع ألاقيها اختفت».
+  //
+  // الحارس يجعل الخادم يملأ النموذج أول مرة فقط، ولا يدهس بعدها ما كتبه أحد.
+  const profileHydrated = useRef(false);
+  const companyHydrated = useRef(false);
+
   useEffect(() => {
-    if (user) setProfile({ name: user.name ?? "", email: user.email ?? "" });
+    if (user && !profileHydrated.current) {
+      profileHydrated.current = true;
+      setProfile({ name: user.name ?? "", email: user.email ?? "" });
+    }
   }, [user]);
 
   useEffect(() => {
-    if (subscription) {
+    if (subscription && !companyHydrated.current) {
+      companyHydrated.current = true;
       setCompany({
         companyName: subscription.companyName ?? "",
         companyType: subscription.companyType ?? "",
