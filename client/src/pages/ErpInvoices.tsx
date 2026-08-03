@@ -20,7 +20,7 @@ type Invoice = {
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   Paid: { label: "مدفوعة", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
   Unpaid: { label: "غير مدفوعة", cls: "bg-red-100 text-red-700 border-red-200" },
-  Overdue: { label: "متأخرة", cls: "bg-orange-100 text-orange-700 border-orange-200" },
+  Overdue: { label: "متأخرة", cls: "bg-amber-100 text-amber-700 border-amber-200" },
   Draft: { label: "مسودة", cls: "bg-slate-100 text-slate-700 border-slate-200" },
   Cancelled: { label: "ملغاة", cls: "bg-slate-100 text-slate-500 border-slate-200" },
   "Partly Paid": { label: "مدفوعة جزئياً", cls: "bg-amber-100 text-amber-700 border-amber-200" },

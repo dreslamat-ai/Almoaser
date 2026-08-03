@@ -362,7 +362,7 @@ export function AdminConsole() {
         {[
           { label: "طلبات التسجيل", value: registrations?.length ?? 0, icon: <Users className="w-5 h-5" />, color: "text-blue-600", bg: "bg-blue-50" },
           { label: "الاشتراكات النشطة", value: subscriptions?.filter(s => s.status === "active").length ?? 0, icon: <CheckCircle2 className="w-5 h-5" />, color: "text-green-600", bg: "bg-green-50" },
-          { label: "إجمالي المهام", value: tasks?.length ?? 0, icon: <FileText className="w-5 h-5" />, color: "text-purple-600", bg: "bg-purple-50" },
+          { label: "إجمالي المهام", value: tasks?.length ?? 0, icon: <FileText className="w-5 h-5" />, color: "text-navy", bg: "bg-navy/5" },
           { label: "مهام معلقة", value: tasks?.filter(t => t.status === "pending").length ?? 0, icon: <Clock className="w-5 h-5" />, color: "text-yellow-600", bg: "bg-yellow-50" },
         ].map((s, i) => (
           <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -736,7 +736,7 @@ export function AdminConsole() {
               </div>
               {/* الضريبة المحصَّلة ليست إيراداً — تُعرض منفصلة كرقم مرجعي للإقرار */}
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-                <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center mb-3"><Receipt className="w-5 h-5" /></div>
+                <div className="w-10 h-10 rounded-xl bg-navy/5 text-navy flex items-center justify-center mb-3"><Receipt className="w-5 h-5" /></div>
                 <div className="text-2xl font-bold text-navy">{(revenueSummary?.vatThisQuarter ?? 0).toLocaleString("ar-SA")} ريال</div>
                 <div className="text-sm text-muted-foreground">ضريبة محصّلة — الربع الجاري</div>
                 <div className="text-[11px] text-muted-foreground mt-1">
@@ -750,7 +750,7 @@ export function AdminConsole() {
                 <div className="text-sm text-muted-foreground">قيمة المنح الإدارية المجانية</div>
               </div>
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3"><Cpu className="w-5 h-5" /></div>
+                <div className="w-10 h-10 rounded-xl bg-gold/10 text-gold-ink flex items-center justify-center mb-3"><Cpu className="w-5 h-5" /></div>
                 <div className="text-2xl font-bold text-navy">${(llmCostSummary?.today ?? 0).toFixed(4)}</div>
                 <div className="text-sm text-muted-foreground">تكلفة نماذج سارة (آخر 24 ساعة)</div>
               </div>
