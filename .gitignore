@@ -116,3 +116,6 @@ client/public/__manus__/version.json
 
 # حالة تشغيل (تنبيهات وتذكيرات) — خارج git، يملكها مستخدم التطبيق
 .runtime-state/
+
+# نسخ الوكلاء المعزولة — worktrees مؤقتة لا تُتابَع
+.claude/worktrees/
