@@ -63,7 +63,7 @@ function startUnbilledWatch(): void {
       const fresh = apps.filter(a => shouldAlert(`unbilled:${a.app}`, "once"));
       if (!fresh.length) return;
 
-      const { sendTelegram } = await import("./telegram");
+      const { sendTelegram, tg } = await import("./telegram");
 
       const lines = fresh.map(a => `• ${a.app}: $${a.costUsd.toFixed(4)} · ${a.calls} استدعاء`);
       const r = await sendTelegram(
@@ -145,7 +145,7 @@ function startErpHealthWatch(): void {
         return;
       }
 
-      const { sendTelegram } = await import("./telegram");
+      const { sendTelegram, tg } = await import("./telegram");
 
       const lines = fresh.map(b => `• ${b.email} — ${b.url}\n  ${b.reason}`);
       const r = await sendTelegram(
@@ -188,9 +188,11 @@ function startReminders(): void {
     const { takeDueReminders } = await import("./reminders");
     const due = takeDueReminders();
     if (!due.length) return;
-    const { sendTelegram } = await import("./telegram");
+    const { sendTelegram, tg } = await import("./telegram");
     for (const r of due) {
-      await sendTelegram(`⏰ <b>تذكير</b>\n${r.text}`).catch(e =>
+      // التهريب لازم: تليجرام يقرأ HTML، واسمٌ فيه < أو & يفشل الإرسال
+      // كلَّه — والتذكير مرّةً واحدة يكون قد حُذف قبل الإرسال فيضيع.
+      await sendTelegram(`⏰ <b>تذكير</b>\n${tg(r.text)}`).catch(e =>
         console.warn("[scheduler] تعذّر إرسال تذكير:", e instanceof Error ? e.message : e));
     }
   };

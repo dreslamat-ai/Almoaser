@@ -10,7 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { AlertCircle, FileText, Loader2, Printer, RefreshCw, Wallet, X } from "lucide-react";
 import { useState } from "react";
-import { useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 type Invoice = {
   name: string; customer: string; posting_date: string; due_date?: string;
@@ -39,8 +39,10 @@ export default function ErpInvoices() {
   const [loadingInvoice, setLoadingInvoice] = useState<string | null>(null);
   // قادمٌ من الضغط على عدد الفواتير في صفحة العملاء — فيفتح على فواتيره وحده
   const customerFilter = new URLSearchParams(useSearch()).get("customer") ?? "";
+  const [, navigate] = useLocation();
   const { data, isLoading, error, refetch } = trpc.erpnext.getSalesInvoices.useQuery(
-    { limit: 200 },
+    // الترشيح على الخادم: ترشيحُ صفحةٍ مقتطعة يُخفي بعض فواتير العميل بصمت
+    { limit: 200, ...(customerFilter ? { customer: customerFilter } : {}) },
     { staleTime: 60 * 1000 },
   );
   const pdfMutation = trpc.agent.getDocumentPdf.useMutation();
@@ -55,7 +57,9 @@ export default function ErpInvoices() {
   const modes = modesQuery.data?.modes ?? [];
   const collectMutation = trpc.erpnext.collectInvoicePayment.useMutation({
     onSuccess: (r) => {
-      toast.success(`سُجّل سند القبض ${r.name} — تحدّثت حالة الفاتورة`);
+      toast.success(r.reused
+        ? `رُحّل سند القبض ${r.name} الذي كان مسودّة — تحدّثت حالة الفاتورة`
+        : `سُجّل سند القبض ${r.name} — تحدّثت حالة الفاتورة`);
       setCollecting(null);
       void refetch();
     },
@@ -69,8 +73,7 @@ export default function ErpInvoices() {
   };
 
   const invoices = ((data?.data ?? []) as Invoice[])
-    .filter(inv => !statusFilter || inv.status === statusFilter)
-    .filter(inv => !customerFilter || inv.customer === customerFilter);
+    .filter(inv => !statusFilter || inv.status === statusFilter);
 
   // يعرض نموذج الطباعة الافتراضي الفعلي المُعدّ في نظام العميل (ERPNext/Odoo)
   // بدل إعادة بنائه في الواجهة — نفس ما يراه العميل لو طبع الفاتورة من نظامه مباشرة
@@ -112,9 +115,9 @@ export default function ErpInvoices() {
           <div className="flex items-center gap-2 text-xs bg-accent/50 border rounded-lg px-3 py-2">
             <span className="text-muted-foreground">فواتير العميل:</span>
             <span className="font-medium">{customerFilter}</span>
-            <a href="/erp/invoices" className="mr-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+            <button onClick={() => navigate("/erp/invoices")} className="mr-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
               <X className="w-3 h-3" /> إلغاء التصفية
-            </a>
+            </button>
           </div>
         )}
 
