@@ -20,6 +20,10 @@ type TgMessage = {
   chat?: { id: number };
   from?: { id: number; first_name?: string };
   text?: string;
+  //الرسالة الصوتية كانت تُهمَل تماماً: المعالج يقرأ `text` وحده، فمن يسجّل
+  //مقطعاً لا يرى ردّاً ولا خطأً — كأنّ شيئاً لم يصل.
+  voice?: { file_id: string; duration?: number; mime_type?: string };
+  audio?: { file_id: string; duration?: number; mime_type?: string };
 };
 
 const MAX_TG_CHARS = 3800; // حد تيليجرام 4096 — نترك هامشاً للوسوم
@@ -103,8 +107,9 @@ export function registerTelegramWebhook(app: Express): void {
 
       const msg = (req.body as { message?: TgMessage })?.message;
       const chatId = msg?.chat?.id;
-      const text = msg?.text?.trim();
-      if (!chatId || !text) return;
+      let text = msg?.text?.trim();
+      const audio = msg?.voice ?? msg?.audio;
+      if (!chatId || (!text && !audio)) return;
 
       const owner = ownerChatId();
       if (owner === null || chatId !== owner) {
@@ -117,6 +122,8 @@ export function registerTelegramWebhook(app: Express): void {
         await sendTelegram(
           "<b>مساعد إدارة المنصة</b>\nاكتب طلبك وسأنفّذه فوراً:\n\n"
           + "• حال المنصة النهاردة\n• الاستهلاك والرصيد\n• مين ربطه واقع؟\n"
+          + "• سجّل مهمة… · إيه المهام؟ · اقفل مهمة #3\n"
+          + "🎙 وابعتها صوت — أفرّغها وأنفّذها\n"
           + "• دوّر على عميل بالإيميل\n• مدّد اشتراك #12 شهر\n• صلّح ربط #4572\n\n"
           + "<code>/new</code> يبدأ محادثة جديدة.",
         );
@@ -128,7 +135,26 @@ export function registerTelegramWebhook(app: Express): void {
         return;
       }
 
-      await handleOwnerMessage(chatId, text);
+      // ─── الصوت يُفرَّغ قبل أن يُعالَج ──────────────────────────────────
+      // ويُخبَر بما سُمع منه: التفريغ قد يخطئ في اسم أو رقم، ورؤيته للنصّ
+      // تجعله يصحّح قبل أن يُبنى على الخطأ إجراء.
+      if (!text && audio) {
+        const { downloadTelegramFile, transcribeAudio } = await import("./transcribe");
+        const file = await downloadTelegramFile(audio.file_id);
+        if (!file.ok) {
+          await sendTelegram(`تعذّر تنزيل المقطع الصوتي — ${tg(file.error)}`);
+          return;
+        }
+        const t = await transcribeAudio(file.bytes, audio.mime_type ?? file.mime);
+        if (!t.ok) {
+          await sendTelegram(`تعذّر تفريغ الصوت — ${tg(t.error)}\n\nاكتب طلبك نصّاً وسأنفّذه.`);
+          return;
+        }
+        text = t.text;
+        await sendTelegram(`🎙 سمعتُ: <i>${tg(text)}</i>`);
+      }
+
+      await handleOwnerMessage(chatId, text!);
     } catch (e) {
       console.error("[telegram] فشل معالجة التحديث:", e instanceof Error ? e.message : e);
     }

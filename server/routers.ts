@@ -1295,6 +1295,53 @@ export const appRouter = router({
     // تعديل ربط مستخدم بنظامه — طلبه المالك ليصلح ربطاً انكسر بلا انتظار العميل.
     // **يُختبر قبل الحفظ:** حفظ بيانات لا تعمل يترك العميل معطّلاً وهو يظنّ أنه
     // أُصلح، وهو ما وقع أصلاً حين انكسر ربطٌ ولم يعلم به أحد.
+    // مهامّ المالك من تيليجرام — يُمليها بالصوت فتُسجَّل ويتابعها ويقفلها.
+    // تُكتب باسمه هو لا باسم عميل، فتظهر في «المهام» عنده.
+    createTaskForOwner: protectedProcedure
+      .input(z.object({
+        title: z.string().trim().min(1).max(255),
+        description: z.string().trim().max(4000).optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        type: z.enum(["bookkeeping", "invoice", "journal_entry", "report", "tax", "payroll", "other"]).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const id = await createTask({
+          userId: ctx.user.id,
+          title: input.title,
+          description: input.description,
+          type: input.type ?? "other",
+          priority: input.priority ?? "medium",
+        });
+        return { id };
+      }),
+
+    // **الملاحظة تُضاف ولا تُستبدل:** التحديث الصوتي يصف ما استجدّ، ومحو
+    // ما قبله يفقد تاريخ المهمّة الذي هو سبب تسجيلها.
+    updateTaskForOwner: protectedProcedure
+      .input(z.object({
+        taskId: z.number(),
+        status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional(),
+        note: z.string().trim().max(2000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const task = await getTaskById(input.taskId);
+        if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "لا مهمّة بهذا الرقم" });
+
+        const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+        const notes = input.note
+          ? `${task.agentNotes ? task.agentNotes + "\n" : ""}[${stamp}] ${input.note}`
+          : undefined;
+
+        await updateTask(input.taskId, ctx.user.id, {
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.status === "completed" ? { completedAt: new Date() } : {}),
+          ...(notes ? { agentNotes: notes } : {}),
+        });
+        return { success: true };
+      }),
+
     setUserErpConnection: protectedProcedure
       .input(z.object({
         userId: z.number(),

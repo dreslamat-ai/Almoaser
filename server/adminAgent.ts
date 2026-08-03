@@ -38,6 +38,53 @@ export const ADMIN_TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "list_tasks",
+      description: "عرض المهام المسجّلة وحالتها. تُستدعى عند «إيه المهام؟» أو «فين وصلنا؟» أو قبل تحديث مهمة لمعرفة رقمها.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["all", "pending", "in_progress", "completed", "cancelled"], description: "الافتراضي: غير المكتملة" },
+        },
+        required: [], additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_task",
+      description: "تسجيل مهمة جديدة. تُستدعى حين يملي مهمّة — بالصوت أو بالكتابة — ليتابعها لاحقاً.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "عنوان مختصر يصف المهمّة" },
+          description: { type: "string", description: "التفاصيل كما قالها، بلا اختصار مخلّ" },
+          priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+          type: { type: "string", enum: ["bookkeeping", "invoice", "journal_entry", "report", "tax", "payroll", "other"] },
+        },
+        required: ["title"], additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "update_task",
+      description: "تحديث مهمّة: تغيير حالتها أو إضافة ما استجدّ عليها. الإقفال حالةٌ لا حذف — المهمّة المكتملة تبقى في السجلّ.",
+      parameters: {
+        type: "object",
+        properties: {
+          taskId: { type: "number", description: "رقم المهمّة من list_tasks" },
+          status: { type: "string", enum: ["pending", "in_progress", "completed", "cancelled"] },
+          note: { type: "string", description: "ما استجدّ — يُضاف إلى ملاحظات المهمّة ولا يمحو ما قبله" },
+        },
+        required: ["taskId"], additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "find_users",
       description: "البحث عن مستخدمين بالاسم أو البريد أو الجوال، مع دورهم وحالتهم وتاريخ تسجيلهم.",
       parameters: {
@@ -154,6 +201,45 @@ export async function runAdminTool(caller: Caller, name: string, args: Record<st
       return JSON.stringify({ insights, revenue, balances: bal }, null, 0).slice(0, 3500);
     }
 
+    case "list_tasks": {
+      const want = String(args.status ?? "open");
+      const all = (await c.admin.tasks().catch(() => [])) as Array<Record<string, unknown>>;
+      const rows = want === "all" ? all
+        : want === "open" ? all.filter(t => t.status === "pending" || t.status === "in_progress")
+        : all.filter(t => t.status === want);
+      if (!rows.length) return want === "open" ? "لا مهامّ مفتوحة." : "لا مهامّ بهذه الحالة.";
+      const label: Record<string, string> = { pending: "معلّقة", in_progress: "جارية", completed: "مكتملة", cancelled: "ملغاة" };
+      return rows.slice(0, 25).map(t =>
+        `#${t.id} · ${t.title} · ${label[String(t.status)] ?? t.status}` +
+        (t.priority && t.priority !== "medium" ? ` · ${t.priority}` : "") +
+        (t.agentNotes ? `\n    ${String(t.agentNotes).slice(-160)}` : "")).join("\n");
+    }
+
+    case "create_task": {
+      const title = String(args.title ?? "").trim();
+      if (!title) return "المهمّة بلا عنوان — اسأله عمّا يريد تسجيله.";
+      const r = await c.admin.createTaskForOwner({
+        title: title.slice(0, 255),
+        description: String(args.description ?? "").slice(0, 4000) || undefined,
+        priority: (args.priority as string) ?? undefined,
+        type: (args.type as string) ?? undefined,
+      });
+      const id = (r as { id?: number } | undefined)?.id;
+      return `سُجّلت المهمّة${id ? ` برقم #${id}` : ""}: ${title}`;
+    }
+
+    case "update_task": {
+      const taskId = Number(args.taskId);
+      if (!Number.isFinite(taskId)) return "رقم المهمّة مطلوب — اعرض المهامّ أولاً بـlist_tasks.";
+      await c.admin.updateTaskForOwner({
+        taskId,
+        status: (args.status as string) ?? undefined,
+        note: args.note ? String(args.note).slice(0, 2000) : undefined,
+      });
+      const what = [args.status ? `الحالة: ${args.status}` : "", args.note ? "وأُضيفت ملاحظة" : ""].filter(Boolean).join(" ");
+      return `حُدّثت المهمّة #${taskId}${what ? ` — ${what}` : ""}.`;
+    }
+
     case "find_users": {
       const q = String(args.query ?? "").trim().toLowerCase();
       const all = (await c.admin.users().catch(() => [])) as Array<Record<string, unknown>>;
@@ -241,7 +327,10 @@ export function adminSystemPrompt(): string {
 اليوم ${today}.
 
 ## دورك
-تدير معه المنصة: المستخدمون، الاشتراكات، الإيرادات، استهلاك النماذج ورصيدها، وربط العملاء بأنظمتهم. تجيب بأرقام من الأدوات لا بتقدير.
+تدير معه المنصة: المستخدمون، الاشتراكات، الإيرادات، استهلاك النماذج ورصيدها، وربط العملاء بأنظمتهم. **وتحفظ له مهامّه**: يُملي عليك مهمّة فتُسجّلها، ويسأل عنها فتعرضها، ويقول «خلصت» فتقفلها. تجيب بأرقام من الأدوات لا بتقدير.
+
+## الصوت
+قد تصلك رسالته مفرَّغةً من مقطع صوتي. التفريغ قد يخطئ في اسم أو رقم — فإن كان الطلب **تسجيل مهمّة** فسجّلها كما فهمتها ثم اعرض عليه العنوان ليصحّحه إن أخطأ التفريغ. وإن كان الطلب **إجراءً على مستخدم أو اشتراك أو مبلغ**، فأعد عليه ما فهمته واطلب تأكيده قبل التنفيذ — رقمٌ يخطئ فيه التفريغ يصير إجراءً على الحساب الخطأ.
 
 ## نطاقك — وما ليس منه
 أنت **لست** وكيل المحاسبة. لا تُنشئ فواتير عملاء ولا قيوداً في ERPNext ولا تشرح استعمال النظام للعملاء — ذلك عمل وكيل آخر. إن سُئلت عن شيء من ذلك قل إنه خارج دورك ووجّهه إلى المحادثة الذكية في المنصة.
