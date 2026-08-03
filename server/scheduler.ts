@@ -7,10 +7,13 @@ import { alertIfLowBalance } from "./providerBalance";
 import { getUnbilledApps, BILLED_APPS } from "./llmUsage";
 import { checkErpConnections } from "./erpHealth";
 import { maybeSendDailyReport } from "./dailyReport";
+import { assertStateWritable } from "./stateFile";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
 
 export function startScheduledJobs(): void {
+  // قبل أي شيء: تخزينٌ يفشل بصمت يجعل التنبيهات تتكرّر والتذكيرات تضيع
+  assertStateWritable();
   const run = () => {
     checkExpiringSubscriptions().catch(err =>
       console.warn("[scheduler] checkExpiringSubscriptions failed:", err instanceof Error ? err.message : err)
@@ -24,6 +27,7 @@ export function startScheduledJobs(): void {
   startUnbilledWatch();
   startErpHealthWatch();
   startDailyReport();
+  startReminders();
 }
 
 // ─── مراقبة رصيد المزوّدين ───────────────────────────────────────────────────
@@ -174,4 +178,21 @@ function startDailyReport(): void {
     }
   };
   setInterval(() => { void tick(); }, 15 * 60 * 1000);
+}
+
+// ─── تذكيرات المالك ──────────────────────────────────────────────────────────
+// **كل خمس دقائق:** التذكير المطلوب «كل ٣ ساعات» لا يضيره تأخّرُ دقائق، وفحصٌ
+// كل دقيقة يوقظ العملية ٦٠ مرّة في الساعة بلا فائدة تُذكر.
+function startReminders(): void {
+  const tick = async () => {
+    const { takeDueReminders } = await import("./reminders");
+    const due = takeDueReminders();
+    if (!due.length) return;
+    const { sendTelegram } = await import("./telegram");
+    for (const r of due) {
+      await sendTelegram(`⏰ <b>تذكير</b>\n${r.text}`).catch(e =>
+        console.warn("[scheduler] تعذّر إرسال تذكير:", e instanceof Error ? e.message : e));
+    }
+  };
+  setInterval(() => { void tick(); }, 5 * 60 * 1000);
 }

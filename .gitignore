@@ -113,3 +113,6 @@ temp/
 client/public/__manus__/version.json
 .project-config.json
 .backups/
+
+# حالة تشغيل (تنبيهات وتذكيرات) — خارج git، يملكها مستخدم التطبيق
+.runtime-state/
