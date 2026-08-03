@@ -50,7 +50,7 @@ function TaskComments({ taskId, taskTitle }: { taskId: number; taskTitle: string
                   <span className={`text-xs font-semibold ${c.authorRole === "admin" ? "text-navy" : "text-gray-700"}`}>
                     {c.authorRole === "admin" ? "المحاسب" : (c.authorName ?? "أنت")}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">{new Date(c.createdAt).toLocaleString("ar-SA-u-ca-gregory")}</span>
+                  <span className="text-[11px] text-muted-foreground">{new Date(c.createdAt).toLocaleString("ar-SA-u-ca-gregory")}</span>
                 </div>
                 <p className="text-gray-800 whitespace-pre-wrap">{c.content}</p>
               </div>

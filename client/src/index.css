@@ -240,3 +240,19 @@
     .table-wrap, .prose, [data-chat-bubble] { text-align: start; }
   }
 }
+
+@layer base {
+  /* ── من يطلب تقليل الحركة يُستجاب له ──────────────────────────────────
+     دوّارٌ لا يتوقّف وظهورٌ متحرّك عند كل بطاقة يسبّبان دواراً حقيقياً لبعض
+     الناس، ونظام تشغيلهم يعلن ذلك عنهم. لا نُلغي الحركة بل نُقصّرها إلى
+     ما لا يكاد يُرى: الإلغاء التامّ يُفقد الانتقالَ معناه (ما الذي تغيّر؟)
+     بينما 0.01ms تصل فوراً وتُبقي أحداث النهاية تعمل. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

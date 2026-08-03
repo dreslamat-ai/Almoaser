@@ -1246,7 +1246,7 @@ export function AdminConsole() {
                       <div className={`inline-block max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${
                         m.role === "user" ? "bg-navy text-white" : "bg-gray-100 text-foreground"
                       }`}>{m.content}</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
                         {new Date(m.createdAt).toLocaleString("ar-SA-u-ca-gregory")}
                       </div>
                     </div>

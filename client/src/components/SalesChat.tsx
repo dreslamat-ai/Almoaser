@@ -206,7 +206,7 @@ export default function SalesChat() {
                 <Send className="w-4 h-4" />
               </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+            <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
               للاستفسارات عن المنصة والباقات — لا تُشارك بيانات دخول أو أرقام بطاقات.
             </p>
           </div>

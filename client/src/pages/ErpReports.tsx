@@ -24,6 +24,14 @@ function KpiBox({ title, value, subtitle, icon: Icon, tone = "plain" }: {
   );
 }
 
+// ألوان الرسوم: recharts يرسم على SVG بقيم صريحة لا بأصناف Tailwind، فتُجمع
+// هنا بأسماء تقول وظيفتها ليمرّ تغييرُها بموضع واحد.
+const CHART_GRID = "#e2e8f0";
+const CHART_TEAL = "#0d9488";
+const STATUS_PAID = "#10b981";
+const STATUS_UNPAID = "#ef4444";
+const STATUS_OTHER = "#94a3b8";
+
 export default function ErpReports() {
   const { data: stats, isLoading, error, refetch } =
     trpc.erpnext.getDashboardStats.useQuery(undefined, { staleTime: 60 * 1000 });
@@ -57,9 +65,9 @@ export default function ErpReports() {
     .map(([customer, total]) => ({ customer, total }));
 
   const pieData = stats ? [
-    { name: "مدفوعة", value: stats.paidInvoices, color: "#10b981" },
-    { name: "غير مدفوعة", value: stats.unpaidInvoices, color: "#ef4444" },
-    { name: "أخرى", value: Math.max(0, stats.totalInvoices - stats.paidInvoices - stats.unpaidInvoices), color: "#94a3b8" },
+    { name: "مدفوعة", value: stats.paidInvoices, color: STATUS_PAID },
+    { name: "غير مدفوعة", value: stats.unpaidInvoices, color: STATUS_UNPAID },
+    { name: "أخرى", value: Math.max(0, stats.totalInvoices - stats.paidInvoices - stats.unpaidInvoices), color: STATUS_OTHER },
   ].filter(d => d.value > 0) : [];
 
   return (
@@ -112,11 +120,11 @@ export default function ErpReports() {
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                     <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip formatter={(v: number) => [`${v.toLocaleString("ar-SA")} ر.ع`, "المبيعات"]} />
-                    <Bar dataKey="total" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="total" fill={CHART_TEAL} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

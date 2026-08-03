@@ -157,7 +157,7 @@ function Navbar() {
           </div>
           <div>
             <span className="font-bold text-lg text-navy">Almoaser <span className="text-gold-ink font-light text-sm">AI ERP</span></span>
-            <div className="text-[10px] text-muted-foreground leading-none">خدمات مسك الدفاتر</div>
+            <div className="text-[11px] text-muted-foreground leading-none">خدمات مسك الدفاتر</div>
           </div>
         </div>
         <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
@@ -414,6 +414,8 @@ function TelegramDemoSection() {
           {/* يمين: هاتف تليجرام */}
           <div className="flex justify-center">
             <div className="relative w-[320px]">
+              {/* ui-agent:mockup-start — رسمٌ مصغّر لهاتف: النصّ فيه صغير عمداً
+                   لأنه صورة لواجهة، لا واجهة. فحص أحجام الخطّ يتخطّاه. */}
               {/* إطار الهاتف */}
               <div className="bg-[#17212b] rounded-[2.5rem] p-3 shadow-2xl border-4 border-gray-800">
                 {/* شريط الحالة */}
@@ -521,6 +523,7 @@ function TelegramDemoSection() {
                   )}
                 </div>
               </div>
+              {/* ui-agent:mockup-end */}
 
               {/* زر إعادة التشغيل */}
               <button onClick={playScenario} disabled={isPlaying}

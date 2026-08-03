@@ -116,7 +116,7 @@ export default function NotificationBell() {
         <Button variant="ghost" size="icon" className="relative" aria-label="الإشعارات">
           {count > 0 ? <BellRing className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
           {count > 0 && (
-            <span className="absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+            <span className="absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center leading-none">
               {count > 99 ? "99+" : count}
             </span>
           )}
