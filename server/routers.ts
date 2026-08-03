@@ -156,6 +156,22 @@ export const appRouter = router({
   }),
   // ─── إعدادات اتصال نظام ERP لكل منظمة (ERPNext أو Odoo) ───────────────────
   erpConnection: router({
+    // حالة الربط كما هي الآن — لا كما كانت وقت الحفظ.
+    //
+    // **لماذا اختبارٌ حيّ لا حقلٌ محفوظ:** `lastVerifiedAt` يُكتب مرّة عند
+    // الحفظ ولا يُعاد أبداً، وكلمة السرّ تتغيّر على الطرف الآخر بلا خبر. عميلٌ
+    // حقيقي أمضى جلسة كاملة يحاول والوكيل يرفض، ولوحته تقول «مربوط».
+    //
+    // ويُخزَّن الناتج دقيقتين: الشاشات تسأل عنه كثيراً، ونداء تسجيل دخول مع كل
+    // سؤال يُثقل نظام العميل بلا فائدة.
+    status: protectedProcedure.query(async ({ ctx }) => {
+      if (!ctx.effectiveUserId) {
+        return { configured: false, ok: false, reason: "لا مستخدم", checkedAt: new Date().toISOString() };
+      }
+
+      const { getConnectionStatus } = await import("./erpHealth");
+      return getConnectionStatus(ctx.effectiveUserId);
+    }),
     get: protectedProcedure.query(async ({ ctx }) => {
       const { getDb } = await import("./db");
       const db = await getDb();

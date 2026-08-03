@@ -26,6 +26,7 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import FloatingChatButton from "./FloatingChatButton";
+import { ConnectionBanner, ConnectionLamp } from "./ConnectionStatus";
 
 const menuItems = [
   { icon: HomeIcon, label: "ملخص الحساب", path: "/dashboard" },
@@ -319,11 +320,15 @@ function DashboardLayoutContent({
                   <span className="tracking-tight text-foreground">
                     {activeMenuItem?.label ?? "Menu"}
                   </span>
+                  <ConnectionLamp />
                 </div>
               </div>
             </div>
           </div>
         )}
+        {/* الشريط في التخطيط لا في صفحة: العميل قد يبدأ من أي شاشة، والانقطاع
+            يخصّ النظام كلّه لا صفحةً بعينها */}
+        <ConnectionBanner />
         <main className="flex-1 p-4">{children}</main>
         <FloatingChatButton />
       </SidebarInset>
