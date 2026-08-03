@@ -231,11 +231,20 @@ async function agentUi(): Promise<Result> {
   const pages = sources("client/src");
 
   // ١) اللون معنى لا زينة: ألوان تيلويند العشوائية للأسطح
-  const palette = /\bbg-(blue|violet|emerald|amber|rose|purple|indigo|teal|orange|cyan|pink|lime|sky|fuchsia)-(50|100|500|600)\b/g;
+  // **الأخضر والكهرماني والأحمر والأزرق حالاتٌ لا زينة** — مدفوع، معلّق،
+  // خطأ، معلومة. تُقاس الألوان التي لا تصف حالة: البنفسجي والفيروزي
+  // والنيلي وأخواتها زينةٌ بحتة، وهي التي تجعل الشاشة تبدو من قوالب.
+  //
+  // أول صيغة عدّت الجميع فبلّغت عن أربعين لوناً في شاشة الدردشة، وأكثرها
+  // دلالي — ومقياسٌ يعدّ الصواب خطأً يُدفن بلاغه كلّه.
+  const palette = /\bbg-(violet|purple|indigo|teal|cyan|pink|lime|fuchsia|sky|orange)-(50|100|500|600)\b/g;
   const offenders: Array<[string, number]> = [];
   for (const p of pages) {
-    //المحادثة تستعمل اللون للتمييز بين أنواع المستندات، وهو معنًى لا زينة
-    if (/AgentChat|AdminPanel/.test(p)) continue;
+    //**لا استثناء للمحادثة بعد اليوم.** كانت مستثناة بحجّة أن اللون فيها
+    //يميّز أنواع المستندات — وهو صحيح لبضعة ألوان لا لثمانية وثلاثين.
+    //الاستثناء الذي يُمنح مرّة يُخفي انحداراً كاملاً: شاشة الدردشة أكبر
+    //شاشة في المنتج وأكثرها استعمالاً، وهي آخر ما راجعه أحد.
+    if (/AdminPanel/.test(p)) continue;
     const n = (read(p).match(palette) ?? []).length;
     if (n >= 4) offenders.push([p, n]);
   }
@@ -268,6 +277,16 @@ async function agentUi(): Promise<Result> {
     const src = read(p);
     const bad = Array.from(src.matchAll(/<button(?![^>]*aria-label)[^>]*>\s*<[A-Z][A-Za-z]*\s[^>]*\/>\s*<\/button>/g)).length;
     if (bad >= 2) f.push(`${bad} زرّ بأيقونة بلا aria-label في ${p}`);
+  }
+
+
+  // ٦) الشاشة الأكثر استعمالاً تُفحص وحدها: طولها يجعل الانحدار فيها يمرّ
+  if (exists("client/src/pages/AgentChat.tsx")) {
+    const chat = read("client/src/pages/AgentChat.tsx");
+    if (!/m-card|m-icon|m-stat/.test(chat)) f.push("شاشة الدردشة لا تستعمل طبقة الهوية إطلاقاً");
+    //ترويسة التخطيط تسمّي الشاشة وتعرض اللمبة؛ تكرارهما ازدحامٌ لا معلومة
+    if (/المعاصر AI — المحاسب الذكي/.test(chat)) f.push("شاشة الدردشة تكرّر اسم الصفحة الموجود في الترويسة");
+    if (/>\s*متصل\s*</.test(chat)) f.push("شاشة الدردشة تكرّر حالة الاتصال الموجودة في الترويسة");
   }
 
   return { ok: f.length === 0, findings: f.slice(0, 12) };

@@ -642,7 +642,7 @@ function ReportCard({ report }: { report: SalesReport }) {
           <p className="text-xs text-emerald-600 mb-1">الإيرادات الكلية</p>
           <p className="text-lg font-bold text-emerald-700">{report.totalRevenue?.toLocaleString()}</p>
         </div>
-        <div className="bg-teal-50 rounded-lg p-2.5 text-center">
+        <div className="bg-navy/5 rounded-lg p-2.5 text-center">
           <p className="text-xs text-teal-600 mb-1">المحصّل</p>
           <p className="text-lg font-bold text-teal-700">{report.paidRevenue?.toLocaleString()}</p>
         </div>
@@ -1073,7 +1073,7 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
 
   if (display.startsWith("__APP_REQUEST__")) {
     return (
-      <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+      <div className="rounded-xl border border-navy/15 bg-navy/5 p-3 text-sm">
         <div className="flex items-center gap-2 font-bold text-sky-900">
           <CheckCircle2 className="w-4 h-4 shrink-0" /> سُجّل طلبك
         </div>
@@ -1109,7 +1109,7 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
     try {
       const d = JSON.parse(display.replace("__REPORT_SAVED__", "")) as { id: number; kind: string; title: string };
       return (
-        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+        <div className="rounded-xl border border-navy/15 bg-navy/5 p-3 text-sm">
           <div className="flex items-center gap-2 font-bold text-sky-900">
             <FileText className="w-4 h-4 shrink-0" /> حُفظ التقرير: {d.title}
           </div>
@@ -1615,20 +1615,21 @@ export default function AgentChat() {
             {/* Welcome */}
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-6 py-8">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center shadow-lg">
-                  <Sparkles className="w-8 h-8 text-white" />
-                </div>
+                {/* وجهها لا بريقٌ بنفسجي غريبٌ عن هوية كحلية وذهبية —
+                    ومن سيحدّثك أولى بالصدارة من أيقونة */}
+                <SaraAvatar className="w-20 h-20 ring-4 ring-gold/25" bordered={false} />
                 <div className="text-center">
-                  <h2 className="text-lg font-bold text-foreground mb-1">مرحباً! أنا محاسب المعاصر الذكي</h2>
-                  <p className="text-sm text-muted-foreground max-w-sm">
+                  <span className="m-eyebrow">المحاسب الذكي</span>
+                  <h2 className="m-title mb-1">مرحباً! أنا سارة</h2>
+                  <p className="m-sub max-w-sm mx-auto">
                     أنفّذ طلباتك مباشرة على Almoaser AI ERP — أنشئ الفواتير والعملاء والأصناف، اجلب التقارير، وأعالج أي نقص تلقائياً.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 w-full max-w-lg">
                   {SUGGESTIONS.map((s, i) => (
                     <button key={i} onClick={() => void send(s.text)}
-                      className="flex items-center gap-2 p-3 rounded-xl border border-border bg-muted/40 hover:bg-muted hover:border-primary/30 transition-all text-right text-sm text-foreground group">
-                      <s.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                      className="m-card m-card--action flex items-center gap-2 !p-3 text-right text-sm text-navy group">
+                      <s.icon className="w-4 h-4 text-gold-ink shrink-0" />
                       <span className="truncate">{s.text}</span>
                     </button>
                   ))}
@@ -1650,7 +1651,7 @@ export default function AgentChat() {
                   <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground rounded-tr-sm"
-                      : "bg-muted/60 text-foreground rounded-tl-sm border border-border"
+                      : "bg-white text-navy rounded-tl-sm border border-navy/10 shadow-sm"
                   }`}>
                     {msg.role === "assistant" ? (
                       <div className="prose prose-sm max-w-none dark:prose-invert">
@@ -1719,7 +1720,7 @@ export default function AgentChat() {
                       {THINKING_STAGES.slice(0, 3).map((_, i) => (
                         <span key={i}
                           className={`h-1 rounded-full transition-all duration-500 ${
-                            i <= thinkingStage ? "bg-violet-500 w-8" : "bg-border w-4"
+                            i <= thinkingStage ? "bg-gold w-8" : "bg-border w-4"
                           }`} />
                       ))}
                     </div>
