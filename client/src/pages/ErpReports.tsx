@@ -6,22 +6,21 @@ import { trpc } from "@/lib/trpc";
 import { AlertCircle, BarChart3, DollarSign, FileText, RefreshCw, TrendingUp } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-function KpiBox({ title, value, subtitle, icon: Icon, color }: {
-  title: string; value: string; subtitle: string; icon: React.ElementType; color: string;
+/** اللون يصف الرقم: ذهبي لما يدخل، وأخضر لما حُصّل، وكهرماني لما ينتظر */
+function KpiBox({ title, value, subtitle, icon: Icon, tone = "plain" }: {
+  title: string; value: string; subtitle: string; icon: React.ElementType;
+  tone?: "plain" | "accent" | "ok" | "warn";
 }) {
+  const iconClass = { plain: "m-icon", accent: "m-icon m-icon--accent", ok: "m-icon m-icon--ok", warn: "m-icon m-icon--warn" }[tone];
   return (
-    <Card>
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center text-white shrink-0`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{title}</p>
-          <p className="text-lg font-bold truncate">{value}</p>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="m-card flex items-center gap-3">
+      <span className={`${iconClass} shrink-0`}><Icon className="w-5 h-5" /></span>
+      <div className="min-w-0">
+        <p className="m-stat__label">{title}</p>
+        <p className="text-lg font-bold text-navy truncate">{value}</p>
+        <p className="m-stat__label">{subtitle}</p>
+      </div>
+    </div>
   );
 }
 
@@ -95,10 +94,10 @@ export default function ErpReports() {
           </div>
         ) : stats && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiBox title="إجمالي الإيرادات" value={stats.totalRevenue.toLocaleString("ar-SA")} subtitle="ريال عماني" icon={DollarSign} color="bg-emerald-500" />
-            <KpiBox title="المحصّل" value={stats.paidRevenue.toLocaleString("ar-SA")} subtitle="إيرادات مدفوعة" icon={TrendingUp} color="bg-blue-500" />
-            <KpiBox title="غير المحصّل" value={(stats.totalRevenue - stats.paidRevenue).toLocaleString("ar-SA")} subtitle="ذمم مدينة" icon={AlertCircle} color="bg-orange-500" />
-            <KpiBox title="عدد الفواتير" value={String(stats.totalInvoices)} subtitle={`${stats.unpaidInvoices} غير مدفوعة`} icon={FileText} color="bg-violet-500" />
+            <KpiBox title="إجمالي الإيرادات" value={stats.totalRevenue.toLocaleString("ar-SA")} subtitle="ريال عماني" icon={DollarSign} tone="accent" />
+            <KpiBox title="المحصّل" value={stats.paidRevenue.toLocaleString("ar-SA")} subtitle="إيرادات مدفوعة" icon={TrendingUp} tone="ok" />
+            <KpiBox title="غير المحصّل" value={(stats.totalRevenue - stats.paidRevenue).toLocaleString("ar-SA")} subtitle="ذمم مدينة" icon={AlertCircle} tone="warn" />
+            <KpiBox title="عدد الفواتير" value={String(stats.totalInvoices)} subtitle={`${stats.unpaidInvoices} غير مدفوعة`} icon={FileText} tone="plain" />
           </div>
         )}
 

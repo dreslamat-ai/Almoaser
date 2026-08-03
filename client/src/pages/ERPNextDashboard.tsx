@@ -34,37 +34,41 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/**
+ * بطاقة رقم.
+ *
+ * **اللون هنا معنى لا زينة.** كانت كل بطاقة بلونها — زمردي وأزرق وبنفسجي
+ * وكهرماني متجاورة — فلا يدلّ اللون على شيء وتُقرأ العناوين في كل مرة.
+ * صار اللون يصف الرقم: ذهبي لما يدخل، وأخضر لما تمّ، وكهرماني لما ينتظر،
+ * وكحلي لما هو عدٌّ مجرّد.
+ *
+ * والبطاقة التي تُفتح ترتفع عند المرور، والساكنة لا — فيُفرَّق بينهما قبل
+ * أن تُقرأ.
+ */
 function KpiCard({
-  title, value, subtitle, icon: Icon, color, loading, onClick,
+  title, value, subtitle, icon: Icon, tone = "plain", loading, onClick,
 }: {
   title: string; value: string | number; subtitle?: string;
-  icon: React.ElementType; color: string; loading?: boolean; onClick?: () => void;
+  icon: React.ElementType; tone?: "plain" | "accent" | "ok" | "warn"; loading?: boolean; onClick?: () => void;
 }) {
+  const iconClass = { plain: "m-icon", accent: "m-icon m-icon--accent", ok: "m-icon m-icon--ok", warn: "m-icon m-icon--warn" }[tone];
   return (
-    <Card
-      className={`relative overflow-hidden border shadow-sm transition-all ${onClick ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""}`}
+    <div
+      className={`m-card ${onClick ? "m-card--action cursor-pointer" : ""}`}
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }) : undefined}
     >
-      <div className={`absolute top-0 right-0 w-24 h-24 rounded-full -translate-y-8 translate-x-8 opacity-10 ${color}`} />
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">{title}</p>
-            {loading ? (
-              <Skeleton className="h-7 w-20 mb-1" />
-            ) : (
-              <p className="text-2xl font-bold text-foreground leading-none">{value}</p>
-            )}
-            {subtitle && !loading && (
-              <p className="text-xs text-muted-foreground mt-1.5">{subtitle}</p>
-            )}
-          </div>
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color} shrink-0`}>
-            <Icon className="w-5 h-5 text-white" />
-          </div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="m-stat__label mb-2">{title}</p>
+          {loading ? <Skeleton className="h-7 w-20 mb-1" /> : <p className="m-stat">{value}</p>}
+          {subtitle && !loading && <p className="m-stat__label mt-1.5">{subtitle}</p>}
         </div>
-      </CardContent>
-    </Card>
+        <span className={`${iconClass} shrink-0`}><Icon className="w-5 h-5" /></span>
+      </div>
+    </div>
   );
 }
 
@@ -154,27 +158,27 @@ export default function ERPNextDashboard() {
             title="إجمالي الإيرادات"
             value={stats ? `${stats.totalRevenue.toLocaleString("ar-SA")}` : "—"}
             subtitle={`${stats?.paidRevenue?.toLocaleString("ar-SA") ?? "—"} ر.ع محصّل`}
-            icon={DollarSign} color="bg-emerald-500" loading={statsLoading}
+            icon={DollarSign} tone="accent" loading={statsLoading}
           />
           <KpiCard
             title="الفواتير"
             value={stats?.totalInvoices ?? "—"}
             subtitle={`${stats?.unpaidInvoices ?? "—"} غير مدفوعة`}
-            icon={FileText} color="bg-blue-500" loading={statsLoading}
+            icon={FileText} tone="plain" loading={statsLoading}
             onClick={() => setLocation("/erp/invoices")}
           />
           <KpiCard
             title="العملاء"
             value={stats?.totalCustomers ?? "—"}
             subtitle="إجمالي العملاء المسجلين"
-            icon={Users} color="bg-violet-500" loading={statsLoading}
+            icon={Users} tone="plain" loading={statsLoading}
             onClick={() => setLocation("/erp/customers")}
           />
           <KpiCard
             title="الموردون / الأصناف"
             value={stats ? `${stats.totalSuppliers} / ${stats.totalItems}` : "—"}
             subtitle="موردون / أصناف مسجلة"
-            icon={Package} color="bg-amber-500" loading={statsLoading}
+            icon={Package} tone="warn" loading={statsLoading}
           />
         </div>
 

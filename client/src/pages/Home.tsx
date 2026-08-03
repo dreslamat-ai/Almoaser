@@ -25,7 +25,7 @@ const SCENARIOS: Scenario[] = [
     id: 1,
     label: "إنشاء فاتورة",
     icon: "🧾",
-    color: "bg-emerald-500",
+    color: "bg-navy",
     messages: [
       { from: "user",  text: "أصدر فاتورة لشركة النور بقيمة 5,000 ريال مقابل خدمات استشارية", delay: 0 },
       { from: "agent", text: "⏳ جاري البحث عن شركة النور في النظام...", delay: 900 },
@@ -39,7 +39,7 @@ const SCENARIOS: Scenario[] = [
     id: 2,
     label: "قيد محاسبي",
     icon: "📒",
-    color: "bg-blue-500",
+    color: "bg-navy",
     messages: [
       { from: "user",  text: "سجّل قيد: مدين حساب الصندوق 3,000 ريال، دائن المبيعات 3,000 ريال", delay: 0 },
       { from: "agent", text: "⏳ جاري التحقق من الحسابات...", delay: 800 },
@@ -50,7 +50,7 @@ const SCENARIOS: Scenario[] = [
     id: 3,
     label: "تقرير مبيعات",
     icon: "📊",
-    color: "bg-purple-500",
+    color: "bg-navy",
     messages: [
       { from: "user",  text: "ما إجمالي مبيعات هذا الشهر مقارنةً بالشهر الماضي؟", delay: 0 },
       { from: "agent", text: "⏳ جاري استخراج تقرير المبيعات...", delay: 700 },
@@ -63,7 +63,7 @@ const SCENARIOS: Scenario[] = [
     id: 4,
     label: "تسجيل دفعة",
     icon: "💳",
-    color: "bg-amber-500",
+    color: "bg-navy",
     messages: [
       { from: "user",  text: "سجّل دفعة واردة من شركة الأمل بقيمة 12,000 ريال تحويل بنكي", delay: 0 },
       { from: "agent", text: "⏳ جاري البحث عن الفواتير المستحقة لشركة الأمل...", delay: 900 },
@@ -105,7 +105,7 @@ const SCENARIOS: Scenario[] = [
     id: 7,
     label: "تقييم نظامك",
     icon: "🔍",
-    color: "bg-indigo-600",
+    color: "bg-navy",
     messages: [
       { from: "user",  text: "قيّم نظامي وقل لي إيه الناقص قبل ما أستلمه من المورّد", delay: 0 },
       { from: "agent", text: "⏳ جاري فحص الإعدادات والحسابات ودورات العمل...", delay: 1000 },
@@ -116,7 +116,7 @@ const SCENARIOS: Scenario[] = [
     id: 8,
     label: "دورة عمل ونموذج",
     icon: "⚙️",
-    color: "bg-teal-600",
+    color: "bg-navy",
     messages: [
       { from: "user",  text: "عايز أي فاتورة فوق 50 ألف تعدي على المدير المالي، وعايز نموذج طباعة بشعارنا", delay: 0 },
       { from: "agent", text: "⏳ جاري قراءة الأدوار المتاحة في نظامك...", delay: 900 },
@@ -270,12 +270,12 @@ function HeroSection() {
 function ServicesSection() {
   const { ref, inView } = useInView();
   const services = [
-    { icon: <BookOpen className="w-6 h-6" />, title: "مسك الدفاتر", desc: "محاسبون محترفون يسجّلون عملياتك المالية اليومية بدقة، يدعمهم نظام ذكي متخصص.", color: "text-blue-600", bg: "bg-blue-50" },
+    { icon: <BookOpen className="w-6 h-6" />, title: "مسك الدفاتر", desc: "محاسبون محترفون يسجّلون عملياتك المالية اليومية بدقة، يدعمهم نظام ذكي متخصص.", color: "text-navy", bg: "bg-navy/5" },
     { icon: <FileText className="w-6 h-6" />, title: "إدارة الفواتير", desc: "إنشاء واعتماد فواتير المبيعات والمشتريات فوراً برسالة عبر تليجرام أو من الموقع.", color: "text-green-600", bg: "bg-green-50" },
     { icon: <DollarSign className="w-6 h-6" />, title: "القيود المحاسبية", desc: "تسجيل القيود اليومية والتسويات بدقة مع مراجعة محاسبية فورية.", color: "text-yellow-600", bg: "bg-yellow-50" },
-    { icon: <BarChart3 className="w-6 h-6" />, title: "التقارير المالية", desc: "ميزانية، قائمة دخل، تقرير الذمم — جاهزة في ثوانٍ بأمر نصي.", color: "text-purple-600", bg: "bg-purple-50" },
+    { icon: <BarChart3 className="w-6 h-6" />, title: "التقارير المالية", desc: "ميزانية، قائمة دخل، تقرير الذمم — جاهزة في ثوانٍ بأمر نصي.", color: "text-navy", bg: "bg-navy/5" },
     { icon: <Users className="w-6 h-6" />, title: "إدارة الرواتب", desc: "حساب الرواتب والمستحقات وإنشاء قيودها المحاسبية تلقائياً.", color: "text-red-600", bg: "bg-red-50" },
-    { icon: <Shield className="w-6 h-6" />, title: "الامتثال الضريبي", desc: "احتساب ضريبة القيمة المضافة وإعداد الإقرارات الضريبية الدورية.", color: "text-teal-600", bg: "bg-teal-50" },
+    { icon: <Shield className="w-6 h-6" />, title: "الامتثال الضريبي", desc: "احتساب ضريبة القيمة المضافة وإعداد الإقرارات الضريبية الدورية.", color: "text-navy", bg: "bg-navy/5" },
   ];
   return (
     <section id="services" className="py-24 bg-gray-50" ref={ref}>
@@ -801,7 +801,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                 {/* بطاقات الخطوات التالية */}
                 <div className="w-full space-y-3 mb-5">
                   {[
-                    { icon: <Phone className="w-4 h-4" />, text: "سيتصل بك مستشارنا قريباً", color: "text-blue-600 bg-blue-50" },
+                    { icon: <Phone className="w-4 h-4" />, text: "سيتصل بك مستشارنا قريباً", color: "text-navy bg-navy/5" },
                     { icon: <MessageCircle className="w-4 h-4" />, text: "أو تواصل معنا عبر واتساب الآن", color: "text-green-600 bg-green-50" },
                     { icon: <CheckCircle2 className="w-4 h-4" />, text: "أو ابدأ تجربتك المجانية فوراً دون انتظار", color: "text-gold bg-yellow-50" },
                   ].map((step, i) => (

@@ -146,3 +146,79 @@
     animation: slideInRight 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
   }
 }
+
+/* ─── طبقة الهوية ────────────────────────────────────────────────────────────
+   منقولةٌ بالمنهج عن almoaser.cloud لا باللون: الكحلي والذهبي وخط IBM Plex
+   هوية هذه المنصة وتبقى. ما يُنقل هو ما جعل تلك تعمل —
+
+   **١) اللون وظيفة لا زينة.** كانت الشاشات تستعمل بنفسجي وأزرق وكهرماني
+   وزمردي لبطاقات متجاورة، فلا يدلّ اللون على شيء والعين تقرأ النصّ في كل
+   مرة. هنا لكل لون معنى واحد: الكحلي هوية، والذهبي إجراء، والأخضر نجاح،
+   والأحمر خطر، والكهرماني انتظار.
+
+   **٢) إيقاع واحد.** حافة واحدة وظلّ واحد وحركة واحدة، فتبدو الشاشات من
+   منتج واحد لا من ثلاثة.
+
+   **٣) هدف اللمس ٤٤ بكسل.** ما دونه يُخطئه الإبهام على الجوال.
+
+   **٤) الجداول تسكرول ولا تُزحَم.** */
+
+@layer components {
+  /* البطاقة */
+  .m-card {
+    background: var(--color-card, #fff);
+    border: 1px solid color-mix(in oklch, var(--color-navy) 8%, transparent);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  }
+  .m-card:hover {
+    border-color: color-mix(in oklch, var(--color-navy) 18%, transparent);
+    box-shadow: 0 10px 28px color-mix(in oklch, var(--color-navy) 10%, transparent);
+  }
+  /* البطاقة القابلة للنقر ترتفع قليلاً — والساكنة لا، فيُفرَّق بينهما بالحسّ */
+  .m-card--action:hover { transform: translateY(-2px); }
+
+  /* رأس القسم: عنوان فرعي صغير، ثم عنوان، ثم شرح — إيقاعٌ يتكرّر في كل شاشة */
+  .m-eyebrow {
+    display: inline-block; font-size: .75rem; font-weight: 600; letter-spacing: .04em;
+    color: var(--color-gold-ink); margin-bottom: .35rem;
+  }
+  .m-title { font-size: clamp(1.25rem, 2.5vw, 1.75rem); font-weight: 700; color: var(--color-navy); line-height: 1.45; }
+  .m-sub { color: color-mix(in oklch, var(--color-navy) 55%, white); font-size: .95rem; line-height: 1.8; }
+
+  /* أيقونة القسم — مربّع واحد بلون واحد بدل ألوان متفرّقة لكل بطاقة */
+  .m-icon {
+    width: 2.5rem; height: 2.5rem; border-radius: .75rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: color-mix(in oklch, var(--color-navy) 7%, transparent);
+    color: var(--color-navy);
+  }
+  .m-icon--accent { background: color-mix(in oklch, var(--color-gold) 16%, transparent); color: var(--color-gold-ink); }
+  .m-icon--ok { background: color-mix(in oklch, oklch(0.72 0.15 155) 16%, transparent); color: oklch(0.42 0.13 155); }
+  .m-icon--warn { background: color-mix(in oklch, oklch(0.75 0.15 70) 18%, transparent); color: oklch(0.45 0.13 70); }
+  .m-icon--danger { background: color-mix(in oklch, oklch(0.63 0.20 25) 14%, transparent); color: oklch(0.45 0.19 25); }
+
+  /* رقم كبير في بطاقة إحصاء — يُقرأ من بعيد */
+  .m-stat { font-size: clamp(1.35rem, 3vw, 1.75rem); font-weight: 700; color: var(--color-navy); line-height: 1.2; }
+  .m-stat__label { font-size: .8rem; color: color-mix(in oklch, var(--color-navy) 55%, white); }
+}
+
+@layer base {
+  /* هدف اللمس: ما دون ٤٤ بكسل يُخطئه الإبهام. يسري على الجوال حيث الإصبع
+     لا الفأرة، ولا يُفرَض على سطح المكتب فيبدو كل شيء متضخّماً. */
+  @media (max-width: 767px) {
+    button, [role="button"], a.btn, .btn { min-height: 2.75rem; }
+    input, select, textarea { min-height: 2.75rem; font-size: 16px; /* أقل من ذلك يُقرِّب iOS الشاشة */ }
+  }
+
+  /* الجدول العريض يسكرول داخل إطاره ولا يدفع الصفحة كلها أفقياً */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-wrap > table { min-width: max-content; }
+
+  /* حلقة تركيز واحدة في كل مكان — من يتنقّل بالكيبورد يجب أن يرى أين هو */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}

@@ -83,8 +83,8 @@ export default function Dashboard() {
   const stats = [
     { label: "المهام المعلقة", value: pendingTasks, icon: <Clock className="w-6 h-6" />, color: "text-yellow-600", bg: "bg-yellow-50" },
     { label: "المهام المكتملة", value: completedTasks, icon: <CheckCircle2 className="w-6 h-6" />, color: "text-green-600", bg: "bg-green-50" },
-    { label: "إجمالي الفواتير", value: totalInvoices, icon: <FileText className="w-6 h-6" />, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "حالة الاشتراك", value: subscription?.status === "active" ? "نشط" : subscription?.status === "trial" ? "تجريبي" : "غير نشط", icon: <TrendingUp className="w-6 h-6" />, color: "text-purple-600", bg: "bg-purple-50" },
+    { label: "إجمالي الفواتير", value: totalInvoices, icon: <FileText className="w-6 h-6" />, color: "text-navy", bg: "bg-navy/5" },
+    { label: "حالة الاشتراك", value: subscription?.status === "active" ? "نشط" : subscription?.status === "trial" ? "تجريبي" : "غير نشط", icon: <TrendingUp className="w-6 h-6" />, color: "text-gold-ink", bg: "bg-gold/10" },
   ];
 
   return (

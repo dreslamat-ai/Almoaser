@@ -217,6 +217,62 @@ async function agentProduct(): Promise<Result> {
   return { ok: f.length === 0, findings: f.slice(0, 10) };
 }
 
+
+/**
+ * خبير الواجهات — ما يراه المستخدم ويلمسه، لا ما يعمل فقط.
+ *
+ * **لماذا وكيلٌ له وحده:** مهندس البنية يسأل «هل الثابت قائم؟» ومدير المنتج
+ * «هل الرحلة تكتمل؟» — ولا أحد يسأل «هل يبدو من منتجٍ واحد؟». والواجهة تنحدر
+ * بالتراكم لا بعطلٍ واحد: لونٌ يُضاف هنا وحافةٌ مختلفة هناك، حتى تبدو كل شاشة
+ * من يدٍ أخرى.
+ */
+async function agentUi(): Promise<Result> {
+  const f: string[] = [];
+  const pages = sources("client/src");
+
+  // ١) اللون معنى لا زينة: ألوان تيلويند العشوائية للأسطح
+  const palette = /\bbg-(blue|violet|emerald|amber|rose|purple|indigo|teal|orange|cyan|pink|lime|sky|fuchsia)-(50|100|500|600)\b/g;
+  const offenders: Array<[string, number]> = [];
+  for (const p of pages) {
+    //المحادثة تستعمل اللون للتمييز بين أنواع المستندات، وهو معنًى لا زينة
+    if (/AgentChat|AdminPanel/.test(p)) continue;
+    const n = (read(p).match(palette) ?? []).length;
+    if (n >= 4) offenders.push([p, n]);
+  }
+  for (const [p, n] of offenders.sort((a, b) => b[1] - a[1]).slice(0, 5)) {
+    f.push(`${n} لوناً عشوائياً في ${p} — اللون يجب أن يصف الحالة لا يزيّنها`);
+  }
+
+  // ٢) طبقة الهوية قائمة
+  const css = read("client/src/index.css");
+  for (const cls of ["m-card", "m-icon", "m-stat", "m-title"]) {
+    if (!css.includes(`.${cls}`)) f.push(`صنف الهوية .${cls} سقط من index.css`);
+  }
+  if (!css.includes("focus-visible")) f.push("حلقة التركيز سقطت — من يتنقّل بالكيبورد لا يرى أين هو");
+  if (!/min-height: 2\.75rem/.test(css)) f.push("هدف اللمس ٤٤ بكسل سقط من الأنماط");
+
+  // ٣) قشرةٌ واحدة وقائمةٌ واحدة
+  const shells = pages.filter(p => /pages\//.test(p) && /min-h-screen bg-gray-50/.test(read(p)) && /Sidebar/.test(read(p)));
+  for (const p of shells) f.push(`قِشرة ثانية بقائمة خاصة في ${p}`);
+
+  // ٤) لا صورة بلا بديل نصّي — من يقرأ بقارئ شاشة لا يرى شيئاً
+  for (const p of pages) {
+    const src = read(p);
+    for (const m of src.matchAll(/<img\s[^>]*>/g)) {
+      if (!/\balt=/.test(m[0])) { f.push(`صورة بلا alt في ${p}`); break; }
+    }
+  }
+
+  // ٥) زرٌّ بأيقونة وحدها يحتاج اسماً يُنطق
+  for (const p of pages) {
+    const src = read(p);
+    const bad = Array.from(src.matchAll(/<button(?![^>]*aria-label)[^>]*>\s*<[A-Z][A-Za-z]*\s[^>]*\/>\s*<\/button>/g)).length;
+    if (bad >= 2) f.push(`${bad} زرّ بأيقونة بلا aria-label في ${p}`);
+  }
+
+  return { ok: f.length === 0, findings: f.slice(0, 12) };
+}
+
 // ─── التشغيل ────────────────────────────────────────────────────────────────
 
 const CREW: Record<string, () => Promise<Result>> = {
@@ -225,6 +281,7 @@ const CREW: Record<string, () => Promise<Result>> = {
   "مراقب العملاء": agentCustomers,
   "مهندس التشغيل": agentOps,
   "مدير المنتج": agentProduct,
+  "خبير الواجهات": agentUi,
 };
 
 const quiet = process.argv.includes("--quiet");
