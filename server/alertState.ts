@@ -5,32 +5,17 @@
 // واحد بلغت إعادات التشغيل سبعاً وثمانين، فوصلت رسائل متكرّرة عن حالة واحدة
 // لم تتغيّر. والتنبيه المتكرّر عن شيء معروف يُعلّم صاحبه ألّا يقرأ التنبيهات.
 //
-// وملفٌّ خارج شجرة النشر لا يمسّه `deploy`، ولا يحتاج جدولاً ولا هجرة.
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+// **وموضع الملفّ ليس تفصيلاً:** كان في بيت مستخدمٍ آخر لا يملك التطبيقُ
+// الكتابةَ فيه، فظلّت كل كتابةٍ تفشل بصمت وظلّ التكرار قائماً بعد «إصلاحه».
+// المسار الآن من `stateFile` الذي يتحقّق من ذلك عند الإقلاع ويصرخ إن عجز.
+import { readState, writeState } from "./stateFile";
 
-const FILE = process.env.ALERT_STATE_FILE ?? "/home/eipsys/.almoaser-alert-state.json";
+const FILE = "alerts.json";
 
 type State = Record<string, string>;
 
-function load(): State {
-  try {
-    return JSON.parse(readFileSync(FILE, "utf8")) as State;
-  } catch {
-    //أول تشغيل أو ملفٌّ معطوب: نبدأ نظيفاً بدل أن نتعطّل
-    return {};
-  }
-}
-
-function save(state: State): void {
-  try {
-    mkdirSync(dirname(FILE), { recursive: true });
-    writeFileSync(FILE, JSON.stringify(state), "utf8");
-  } catch (e) {
-    //تعذّر الحفظ لا يمنع التنبيه — أسوأ ما يقع تكرارٌ، وهو أهون من صمت
-    console.warn("[alertState] تعذّر الحفظ:", e instanceof Error ? e.message : e);
-  }
-}
+const load = (): State => readState<State>(FILE, {});
+const save = (state: State): void => { writeState(FILE, state); };
 
 /**
  * هل يجوز التنبيه عن هذا المفتاح الآن؟

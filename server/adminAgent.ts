@@ -179,6 +179,45 @@ export const ADMIN_TOOLS = [
       },
     },
   },
+  // ─── تذكيرات ─────────────────────────────────────────────────────────────
+  // طلبه: «ذكّرني كل ٣ ساعات» — وكان الوكيل يردّ بأنه لا يملك أداةً لذلك،
+  // فيُطلب من صاحب المنصّة أن يفتح المحادثة ويسأل بنفسه. مساعدٌ نشط يبدأ هو.
+  {
+    type: "function" as const,
+    function: {
+      name: "schedule_reminder",
+      description: "يجدول تذكيراً يصل على تليجرام — مرّةً واحدة أو متكرّراً كل عدد ساعات.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "نصّ التذكير كما سيصل" },
+          every_hours: { type: "number", description: "التكرار بالساعات (١–١٦٨). اتركه فارغاً لتذكير مرّة واحدة" },
+          after_hours: { type: "number", description: "بعد كم ساعة أوّل إرسال — افتراضه نفس التكرار" },
+        },
+        required: ["text"], additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_reminders",
+      description: "التذكيرات المجدولة ومواعيدها القادمة.",
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "cancel_reminder",
+      description: "يوقف تذكيراً مجدولاً برقمه.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "number", description: "رقم التذكير من list_reminders" } },
+        required: ["id"], additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const money = (n: unknown) => `${Number(n ?? 0).toLocaleString("ar-SA", { maximumFractionDigits: 2 })}`;
@@ -315,6 +354,30 @@ export async function runAdminTool(caller: Caller, name: string, args: Record<st
       return JSON.stringify({ byApp, balances }).slice(0, 3500);
     }
 
+    case "schedule_reminder": {
+      const { addReminder, describeReminder } = await import("./reminders");
+      const r = addReminder(
+        String(args.text ?? ""),
+        args.every_hours !== undefined ? Number(args.every_hours) : undefined,
+        args.after_hours !== undefined ? Number(args.after_hours) : undefined,
+      );
+      if ("error" in r) return `تعذّر: ${r.error}`;
+      return `جُدول: ${describeReminder(r)}`;
+    }
+
+    case "list_reminders": {
+      const { listReminders, describeReminder } = await import("./reminders");
+      const items = listReminders();
+      if (!items.length) return "لا تذكيرات مجدولة.";
+      return items.map(describeReminder).join("\n");
+    }
+
+    case "cancel_reminder": {
+      const { cancelReminder } = await import("./reminders");
+      const id = Number(args.id);
+      return cancelReminder(id) ? `أُوقف التذكير #${id}.` : `لا تذكير برقم #${id}.`;
+    }
+
     default:
       return `لا أداة باسم ${name}.`;
   }
@@ -327,7 +390,7 @@ export function adminSystemPrompt(): string {
 اليوم ${today}.
 
 ## دورك
-تدير معه المنصة: المستخدمون، الاشتراكات، الإيرادات، استهلاك النماذج ورصيدها، وربط العملاء بأنظمتهم. **وتحفظ له مهامّه**: يُملي عليك مهمّة فتُسجّلها، ويسأل عنها فتعرضها، ويقول «خلصت» فتقفلها. تجيب بأرقام من الأدوات لا بتقدير.
+تدير معه المنصة: المستخدمون، الاشتراكات، الإيرادات، استهلاك النماذج ورصيدها، وربط العملاء بأنظمتهم. **وتذكّره بما طلب أن يُذكَّر به**، و**تحفظ له مهامّه**: يُملي عليك مهمّة فتُسجّلها، ويسأل عنها فتعرضها، ويقول «خلصت» فتقفلها. تجيب بأرقام من الأدوات لا بتقدير.
 
 ## الصوت
 قد تصلك رسالته مفرَّغةً من مقطع صوتي. التفريغ قد يخطئ في اسم أو رقم — فإن كان الطلب **تسجيل مهمّة** فسجّلها كما فهمتها ثم اعرض عليه العنوان ليصحّحه إن أخطأ التفريغ. وإن كان الطلب **إجراءً على مستخدم أو اشتراك أو مبلغ**، فأعد عليه ما فهمته واطلب تأكيده قبل التنفيذ — رقمٌ يخطئ فيه التفريغ يصير إجراءً على الحساب الخطأ.
