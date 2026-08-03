@@ -109,18 +109,9 @@
      تُولَّد تلقائياً من رموز --color-navy و--color-gold في @theme أعلاه (بما فيها
      صيغ الشفافية bg-navy/10) — لا حاجة لتعريفها يدوياً هنا */
 
-  /* Card styles */
-  .card-navy {
-    background: white;
-    border: 1px solid oklch(0.88 0.02 245);
-    border-radius: var(--radius);
-    box-shadow: 0 2px 8px oklch(0.22 0.08 245 / 0.06);
-    transition: box-shadow 0.2s, transform 0.2s;
-  }
-  .card-navy:hover {
-    box-shadow: 0 8px 24px oklch(0.22 0.08 245 / 0.12);
-    transform: translateY(-2px);
-  }
+  /* `.card-navy` كانت هنا: بطاقةٌ ثانية بحافّة وظلّ غير حافّة `.m-card` وظلّها،
+     ولم يبقَ لها مستعملٌ إلا بطاقات الخدمات في صفحة البداية — وقد صارت
+     `.m-card` مثل بقية بطاقات المنتج. تُحذف ولا تُترك معطّلة. */
 
   /* Status badges */
   .badge-active { @apply bg-green-100 text-green-700 border border-green-200; }
@@ -202,6 +193,107 @@
   /* رقم كبير في بطاقة إحصاء — يُقرأ من بعيد */
   .m-stat { font-size: clamp(1.35rem, 3vw, 1.75rem); font-weight: 700; color: var(--color-navy); line-height: 1.2; }
   .m-stat__label { font-size: .8rem; color: color-mix(in oklch, var(--color-navy) 55%, white); }
+}
+
+/* ─── طبقة الصفحات العامّة ───────────────────────────────────────────────────
+   الصفحة التي يراها الزائر قبل أن يدفع كانت تُبنى بأربع لغات في آن: بطاقة
+   بـ`card-navy` وأخرى بـ`rounded-2xl border-gray-100` وثالثة بـ`bg-gray-50/60`،
+   وشريحةُ عنوانٍ تُكتب يدوياً بأربع خلفيات مختلفة، وخلفيةُ دخولٍ رمادية-زرقاء
+   لا صلة لها بالكحلي والذهبي. فبدت كل شاشة من يدٍ أخرى — وذلك بالضبط ما يُقرأ
+   «تصميم قديم».
+
+   ما هنا **يُضاف ولا يُبدّل**: `.m-card` و`.m-icon` و`--radius` تستعملها شاشاتُ
+   ما بعد الدخول، وتغييرُ هندستها يُعيد تصميمها من حيث لا نقصد. */
+@layer components {
+  /* شريحة عنوان القسم — صيغتان لا أكثر: الكحلية للعناوين المحايدة،
+     والذهبية لما يدعو إلى إجراء، والشفّافة فوق الخلفيات الكحلية. */
+  .m-chip {
+    display: inline-flex; align-items: center; gap: .5rem;
+    min-height: 2.25rem; padding-inline: .95rem; border-radius: 999px;
+    font-size: .875rem; font-weight: 600; line-height: 1;
+    background: color-mix(in oklch, var(--color-navy) 7%, transparent);
+    color: var(--color-navy);
+    border: 1px solid color-mix(in oklch, var(--color-navy) 12%, transparent);
+  }
+  .m-chip--accent {
+    background: color-mix(in oklch, var(--color-gold) 14%, transparent);
+    color: var(--color-gold-ink);
+    border-color: color-mix(in oklch, var(--color-gold) 32%, transparent);
+  }
+  .m-chip--on-dark {
+    background: color-mix(in oklch, white 10%, transparent);
+    color: color-mix(in oklch, white 82%, transparent);
+    border-color: color-mix(in oklch, white 20%, transparent);
+  }
+
+  /* أيقونة أكبر لشاشات الحالة (تأكيد بريد، نتيجة دفع، صفحة مفقودة): علامةٌ
+     واحدة في وسط الشاشة تحتاج حضوراً أكبر من أيقونة داخل بطاقة. */
+  .m-icon--lg { width: 3.5rem; height: 3.5rem; border-radius: 1rem; }
+
+  /* شريط القسم — تناوبُ الخلفيات كان `bg-gray-50` رمادياً محايداً لا علاقة
+     له بالهوية. مسحةٌ كحلية خفيفة تفصل الأقسام وتبقى من نفس اللون الواحد. */
+  .m-band { background: color-mix(in oklch, var(--color-navy) 3%, var(--color-background)); }
+
+  /* رأس القسم الموحَّد: عرضٌ محدود وتوسيطٌ واحد لكل الأقسام */
+  .m-section-head { max-width: 44rem; margin-inline: auto; text-align: center; }
+  .m-section-head .m-title { font-size: clamp(1.65rem, 4vw, 2.35rem); }
+
+  /* عنوان كبير للأقسام — نفس مقياس `.m-title` مرفوعاً درجةً واحدة */
+  .m-h2 {
+    font-size: clamp(1.65rem, 4vw, 2.35rem); font-weight: 700;
+    color: var(--color-navy); line-height: 1.35; letter-spacing: -0.01em;
+  }
+
+  /* شبكة الهيرو — كانت عشرين عنصراً في DOM بشفافية `Math.random()` تتغيّر مع
+     كل رسم، فالخلفية ترتجف عند إعادة التصيير. خطٌّ واحد في CSS يغني عنها. */
+  .m-hero-grid {
+    background-image:
+      linear-gradient(to left, color-mix(in oklch, white 7%, transparent) 1px, transparent 1px),
+      linear-gradient(to top, color-mix(in oklch, white 4%, transparent) 1px, transparent 1px);
+    background-size: 5.5rem 100%, 100% 5.5rem;
+    mask-image: linear-gradient(to bottom, black, transparent 85%);
+  }
+
+  /* ── شاشات الحساب (دخول، تسجيل، استعادة، تأكيد بريد) ──────────────────
+     كانت أربعتها تتشارك `from-slate-50 via-blue-50/40 to-slate-100`: رماديٌّ
+     وأزرقٌ ليسا من الهوية، وهما أوضح علامة «قالب جاهز» في المشروع كلّه. */
+  .auth-shell {
+    min-height: 100dvh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem 1rem calc(1.5rem + var(--safe-bottom));
+    background:
+      radial-gradient(38rem 26rem at 88% -8%, color-mix(in oklch, var(--color-gold) 14%, transparent), transparent 62%),
+      radial-gradient(34rem 24rem at 6% 108%, color-mix(in oklch, var(--color-navy) 12%, transparent), transparent 62%),
+      var(--color-background);
+  }
+  .auth-card {
+    width: 100%;
+    background: var(--color-card);
+    border: 1px solid color-mix(in oklch, var(--color-navy) 10%, transparent);
+    border-radius: calc(var(--radius) + .5rem);
+    padding: 2rem 1.5rem;
+    box-shadow:
+      0 1px 2px color-mix(in oklch, var(--color-navy) 7%, transparent),
+      0 28px 56px -28px color-mix(in oklch, var(--color-navy) 28%, transparent);
+  }
+  @media (min-width: 640px) { .auth-card { padding: 2.25rem; } }
+
+  /* الشعار في رأس شاشات الحساب — مقاسٌ واحد في أربع شاشات كان ثلاثة مقاسات */
+  .auth-logo {
+    width: 3.5rem; height: 3.5rem; padding: .5rem; border-radius: 1rem;
+    object-fit: contain; background: white;
+    border: 1px solid color-mix(in oklch, var(--color-navy) 12%, transparent);
+    box-shadow: 0 6px 16px -8px color-mix(in oklch, var(--color-navy) 40%, transparent);
+  }
+}
+
+@layer base {
+  /* قائمة مزايا الباقة تُقرأ سطراً سطراً ومعها علامة صح أو إكس في أوّل كل سطر،
+     فتوسيطُها على الجوال يُزيح العلامات ويُتعب العين. تُستثنى كما استُثني
+     الجدول والنموذج للسبب نفسه. */
+  @media (max-width: 767px) {
+    .m-featurelist { text-align: start; }
+  }
 }
 
 @layer base {

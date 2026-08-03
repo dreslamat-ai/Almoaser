@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   BookOpen, Bot, CheckCircle2, ChevronDown, DollarSign, FileText,
-  BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Building2,
-  ArrowLeft, Star, Clock, TrendingUp, Send, Sparkles, XCircle, ShieldCheck, Lock, AlertCircle} from "lucide-react";
+  BarChart3, Shield, Users, Zap, MessageCircle, Phone, Mail, Menu, X,
+  ArrowLeft, Star, Clock, Send, Sparkles, XCircle, ShieldCheck, Lock,
+  Gauge, Target, Moon, Languages} from "lucide-react";
 import { planCapacityLabel } from "@shared/planDisplay";
 import { featuresForCard } from "@shared/planFeatures";
 import { DELIVERABLES } from "@shared/deliverables";
@@ -18,14 +19,13 @@ import SalesChat from "@/components/SalesChat";
 
 // ─── بيانات السيناريوهات التفاعلية ──────────────────────────────────────────
 type ChatMessage = { from: "user" | "agent"; text: string; delay: number; type?: "text" | "pdf"; pdfName?: string; pdfSize?: string };
-type Scenario = { id: number; label: string; icon: string; color: string; messages: ChatMessage[] };
+type Scenario = { id: number; label: string; icon: string; messages: ChatMessage[] };
 
 const SCENARIOS: Scenario[] = [
   {
     id: 1,
     label: "إنشاء فاتورة",
     icon: "🧾",
-    color: "bg-navy",
     messages: [
       { from: "user",  text: "أصدر فاتورة لشركة النور بقيمة 5,000 ريال مقابل خدمات استشارية", delay: 0 },
       { from: "agent", text: "⏳ جاري البحث عن شركة النور في النظام...", delay: 900 },
@@ -39,7 +39,6 @@ const SCENARIOS: Scenario[] = [
     id: 2,
     label: "قيد محاسبي",
     icon: "📒",
-    color: "bg-navy",
     messages: [
       { from: "user",  text: "سجّل قيد: مدين حساب الصندوق 3,000 ريال، دائن المبيعات 3,000 ريال", delay: 0 },
       { from: "agent", text: "⏳ جاري التحقق من الحسابات...", delay: 800 },
@@ -50,7 +49,6 @@ const SCENARIOS: Scenario[] = [
     id: 3,
     label: "تقرير مبيعات",
     icon: "📊",
-    color: "bg-navy",
     messages: [
       { from: "user",  text: "ما إجمالي مبيعات هذا الشهر مقارنةً بالشهر الماضي؟", delay: 0 },
       { from: "agent", text: "⏳ جاري استخراج تقرير المبيعات...", delay: 700 },
@@ -63,7 +61,6 @@ const SCENARIOS: Scenario[] = [
     id: 4,
     label: "تسجيل دفعة",
     icon: "💳",
-    color: "bg-navy",
     messages: [
       { from: "user",  text: "سجّل دفعة واردة من شركة الأمل بقيمة 12,000 ريال تحويل بنكي", delay: 0 },
       { from: "agent", text: "⏳ جاري البحث عن الفواتير المستحقة لشركة الأمل...", delay: 900 },
@@ -79,7 +76,6 @@ const SCENARIOS: Scenario[] = [
     id: 5,
     label: "يرفض الناقص",
     icon: "🛡️",
-    color: "bg-red-500",
     messages: [
       { from: "user",  text: "أصدر فاتورة لمؤسسة الرياض بـ 20,000 ريال", delay: 0 },
       { from: "agent", text: "⏳ جاري فحص بيانات العميل قبل الإصدار...", delay: 900 },
@@ -92,7 +88,6 @@ const SCENARIOS: Scenario[] = [
     id: 6,
     label: "يحترم الصلاحيات",
     icon: "🔒",
-    color: "bg-slate-600",
     messages: [
       { from: "user",  text: "سجّل قيد يومية: مدين مصروفات 5,000 دائن الصندوق 5,000", delay: 0 },
       { from: "agent", text: "⏳ جاري التحقق من صلاحياتك في نظامكم...", delay: 800 },
@@ -105,7 +100,6 @@ const SCENARIOS: Scenario[] = [
     id: 7,
     label: "تقييم نظامك",
     icon: "🔍",
-    color: "bg-navy",
     messages: [
       { from: "user",  text: "قيّم نظامي وقل لي إيه الناقص قبل ما أستلمه من المورّد", delay: 0 },
       { from: "agent", text: "⏳ جاري فحص الإعدادات والحسابات ودورات العمل...", delay: 1000 },
@@ -116,7 +110,6 @@ const SCENARIOS: Scenario[] = [
     id: 8,
     label: "دورة عمل ونموذج",
     icon: "⚙️",
-    color: "bg-navy",
     messages: [
       { from: "user",  text: "عايز أي فاتورة فوق 50 ألف تعدي على المدير المالي، وعايز نموذج طباعة بشعارنا", delay: 0 },
       { from: "agent", text: "⏳ جاري قراءة الأدوار المتاحة في نظامك...", delay: 900 },
@@ -139,8 +132,19 @@ function useInView(threshold = 0.15) {
   return { ref, inView };
 }
 
+const NAV_LINKS = [
+  { label: "الخدمات", href: "#services" },
+  { label: "كيف نعمل", href: "#how" },
+  { label: "المحاكاة", href: "#demo" },
+  { label: "الباقات", href: "#pricing" },
+  { label: "تواصل معنا", href: "#contact" },
+];
+
 function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  // أقسام الصفحة كانت تختفي كلياً على الجوال (`hidden md:flex`) بلا بديل، فمن
+  // يفتح الصفحة من هاتفه لا سبيل له إلى الباقات إلا بتمرير الصفحة كاملة.
+  const [menuOpen, setMenuOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   useEffect(() => {
@@ -148,42 +152,83 @@ function Navbar() {
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
   }, []);
+  // الشريط شفّاف فوق الهيرو الكحلي حتى أول ٤٠ بكسل تمرير، فنصٌّ كحلي هنا يعني
+  // كحلي على كحلي — تباين 1.00:1، أي زرٌّ غير مرئي تماماً في أول ما يراه
+  // الزائر. اللون يتبع حالة الشريط لا يثبت. والقائمة المفتوحة سطحٌ أبيض كذلك.
+  const onLight = scrolled || menuOpen;
   return (
-    <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? "bg-white/95 backdrop-blur-xl shadow-sm border-b border-gray-100" : "bg-transparent"}`}>
-      <div className="container flex items-center justify-between h-16">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 shadow-sm flex items-center justify-center overflow-hidden">
-            <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر" className="w-8 h-8 object-contain" />
-          </div>
-          <div>
-            <span className="font-bold text-lg text-navy">Almoaser <span className="text-gold-ink font-light text-sm">AI ERP</span></span>
-            <div className="text-[11px] text-muted-foreground leading-none">خدمات مسك الدفاتر</div>
-          </div>
-        </div>
-        <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-          {[{ label: "الخدمات", href: "#services" }, { label: "الباقات", href: "#pricing" }, { label: "كيف نعمل", href: "#how" }, { label: "تواصل معنا", href: "#contact" }].map(l => (
-            <a key={l.href} href={l.href} className="hover:text-navy transition-colors">{l.label}</a>
+    <nav className={`fixed top-0 inset-x-0 z-50 transition-colors duration-300 ${
+      onLight ? "bg-background/85 backdrop-blur-xl border-b border-navy/10" : "bg-transparent border-b border-transparent"
+    }`}>
+      <div className="container flex items-center justify-between h-18 py-2">
+        <a href="#top" className="flex items-center gap-3 shrink-0" onClick={() => setMenuOpen(false)}>
+          <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر"
+            className={`w-11 h-11 rounded-2xl p-1.5 object-contain bg-white transition-shadow ${
+              onLight ? "border border-navy/10 shadow-sm" : "shadow-lg shadow-navy/40"
+            }`} />
+          <span className="leading-tight">
+            <span className={`block font-bold text-lg ${onLight ? "text-navy" : "text-white"}`}>
+              Almoaser <span className={`font-light text-sm ${onLight ? "text-gold-ink" : "text-gold"}`}>AI ERP</span>
+            </span>
+            <span className={`block text-xs ${onLight ? "text-muted-foreground" : "text-white/60"}`}>خدمات مسك الدفاتر</span>
+          </span>
+        </a>
+
+        <div className={`hidden lg:flex items-center gap-1 rounded-full p-1 border ${
+          onLight ? "bg-navy/[0.04] border-navy/10" : "bg-white/10 border-white/15"
+        }`}>
+          {NAV_LINKS.map(l => (
+            <a key={l.href} href={l.href}
+              className={`inline-flex items-center h-9 px-4 rounded-full text-sm font-medium transition-colors ${
+                onLight ? "text-navy/70 hover:text-navy hover:bg-white" : "text-white/75 hover:text-white hover:bg-white/15"
+              }`}>{l.label}</a>
           ))}
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2">
           {isAuthenticated ? (
-            <Button onClick={() => navigate("/erp")} className="bg-navy-gradient text-white hover:opacity-90">
+            <Button onClick={() => navigate("/erp")} className="bg-gold text-navy hover:bg-gold-light font-semibold">
               لوحة التحكم
             </Button>
           ) : (
             <>
-              {/* الشريط شفّاف فوق الهيرو الكحلي حتى أول ٤٠ بكسل تمرير، فنصٌّ
-                  كحلي هنا يعني كحلي على كحلي — تباين 1.00:1، أي زرٌّ غير مرئي
-                  تماماً في أول ما يراه الزائر. اللون يتبع حالة الشريط لا يثبت. */}
               <Button variant="ghost" onClick={() => navigate("/login")}
-                className={scrolled ? "text-navy hover:bg-navy/5" : "text-white hover:bg-white/15"}>
+                className={`hidden sm:inline-flex ${onLight ? "text-navy hover:bg-navy/5" : "text-white hover:bg-white/15"}`}>
                 تسجيل الدخول
               </Button>
-              <Button onClick={() => navigate("/signup")} className="bg-navy-gradient text-white hover:opacity-90">ابدأ مجاناً</Button>
+              <Button onClick={() => navigate("/signup")} className="bg-gold text-navy hover:bg-gold-light font-semibold">
+                ابدأ مجاناً
+              </Button>
             </>
           )}
+          <button type="button" onClick={() => setMenuOpen(o => !o)}
+            aria-label={menuOpen ? "إغلاق القائمة" : "فتح القائمة"} aria-expanded={menuOpen}
+            className={`lg:hidden w-11 h-11 rounded-xl inline-flex items-center justify-center transition-colors ${
+              onLight ? "text-navy hover:bg-navy/5" : "text-white hover:bg-white/15"
+            }`}>
+            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
       </div>
+
+      {menuOpen && (
+        <div className="lg:hidden border-t border-navy/10 bg-background/95 backdrop-blur-xl animate-fade-in-up">
+          <div className="container py-3 flex flex-col">
+            {NAV_LINKS.map(l => (
+              <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
+                className="flex items-center min-h-11 px-2 rounded-lg text-navy/80 hover:text-navy hover:bg-navy/5 transition-colors">
+                {l.label}
+              </a>
+            ))}
+            {!isAuthenticated && (
+              <button type="button" onClick={() => { setMenuOpen(false); navigate("/login"); }}
+                className="sm:hidden flex items-center min-h-11 px-2 rounded-lg text-navy/80 hover:text-navy hover:bg-navy/5 transition-colors text-start">
+                تسجيل الدخول
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
@@ -192,108 +237,107 @@ function HeroSection() {
   const { isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   return (
-    <section className="bg-navy-hero min-h-screen flex items-center relative overflow-hidden pt-16">
-      <div className="absolute inset-0 opacity-10">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="absolute w-px bg-white/20"
-            style={{ right: `${(i + 1) * 5}%`, top: 0, bottom: 0, opacity: Math.random() * 0.3 }} />
-        ))}
-      </div>
-      <div className="absolute top-20 left-20 w-64 h-64 rounded-full bg-gold/10 blur-3xl" />
-      <div className="absolute bottom-20 right-20 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
-      <div className="container relative z-10 py-20">
+    <section id="top" className="bg-navy-hero min-h-screen flex items-center relative overflow-hidden pt-24 pb-16">
+      <div className="absolute inset-0 m-hero-grid" aria-hidden />
+      <div className="absolute -top-24 -left-24 w-[28rem] h-[28rem] rounded-full bg-gold/10 blur-3xl" aria-hidden />
+      <div className="absolute -bottom-32 -right-20 w-[32rem] h-[32rem] rounded-full bg-white/5 blur-3xl" aria-hidden />
+      <div className="container relative z-10">
         <div className="max-w-3xl">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 mb-8 animate-fade-in-up">
+          <div className="m-chip m-chip--on-dark mb-8 animate-fade-in-up">
             <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
-            <span className="text-white/80 text-sm">مكتب المحاسبة الذكي #1 في المملكة</span>
+            مكتب المحاسبة الذكي #1 في المملكة
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
+          <h1 className="text-[clamp(2.25rem,7vw,4rem)] font-bold text-white leading-[1.15] tracking-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
             محاسبون محترفون<br />
             <span className="text-gold">يمسكون دفاترك</span><br />
             بمساعدة النظام الذكي
           </h1>
-          <p className="text-white/70 text-xl leading-relaxed mb-10 max-w-2xl animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
+          <p className="text-white/70 text-lg md:text-xl leading-relaxed mb-10 max-w-2xl animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
             فريق محاسبي محترف يدعمه نظام ذكي يعمل 24/7 — يُدخل الفواتير، يُسجّل القيود، ويُنتج التقارير برسالة واحدة عبر تليجرام أو من الموقع مباشرة.
           </p>
-          <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+          <div className="flex flex-wrap gap-3 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
             {isAuthenticated ? (
               <Button size="lg" onClick={() => navigate("/erp")}
-                className="bg-gold text-navy hover:bg-gold/90 text-base px-8 py-4 h-auto font-semibold">
+                className="bg-gold text-navy hover:bg-gold-light text-base px-7 h-13 font-semibold shadow-lg shadow-navy/40">
                 الذهاب للوحة التحكم
-                <ArrowLeft className="w-5 h-5 mr-2" />
+                <ArrowLeft className="w-5 h-5" />
               </Button>
             ) : (
               <Button size="lg" onClick={() => navigate("/signup")}
-                className="bg-gold text-navy hover:bg-gold/90 text-base px-8 py-4 h-auto font-semibold">
+                className="bg-gold text-navy hover:bg-gold-light text-base px-7 h-13 font-semibold shadow-lg shadow-navy/40">
                 ابدأ تجربتك المجانية
-                <ArrowLeft className="w-5 h-5 mr-2" />
+                <ArrowLeft className="w-5 h-5" />
               </Button>
             )}
             {/* العائد لا يبحث عن "ابدأ مجاناً" — يبحث عن الدخول. وجوده هنا يوفّر
                 عليه التمرير لأعلى الصفحة في كل زيارة. */}
             {!isAuthenticated && (
               <Button size="lg" variant="outline"
-                className="border-white/40 text-white bg-transparent hover:bg-white/15 text-base px-8 py-4 h-auto"
+                className="border-white/25 text-white bg-white/10 hover:bg-white/20 text-base px-7 h-13"
                 onClick={() => navigate("/login")}>
                 تسجيل الدخول
               </Button>
             )}
-            <Button size="lg" variant="outline"
-              className="border-white/30 text-white bg-white/10 hover:bg-white/20 text-base px-8 py-4 h-auto"
+            <Button size="lg" variant="ghost"
+              className="text-white/85 hover:text-white hover:bg-white/10 text-base px-7 h-13"
               onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>
               عرض الباقات
             </Button>
           </div>
-          <div className="flex flex-wrap gap-8 mt-12 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-6 mt-14 pt-8 border-t border-white/10 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
             {[
               { value: "+200", label: "عميل نشط" },
               { value: "24/7", label: "وقت العمل" },
               { value: "90%", label: "توفير في الوقت" },
               { value: "5 ثوانٍ", label: "لإنشاء فاتورة" },
             ].map((s, i) => (
-              <div key={i} className="text-center">
-                <div className="text-3xl font-bold text-gold">{s.value}</div>
-                <div className="text-white/60 text-sm">{s.label}</div>
+              <div key={i}>
+                <dt className="sr-only">{s.label}</dt>
+                <dd>
+                  <span className="block text-3xl font-bold text-gold tracking-tight">{s.value}</span>
+                  <span className="block text-white/55 text-sm mt-1">{s.label}</span>
+                </dd>
               </div>
             ))}
-          </div>
+          </dl>
         </div>
       </div>
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/40 animate-bounce">
+      <a href="#services" aria-label="انتقل إلى الخدمات"
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden sm:flex flex-col items-center gap-1.5 text-white/40 hover:text-white/70 transition-colors animate-bounce">
         <span className="text-xs">اسحب للأسفل</span>
         <ChevronDown className="w-4 h-4" />
-      </div>
+      </a>
     </section>
   );
 }
 
 function ServicesSection() {
   const { ref, inView } = useInView();
+  // اللون هنا كان زينة: أخضرُ للفواتير وأصفرُ للقيود وأحمرُ للرواتب بلا معنى
+  // يجمعها — ستّ بطاقات بأربعة ألوان تجعل العين تقرأ العنوان في كل مرة لأن
+  // اللون لا يدلّ على شيء. أيقونةٌ واحدة بلون واحد، والتمييز بالاسم.
   const services = [
-    { icon: <BookOpen className="w-6 h-6" />, title: "مسك الدفاتر", desc: "محاسبون محترفون يسجّلون عملياتك المالية اليومية بدقة، يدعمهم نظام ذكي متخصص.", color: "text-navy", bg: "bg-navy/5" },
-    { icon: <FileText className="w-6 h-6" />, title: "إدارة الفواتير", desc: "إنشاء واعتماد فواتير المبيعات والمشتريات فوراً برسالة عبر تليجرام أو من الموقع.", color: "text-green-600", bg: "bg-green-50" },
-    { icon: <DollarSign className="w-6 h-6" />, title: "القيود المحاسبية", desc: "تسجيل القيود اليومية والتسويات بدقة مع مراجعة محاسبية فورية.", color: "text-yellow-600", bg: "bg-yellow-50" },
-    { icon: <BarChart3 className="w-6 h-6" />, title: "التقارير المالية", desc: "ميزانية، قائمة دخل، تقرير الذمم — جاهزة في ثوانٍ بأمر نصي.", color: "text-navy", bg: "bg-navy/5" },
-    { icon: <Users className="w-6 h-6" />, title: "إدارة الرواتب", desc: "حساب الرواتب والمستحقات وإنشاء قيودها المحاسبية تلقائياً.", color: "text-red-600", bg: "bg-red-50" },
-    { icon: <Shield className="w-6 h-6" />, title: "الامتثال الضريبي", desc: "احتساب ضريبة القيمة المضافة وإعداد الإقرارات الضريبية الدورية.", color: "text-navy", bg: "bg-navy/5" },
+    { icon: <BookOpen className="w-5 h-5" />, title: "مسك الدفاتر", desc: "محاسبون محترفون يسجّلون عملياتك المالية اليومية بدقة، يدعمهم نظام ذكي متخصص." },
+    { icon: <FileText className="w-5 h-5" />, title: "إدارة الفواتير", desc: "إنشاء واعتماد فواتير المبيعات والمشتريات فوراً برسالة عبر تليجرام أو من الموقع." },
+    { icon: <DollarSign className="w-5 h-5" />, title: "القيود المحاسبية", desc: "تسجيل القيود اليومية والتسويات بدقة مع مراجعة محاسبية فورية." },
+    { icon: <BarChart3 className="w-5 h-5" />, title: "التقارير المالية", desc: "ميزانية، قائمة دخل، تقرير الذمم — جاهزة في ثوانٍ بأمر نصي." },
+    { icon: <Users className="w-5 h-5" />, title: "إدارة الرواتب", desc: "حساب الرواتب والمستحقات وإنشاء قيودها المحاسبية تلقائياً." },
+    { icon: <Shield className="w-5 h-5" />, title: "الامتثال الضريبي", desc: "احتساب ضريبة القيمة المضافة وإعداد الإقرارات الضريبية الدورية." },
   ];
   return (
-    <section id="services" className="py-24 bg-gray-50" ref={ref}>
+    <section id="services" className="py-20 md:py-24 m-band scroll-mt-20" ref={ref}>
       <div className="container">
-        <div className={`text-center mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-navy/10 text-navy text-sm font-medium mb-4">
-            <Zap className="w-4 h-4" />
-            خدماتنا
-          </div>
-          <h2 className="text-4xl font-bold text-navy mb-4">كل ما تحتاجه لإدارة محاسبتك</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">محاسبون متخصصون لكل قسم، يعملون بتناسق تام مع نظام Almoaser AI ERP الخاص بك.</p>
+        <div className={`m-section-head mb-14 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="m-chip mb-5"><Zap className="w-4 h-4" />خدماتنا</div>
+          <h2 className="m-h2 mb-4">كل ما تحتاجه لإدارة محاسبتك</h2>
+          <p className="m-sub">محاسبون متخصصون لكل قسم، يعملون بتناسق تام مع نظام Almoaser AI ERP الخاص بك.</p>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {services.map((s, i) => (
-            <div key={i} className={`card-navy p-6 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.08}s` }}>
-              <div className={`w-12 h-12 rounded-xl ${s.bg} ${s.color} flex items-center justify-center mb-4`}>{s.icon}</div>
+            <div key={i} className={`m-card ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.06}s` }}>
+              <div className="m-icon mb-4">{s.icon}</div>
               <h3 className="font-bold text-lg text-navy mb-2">{s.title}</h3>
-              <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
+              <p className="m-sub text-sm">{s.desc}</p>
             </div>
           ))}
         </div>
@@ -311,30 +355,26 @@ function HowItWorksSection() {
     { num: "04", title: "تحدّث ونفّذ فوراً", desc: "اكتب طلبك بالعربية — فاتورة، قيد، سند، تقرير — والنظام الذكي ينفذه بإشراف محاسبينا خلال ثوانٍ.", icon: <MessageCircle className="w-5 h-5" /> },
   ];
   return (
-    <section id="how" className="py-24" ref={ref}>
+    <section id="how" className="py-20 md:py-24 scroll-mt-20" ref={ref}>
       <div className="container">
-        <div className={`text-center mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold/10 text-gold-ink text-sm font-medium mb-4">
-            <Clock className="w-4 h-4" />
-            كيف نعمل
-          </div>
-          <h2 className="text-4xl font-bold text-navy mb-4">أربع خطوات وتبدأ فوراً</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">تفعيل ذاتي بالكامل — من التسجيل حتى أول فاتورة ينفذها النظام الذكي في أقل من 10 دقائق.</p>
+        <div className={`m-section-head mb-14 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="m-chip m-chip--accent mb-5"><Clock className="w-4 h-4" />كيف نعمل</div>
+          <h2 className="m-h2 mb-4">أربع خطوات وتبدأ فوراً</h2>
+          <p className="m-sub">تفعيل ذاتي بالكامل — من التسجيل حتى أول فاتورة ينفذها النظام الذكي في أقل من 10 دقائق.</p>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* الخطوات مرقّمة، والخيط الواصل بينها يقول إنها تسلسلٌ لا أربع بطاقات
+            متجاورة. يختفي على الجوال حيث تتراصّ عمودياً فيصبح الخيط مضلِّلاً. */}
+        <ol className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 relative">
+          <div className="hidden lg:block absolute top-10 inset-x-12 h-px bg-navy/10" aria-hidden />
           {steps.map((s, i) => (
-            <div key={i} className={`relative p-6 rounded-2xl border border-gray-100 bg-white hover:shadow-md transition-shadow ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.08}s` }}>
-              <div className="flex items-start gap-4">
-                <div className="text-4xl font-bold text-navy/10 leading-none">{s.num}</div>
-                <div className="flex-1">
-                  <div className="w-10 h-10 rounded-xl bg-navy-gradient text-white flex items-center justify-center mb-3">{s.icon}</div>
-                  <h3 className="font-bold text-navy mb-2">{s.title}</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">{s.desc}</p>
-                </div>
-              </div>
-            </div>
+            <li key={i} className={`m-card relative ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.06}s` }}>
+              <div className="m-icon m-icon--accent mb-4">{s.icon}</div>
+              <p className="m-eyebrow tabular-nums">الخطوة {s.num}</p>
+              <h3 className="font-bold text-navy mb-2">{s.title}</h3>
+              <p className="m-sub text-sm">{s.desc}</p>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   );
@@ -376,36 +416,34 @@ function TelegramDemoSection() {
   }, [inView]);
 
   return (
-    <section id="demo" className="py-24 bg-gray-50" ref={ref}>
+    <section id="demo" className="py-20 md:py-24 m-band scroll-mt-20" ref={ref}>
       <div className="container">
         {/* Header */}
-        <div className={`text-center mb-14 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-sky-100 text-sky-700 text-sm font-medium mb-4">
-            <MessageCircle className="w-4 h-4" />
-            محاكاة حية
-          </div>
-          <h2 className="text-4xl font-bold text-navy mb-4">
+        <div className={`m-section-head mb-14 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="m-chip mb-5"><MessageCircle className="w-4 h-4" />محاكاة حية</div>
+          <h2 className="m-h2 mb-4">
             شاهد النظام الذكي <span className="text-gold-ink">يعمل الآن</span>
           </h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+          <p className="m-sub">
             أرسل أمراً بالعربية عبر تليجرام أو من الموقع مباشرة — النظام يفهمه وينفذه في نظامك المحاسبي خلال ثوانٍ.
           </p>
         </div>
 
-        <div className={`grid lg:grid-cols-2 gap-12 items-center ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.15s" }}>
+        <div className={`grid lg:grid-cols-2 gap-10 lg:gap-12 items-center ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.15s" }}>
           {/* يسار: اختيار السيناريو + شرح */}
-          <div className="space-y-6">
-            <p className="text-sm font-semibold text-navy/60 uppercase tracking-wider">اختر سيناريو لمشاهدته</p>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-5">
+            <p className="m-eyebrow">اختر سيناريو لمشاهدته</p>
+            <div className="grid grid-cols-2 gap-2.5">
               {SCENARIOS.map((s, i) => (
                 <button key={s.id} onClick={() => { switchScenario(i); setTimeout(() => playScenario(), 100); }}
-                  className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-right transition-all duration-200 ${
+                  aria-pressed={activeScenario === i}
+                  className={`flex items-center gap-3 min-h-14 px-4 py-3 rounded-xl border text-start transition-colors duration-200 ${
                     activeScenario === i
-                      ? "border-gold bg-gold text-navy shadow-lg scale-[1.02]"
-                      : "border-gray-200 bg-white text-navy hover:border-navy/40 hover:shadow-sm"
+                      ? "border-gold bg-gold text-navy font-bold"
+                      : "border-navy/10 bg-card text-navy hover:border-navy/25 hover:bg-navy/[0.03]"
                   }`}>
-                  <span className="text-2xl">{s.icon}</span>
-                  <span className="font-semibold text-sm">{s.label}</span>
+                  <span className="text-xl leading-none" aria-hidden>{s.icon}</span>
+                  <span className="font-semibold text-sm leading-snug">{s.label}</span>
                 </button>
               ))}
             </div>
@@ -527,11 +565,11 @@ function TelegramDemoSection() {
 
               {/* زر إعادة التشغيل */}
               <button onClick={playScenario} disabled={isPlaying}
-                className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-5 py-2 [@media(pointer:coarse)]:min-h-11 rounded-full bg-white border border-gray-200 shadow-md text-navy text-xs font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-5 h-11 rounded-full bg-card border border-navy/10 shadow-lg shadow-navy/10 text-navy text-xs font-semibold hover:border-navy/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {isPlaying ? (
                   <><span className="w-3 h-3 rounded-full border-2 border-navy border-t-transparent animate-spin" />جاري التنفيذ...</>
                 ) : (
-                  <><Zap className="w-3 h-3 text-gold" />إعادة التشغيل</>
+                  <><Zap className="w-3.5 h-3.5 text-gold-ink" />إعادة التشغيل</>
                 )}
               </button>
             </div>
@@ -539,19 +577,22 @@ function TelegramDemoSection() {
         </div>
 
         {/* القيمة المضافة — تحت معاينة عمل الوكيل */}
-        <div className={`mt-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.3s" }}>
-          <h3 className="font-bold text-navy text-2xl text-center mb-8">لماذا هذا يغيّر كل شيء؟</h3>
+        <div className={`mt-20 ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: "0.3s" }}>
+          <h3 className="m-h2 text-center mb-8">لماذا هذا يغيّر كل شيء؟</h3>
+          {/* كانت الرموز التعبيرية (⚡🎯🌙💬) ترسمها كل منصّة بشكلها وحجمها،
+              فيختلف الصفّ عن كل أيقونات المنتج. أيقونات lucide نفسها المستعملة
+              في بقية الشاشات. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { icon: "⚡", title: "سرعة فائقة", desc: "ما كان يستغرق 15 دقيقة يتم في 5 ثوانٍ" },
-              { icon: "🎯", title: "دقة 100%", desc: "لا أخطاء إدخال يدوي، البيانات تُسجَّل مباشرة" },
-              { icon: "🌙", title: "24/7 بلا توقف", desc: "النظام يعمل حتى في العطل والإجازات" },
-              { icon: "💬", title: "بالعربية الفصحى والعامية", desc: "يفهم طلبك بأي أسلوب تكتب به" },
+              { icon: <Gauge className="w-5 h-5" />, title: "سرعة فائقة", desc: "ما كان يستغرق 15 دقيقة يتم في 5 ثوانٍ" },
+              { icon: <Target className="w-5 h-5" />, title: "دقة 100%", desc: "لا أخطاء إدخال يدوي، البيانات تُسجَّل مباشرة" },
+              { icon: <Moon className="w-5 h-5" />, title: "24/7 بلا توقف", desc: "النظام يعمل حتى في العطل والإجازات" },
+              { icon: <Languages className="w-5 h-5" />, title: "بالعربية الفصحى والعامية", desc: "يفهم طلبك بأي أسلوب تكتب به" },
             ].map((v, i) => (
-              <div key={i} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-center hover:shadow-md transition-shadow">
-                <span className="text-3xl block mb-3">{v.icon}</span>
-                <p className="font-semibold text-navy text-sm mb-1">{v.title}</p>
-                <p className="text-muted-foreground text-xs leading-relaxed">{v.desc}</p>
+              <div key={i} className="m-card">
+                <div className="m-icon mb-4">{v.icon}</div>
+                <p className="font-bold text-navy mb-1">{v.title}</p>
+                <p className="m-sub text-sm">{v.desc}</p>
               </div>
             ))}
           </div>
@@ -561,38 +602,38 @@ function TelegramDemoSection() {
   );
 }
 
+// الأقسام تتناوب: مسحة كحلية (`m-band`) ثم خلفية عادية، فيُقرأ الفاصل بينها بلا
+// خطوط. والباقات على العادية لأن ما قبلها (الالتزام الضريبي) بمسحة.
 function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => void }) {
   const { ref, inView } = useInView();
   const [, navigate] = useLocation();
   const { data: plans, isLoading } = trpc.plans.list.useQuery();
   const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
 
-  const planIcons = [<BookOpen className="w-6 h-6" />, <Zap className="w-6 h-6" />, <Bot className="w-6 h-6" />];
-  const planColors = ["border-gray-200", "border-navy shadow-lg scale-105", "border-gold"];
+  const planIcons = [<BookOpen className="w-5 h-5" />, <Zap className="w-5 h-5" />, <Bot className="w-5 h-5" />];
   const planBadges = ["", "الأكثر طلباً", ""];
 
   return (
-    <section id="pricing" className="py-24 bg-gray-50" ref={ref}>
+    <section id="pricing" className="py-20 md:py-24 scroll-mt-20" ref={ref}>
       <div className="container">
-        <div className={`text-center mb-16 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-navy/10 text-navy text-sm font-medium mb-4">
-            <DollarSign className="w-4 h-4" />
-            الباقات والأسعار
-          </div>
-          <h2 className="text-4xl font-bold text-navy mb-4">باقات تناسب جميع الأعمال</h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">أسعار بدون رسوم خفية — جميع الباقات تشمل الربط مع نظام المعاصر ERP ورصيد نقاط شهرياً. يمكنك الترقية أو الإلغاء في أي وقت.</p>
+        <div className={`m-section-head mb-14 ${inView ? "animate-fade-in-up" : "opacity-0"}`}>
+          <div className="m-chip mb-5"><DollarSign className="w-4 h-4" />الباقات والأسعار</div>
+          <h2 className="m-h2 mb-4">باقات تناسب جميع الأعمال</h2>
+          <p className="m-sub">أسعار بدون رسوم خفية — جميع الباقات تشمل الربط مع نظام المعاصر ERP ورصيد نقاط شهرياً. يمكنك الترقية أو الإلغاء في أي وقت.</p>
           <p className="text-xs text-muted-foreground mt-2">الأسعار لا تشمل ضريبة القيمة المضافة (15%)</p>
           {/* مبدّل الفوترة الشهرية/السنوية */}
-          <div className="inline-flex items-center gap-1 mt-6 p-1 rounded-full bg-white border border-gray-200 shadow-sm">
+          <div className="inline-flex items-center gap-1 mt-7 p-1 rounded-full bg-card border border-navy/10">
             <button
               onClick={() => setBilling("monthly")}
-              className={`px-5 py-2 [@media(pointer:coarse)]:min-h-11 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-navy text-white shadow" : "text-muted-foreground hover:text-navy"}`}
+              aria-pressed={billing === "monthly"}
+              className={`px-5 min-h-11 rounded-full text-sm font-semibold transition-colors ${billing === "monthly" ? "bg-navy text-white" : "text-muted-foreground hover:text-navy"}`}
             >
               شهري
             </button>
             <button
               onClick={() => setBilling("yearly")}
-              className={`px-5 py-2 [@media(pointer:coarse)]:min-h-11 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${billing === "yearly" ? "bg-navy text-white shadow" : "text-muted-foreground hover:text-navy"}`}
+              aria-pressed={billing === "yearly"}
+              className={`px-5 min-h-11 rounded-full text-sm font-semibold transition-colors flex items-center gap-2 ${billing === "yearly" ? "bg-navy text-white" : "text-muted-foreground hover:text-navy"}`}
             >
               سنوي
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${billing === "yearly" ? "bg-gold text-navy" : "bg-gold/15 text-gold-ink"}`}>خصم 15%</span>
@@ -602,58 +643,64 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
         {isLoading ? (
           <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin" /></div>
         ) : (
-          <div className="grid md:grid-cols-3 gap-6 items-center">
+          /* البطاقة الوسطى كانت `scale-105` فتخرج عن صفّ الحواف وتختلف
+             ارتفاعاتها عن جارتيها، و`items-center` يجعل الثلاث تتفاوت رأسياً.
+             التمييز الآن بحلقةٍ وشارة — والهندسة واحدة. */
+          <div className="grid md:grid-cols-3 gap-5 items-stretch">
             {plans?.map((plan, i) => {
-              const features: string[] = plan.features ? JSON.parse(plan.features) : [];
               const isPopular = i === 1;
               const monthly = Number(plan.price);
               const discountPct = plan.yearlyDiscountPct ?? 15;
               const yearlyTotal = Math.round(monthly * 12 * (1 - discountPct / 100));
               const yearlyPerMonth = Math.round(yearlyTotal / 12);
               return (
-                <div key={plan.id} className={`rounded-2xl border-2 ${planColors[i]} bg-white p-8 relative ${inView ? "animate-fade-in-up" : "opacity-0"}`} style={{ animationDelay: `${i * 0.1}s` }}>
+                <div key={plan.id}
+                  className={`m-card flex flex-col p-7 relative ${isPopular ? "ring-2 ring-navy border-navy/20" : ""} ${inView ? "animate-fade-in-up" : "opacity-0"}`}
+                  style={{ animationDelay: `${i * 0.1}s` }}>
                   {planBadges[i] && (
-                    <div className="absolute -top-4 right-1/2 translate-x-1/2 bg-navy text-white text-xs font-bold px-4 py-1.5 rounded-full">
+                    <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-navy text-white text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap">
                       {planBadges[i]}
                     </div>
                   )}
-                  <div className={`w-12 h-12 rounded-xl mb-4 flex items-center justify-center ${isPopular ? "bg-navy-gradient text-white" : "bg-gray-100 text-navy"}`}>
+                  <div className={`m-icon mb-4 ${isPopular ? "bg-navy text-gold" : ""}`}>
                     {planIcons[i]}
                   </div>
-                  <h3 className="text-xl font-bold text-navy mb-1">{plan.nameAr}</h3>
+                  <h3 className="text-xl font-bold text-navy mb-2">{plan.nameAr}</h3>
                   {billing === "monthly" ? (
-                    <div className="flex items-baseline gap-1 mb-2">
-                      <span className="text-4xl font-bold text-navy">{monthly.toLocaleString("ar-SA")}</span>
-                      <span className="text-muted-foreground">ريال / شهر</span>
+                    <div className="flex items-baseline gap-1.5 mb-2">
+                      <span className="text-4xl font-bold text-navy tracking-tight">{monthly.toLocaleString("ar-SA")}</span>
+                      <span className="text-muted-foreground text-sm">ريال / شهر</span>
                     </div>
                   ) : (
                     <div className="mb-2">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-4xl font-bold text-navy">{yearlyPerMonth.toLocaleString("ar-SA")}</span>
-                        <span className="text-muted-foreground">ريال / شهر</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-4xl font-bold text-navy tracking-tight">{yearlyPerMonth.toLocaleString("ar-SA")}</span>
+                        <span className="text-muted-foreground text-sm">ريال / شهر</span>
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
                         <span className="line-through">{(monthly * 12).toLocaleString("ar-SA")}</span>
-                        <span className="text-gold-ink font-bold mr-1"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
+                        <span className="text-gold-ink font-bold"> {yearlyTotal.toLocaleString("ar-SA")} ريال سنوياً</span>
                       </div>
                     </div>
                   )}
-                  <div className="flex items-center gap-2 mb-6 text-xs font-medium">
-                    <span className="px-2 py-1 rounded-full bg-navy/5 text-navy">{planCapacityLabel(plan)}</span>
-                    <span className="px-2 py-1 rounded-full bg-gold/10 text-gold-ink">{plan.monthlyCredits ?? 150} نقطة / شهر</span>
+                  <div className="flex flex-wrap items-center gap-2 mb-6 text-xs font-medium">
+                    <span className="px-2.5 py-1 rounded-full bg-navy/5 text-navy">{planCapacityLabel(plan)}</span>
+                    <span className="px-2.5 py-1 rounded-full bg-gold/15 text-gold-ink">{plan.monthlyCredits ?? 150} نقطة / شهر</span>
                   </div>
                   {/* كل المزايا في كل بطاقة: المتاح بعلامة صح والمستبعد بعلامة
                       إكس. عرض المتاح وحده يُخفي الفرق بين الباقات، وهو تحديداً
-                      ما يحتاجه الزائر ليقرر الترقية. */}
-                  <ul className="space-y-2 mb-8">
+                      ما يحتاجه الزائر ليقرر الترقية.
+                      و`m-featurelist` تُبقيها محاذاة للبداية على الجوال: سطرٌ
+                      يبدأ بعلامة، وتوسيطه يُبعثر العلامات. */}
+                  <ul className="m-featurelist space-y-2.5 mb-7 pt-5 border-t border-navy/10 w-full">
                     {featuresForCard(plan.id).map(f => {
                       const has = f.includedIn.includes(plan.id);
                       return (
                         <li key={f.key} className={`flex items-start gap-2 text-sm ${has ? "" : "opacity-45"}`}>
                           {has
-                            ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" aria-hidden />
-                            : <XCircle className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" aria-hidden />}
-                          <span className={has ? "text-foreground" : "text-muted-foreground line-through decoration-gray-300"}>
+                            ? <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" aria-hidden />
+                            : <XCircle className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" aria-hidden />}
+                          <span className={has ? "text-foreground" : "text-muted-foreground line-through"}>
                             {f.label}
                           </span>
                           <span className="sr-only">{has ? "متاح" : "غير متاح"}</span>
@@ -664,7 +711,7 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: (planId: number) => vo
                   {/* الزر كان يقول "اطلب استشارة" ويُنزل لفورم التواصل، فلا يصل أحد
                       إلى التسجيل من هنا. الآن يبدأ التجربة مباشرة والباقة محمولة معه. */}
                   <Button
-                    className={`w-full ${isPopular ? "bg-navy-gradient text-white hover:opacity-90" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
+                    className={`w-full h-12 mt-auto font-semibold ${isPopular ? "bg-navy text-white hover:bg-navy-light" : "border-navy/25 text-navy hover:bg-navy hover:text-white"}`}
                     variant={isPopular ? "default" : "outline"}
                     onClick={() => {
                       onSelectPlan(plan.id);
@@ -754,19 +801,20 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
     });
   };
   return (
-    <section id="contact" className="py-24 bg-navy-hero" ref={ref}>
-      <div className="container">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
+    <section id="contact" className="py-20 md:py-24 bg-navy-hero relative overflow-hidden scroll-mt-20" ref={ref}>
+      <div className="absolute inset-0 m-hero-grid" aria-hidden />
+      <div className="container relative z-10">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           <div className={`${inView ? "animate-fade-in-up" : "opacity-0"}`}>
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-white/80 text-sm mb-6">
+            <div className="m-chip m-chip--on-dark mb-6">
               <MessageCircle className="w-4 h-4" />
               تواصل معنا
             </div>
-            <h2 className="text-4xl font-bold text-white mb-6">ابدأ رحلتك مع <span className="text-gold">Almoaser AI</span> اليوم</h2>
+            <h2 className="m-h2 text-white mb-5">ابدأ رحلتك مع <span className="text-gold">Almoaser AI</span> اليوم</h2>
             <p className="text-white/70 text-lg leading-relaxed mb-8">
               سجّل بياناتك ونتواصل معك لنساعدك على اختيار الباقة المناسبة لعملك — أو ابدأ التجربة المجانية مباشرة الآن.
             </p>
-            <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-2">
               {[
                 { icon: <Phone className="w-5 h-5" />, text: "+966 56 467 7377", href: "tel:+966564677377" },
                 { icon: <Mail className="w-5 h-5" />, text: "info@almoaser.com", href: "mailto:info@almoaser.com" },
@@ -774,58 +822,59 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                 { icon: <MessageCircle className="w-5 h-5" />, text: "واتساب متاح 24/7", href: "https://wa.me/966564677377" },
               ].map((c, i) => (
                 <a key={i} href={c.href} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-3 [@media(pointer:coarse)]:min-h-11 text-white/80 hover:text-white transition-colors group">
-                  <div className="w-10 h-10 rounded-xl bg-white/10 group-hover:bg-white/20 flex items-center justify-center transition-colors">{c.icon}</div>
-                  <span>{c.text}</span>
+                  className="flex items-center gap-3 min-h-14 px-3 rounded-xl border border-white/10 bg-white/[0.04] text-white/80 hover:text-white hover:bg-white/10 hover:border-white/25 transition-colors group">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 group-hover:bg-gold group-hover:text-navy text-gold flex items-center justify-center transition-colors shrink-0">{c.icon}</div>
+                  <span className="text-sm">{c.text}</span>
                 </a>
               ))}
             </div>
           </div>
-          <div className={`bg-white rounded-2xl p-8 shadow-2xl ${inView ? "animate-slide-in-right" : "opacity-0"}`}>
+          <div className={`bg-card rounded-3xl p-6 sm:p-8 shadow-2xl shadow-navy/40 ${inView ? "animate-slide-in-right" : "opacity-0"}`}>
             {submitted ? (
               /* ─── رسالة الترحيب المتحركة ─── */
               <div className="flex flex-col items-center justify-center text-center py-6 animate-fade-in-up">
                 {/* دائرة النجاح المتحركة */}
                 <div className="relative mb-6">
-                  <div className="w-24 h-24 rounded-full bg-green-50 border-4 border-green-200 flex items-center justify-center animate-[bounce_0.6s_ease-out]">
-                    <CheckCircle2 className="w-12 h-12 text-green-500" strokeWidth={1.5} />
+                  <div className="w-20 h-20 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center animate-[bounce_0.6s_ease-out]">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-600" strokeWidth={1.5} />
                   </div>
-                  <div className="absolute -top-1 -right-1 w-8 h-8 rounded-full bg-gold/20 border-2 border-gold flex items-center justify-center animate-[spin_3s_linear_infinite]">
-                    <Star className="w-4 h-4 text-gold" fill="currentColor" />
+                  <div className="absolute -top-1 -right-1 w-8 h-8 rounded-full bg-gold flex items-center justify-center">
+                    <Star className="w-4 h-4 text-navy" fill="currentColor" />
                   </div>
                 </div>
                 {/* نص الترحيب */}
                 <h3 className="text-2xl font-bold text-navy mb-2">
-                  أهلاً وسهلاً، <span className="text-gold">{submittedName}</span>! 🎉
+                  {/* `text-gold` على أبيض تباينه 2.4:1 ولا يُقرأ — `text-gold-ink` وُضع لهذا */}
+                  أهلاً وسهلاً، <span className="text-gold-ink">{submittedName}</span>! 🎉
                 </h3>
-                <p className="text-gray-600 text-sm leading-relaxed mb-6 max-w-xs">
+                <p className="m-sub text-sm mb-6 max-w-xs">
                   تم استلام بياناتك بنجاح. سيتواصل معك فريق <strong>Almoaser AI</strong> خلال <strong>24 ساعة</strong>.
                 </p>
-                {/* بطاقات الخطوات التالية */}
-                <div className="w-full space-y-3 mb-5">
+                {/* بطاقات الخطوات التالية — لونٌ واحد: هذه خطوات لا حالات */}
+                <div className="w-full space-y-2 mb-5">
                   {[
-                    { icon: <Phone className="w-4 h-4" />, text: "سيتصل بك مستشارنا قريباً", color: "text-navy bg-navy/5" },
-                    { icon: <MessageCircle className="w-4 h-4" />, text: "أو تواصل معنا عبر واتساب الآن", color: "text-green-600 bg-green-50" },
-                    { icon: <CheckCircle2 className="w-4 h-4" />, text: "أو ابدأ تجربتك المجانية فوراً دون انتظار", color: "text-gold bg-yellow-50" },
+                    { icon: <Phone className="w-4 h-4" />, text: "سيتصل بك مستشارنا قريباً" },
+                    { icon: <MessageCircle className="w-4 h-4" />, text: "أو تواصل معنا عبر واتساب الآن" },
+                    { icon: <CheckCircle2 className="w-4 h-4" />, text: "أو ابدأ تجربتك المجانية فوراً دون انتظار" },
                   ].map((step, i) => (
-                    <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${step.color} animate-fade-in-up`}
+                    <div key={i} className="flex items-center gap-3 min-h-12 px-3 rounded-xl bg-navy/[0.04] text-navy animate-fade-in-up"
                       style={{ animationDelay: `${0.2 + i * 0.15}s` }}>
-                      <div className="flex-shrink-0">{step.icon}</div>
-                      <span className="text-sm font-medium">{step.text}</span>
+                      <div className="flex-shrink-0 text-gold-ink">{step.icon}</div>
+                      <span className="text-sm font-medium text-start">{step.text}</span>
                     </div>
                   ))}
                 </div>
                 {/* أزرار الإجراء */}
-                <div className="flex gap-3 w-full">
+                <div className="flex flex-col sm:flex-row gap-2 w-full">
                   <a href="https://wa.me/966564677377?text=مرحباً، أريد الاستفسار عن خدمات Almoaser AI"
                     target="_blank" rel="noopener noreferrer" className="flex-1">
-                    <Button className="w-full bg-green-500 hover:bg-green-600 text-white gap-2">
+                    <Button variant="outline" className="w-full h-12 border-navy/25 text-navy hover:bg-navy hover:text-white gap-2">
                       <MessageCircle className="w-4 h-4" />
                       واتساب الآن
                     </Button>
                   </a>
                   <Button
-                    className="flex-1 bg-navy-gradient text-white gap-2 hover:opacity-90"
+                    className="flex-1 h-12 bg-navy text-white gap-2 hover:bg-navy-light font-semibold"
                     onClick={() => navigate(form.planId ? `/signup?plan=${form.planId}` : "/signup")}
                   >
                     <Sparkles className="w-4 h-4" />
@@ -838,7 +887,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
               <>
                 <h3 className="text-xl font-bold text-navy mb-6">سجّل لنتواصل معك</h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="name" className="text-navy font-medium">الاسم الكامل *</Label>
                       <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="محمد أحمد" required className="mt-1" />
@@ -885,7 +934,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                         </p>
                       </div>
                       {!phoneTouched && (
-                        <p className="text-xs text-gray-600 mt-1">الصيغ المقبولة: 0512345678 أو +966512345678</p>
+                        <p className="text-xs text-muted-foreground mt-1">الصيغ المقبولة: 0512345678 أو +966512345678</p>
                       )}
                       {phoneTouched && isPhoneValid && (
                         <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
@@ -898,7 +947,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                     <Label htmlFor="email" className="text-navy font-medium">البريد الإلكتروني *</Label>
                     <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="example@company.com" required className="mt-1" />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="company" className="text-navy font-medium">اسم الشركة *</Label>
                       <Input id="company" value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} placeholder="شركة النور للتجارة" required className="mt-1" />
@@ -929,7 +978,7 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                       onChange={e => setForm(f => ({ ...f, businessSector: e.target.value }))}
                       placeholder="مثال: استيراد وتصدير مواد غذائية، مقاولات بنية تحتية..."
                       className="mt-1" />
-                    <p className="text-xs text-gray-600 mt-1">اختياري — يساعدنا في تخصيص الخدمة لنشاطك</p>
+                    <p className="text-xs text-muted-foreground mt-1">اختياري — يساعدنا في تخصيص الخدمة لنشاطك</p>
                   </div>
                   <div>
                     <Label className="text-navy font-medium">الباقة المهتم بها</Label>
@@ -944,9 +993,9 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
                     <Label htmlFor="message" className="text-navy font-medium">رسالة إضافية</Label>
                     <textarea id="message" value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
                       placeholder="أخبرنا عن احتياجاتك المحاسبية..." rows={3}
-                      className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-navy/30" />
+                      className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm resize-none" />
                   </div>
-                  <Button type="submit" disabled={submitMutation.isPending} className="w-full bg-navy-gradient text-white hover:opacity-90 h-12 text-base">
+                  <Button type="submit" disabled={submitMutation.isPending} className="w-full bg-navy text-white hover:bg-navy-light h-12 text-base font-semibold">
                     {submitMutation.isPending ? (
                       <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />جاري الإرسال...</span>
                     ) : (
@@ -965,23 +1014,36 @@ function ContactSection({ initialPlanId }: { initialPlanId: number | null }) {
 
 function Footer() {
   return (
-    <footer className="bg-navy-dark py-12 text-white/60">
+    <footer className="bg-navy-dark pt-14 pb-8 text-white/60">
       <div className="container">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="grid gap-8 md:grid-cols-[1.4fr_1fr] md:items-start">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center overflow-hidden">
-              <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر" className="w-8 h-8 object-contain" />
-            </div>
+            <img src="/manus-storage/almoaser-icon-192_bc4dbf5e.png" alt="شعار المعاصر"
+              className="w-11 h-11 rounded-2xl p-1.5 object-contain bg-white shrink-0" />
             <div>
-              <div className="font-bold text-white">Almoaser <span className="text-gold text-sm font-light">AI ERP</span></div>
-              <div className="text-xs">خدمات مسك الدفاتر بالذكاء الاصطناعي</div>
+              <div className="font-bold text-white text-lg leading-tight">
+                Almoaser <span className="text-gold text-sm font-light">AI ERP</span>
+              </div>
+              <div className="text-sm">خدمات مسك الدفاتر بالذكاء الاصطناعي</div>
             </div>
           </div>
-          <div className="text-sm">© 2026 Almoaser AI ERP — جميع الحقوق محفوظة</div>
-          <div className="flex gap-4 text-sm">
-            <a href="https://almoaser.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center [@media(pointer:coarse)]:min-h-11 hover:text-white transition-colors">الموقع الرئيسي</a>
-            <a href="#contact" className="inline-flex items-center [@media(pointer:coarse)]:min-h-11 hover:text-white transition-colors">تواصل معنا</a>
-          </div>
+          <nav className="flex flex-wrap gap-x-6 gap-y-1 text-sm md:justify-end" aria-label="روابط التذييل">
+            {[
+              { label: "الخدمات", href: "#services" },
+              { label: "الباقات", href: "#pricing" },
+              { label: "تواصل معنا", href: "#contact" },
+              { label: "الموقع الرئيسي", href: "https://almoaser.com" },
+            ].map(l => (
+              <a key={l.href} href={l.href}
+                {...(l.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                className="inline-flex items-center min-h-11 hover:text-white transition-colors">
+                {l.label}
+              </a>
+            ))}
+          </nav>
+        </div>
+        <div className="mt-8 pt-6 border-t border-white/10 text-sm text-center md:text-start">
+          © 2026 Almoaser AI ERP — جميع الحقوق محفوظة
         </div>
       </div>
     </footer>
@@ -995,54 +1057,54 @@ function Footer() {
 function WhyUsSection() {
   const points = [
     {
-      icon: <ShieldCheck className="w-6 h-6" />,
+      icon: <ShieldCheck className="w-5 h-5" />,
       title: "لا يخترع رقماً",
       body: "لا يذكر بياناً لم يقرأه من نظامك، وينقل الأرقام كما وردت بلا إعادة حساب. وإن فشلت عملية أخبرك بنص الخطأ بدل أن يقول \"تمّت\". في المحاسبة رقم مختلَق يعني قراراً مالياً خاطئاً.",
     },
     {
-      icon: <Lock className="w-6 h-6" />,
+      icon: <Lock className="w-5 h-5" />,
       title: "لا يتجاوز صلاحياتك",
       body: "يقرأ صلاحيات المستخدم من نظام ERP نفسه، ولا يعرض عليه إلا ما يملكه فعلاً هناك. من لا يملك إنشاء قيد يومية في نظامه لا يستطيع ذلك عبرنا — ونظامك يبقى الحاجز الأخير.",
     },
     {
-      icon: <CheckCircle2 className="w-6 h-6" />,
+      icon: <CheckCircle2 className="w-5 h-5" />,
       title: "لا يُرحّل دون إذنك",
       body: "ينشئ المستند كمسودة، يعرضها عليك، ويطلب موافقتك الصريحة قبل الترحيل موضّحاً أنه يقيّد في الحسابات ولا يُلغى إلا بقيد عكسي.",
     },
     {
-      icon: <FileText className="w-6 h-6" />,
+      icon: <FileText className="w-5 h-5" />,
       title: "يمنع الفاتورة غير المستوفية",
       body: "لا يُصدر فاتورة ضريبية لمنشأة قبل اكتمال بيانات المشتري ولا بلا إعداد ضريبي سليم — يطلب الناقص ويسجّله، بدل أن تُكتشف الفاتورة ناقصة عند الفحص.",
     },
     {
-      icon: <Shield className="w-6 h-6" />,
+      icon: <Shield className="w-5 h-5" />,
       title: "صادق في حدود تحققه",
       body: "يتحقق من صيغة الرقم الضريبي ويقول ذلك صراحةً — ولا يدّعي أنه تحقق منه لدى هيئة الزكاة والضريبة، لأن الهيئة لا توفّر واجهة لذلك أصلاً.",
     },
     {
-      icon: <BookOpen className="w-6 h-6" />,
+      icon: <BookOpen className="w-5 h-5" />,
       title: "خبرة محاسبية لا واجهة محادثة",
       body: "يعرف دورة حياة المستند والقيد المزدوج ومعايير IFRS ومتطلبات الفوترة الإلكترونية السعودية — ويتعامل مع ERPNext وOdoo معاً.",
     },
   ];
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 md:py-24">
       <div className="container">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-sm font-semibold text-gold-ink uppercase tracking-wider mb-2">لماذا نحن</p>
-          <h2 className="text-3xl md:text-4xl font-bold text-navy">
+        <div className="m-section-head mb-14">
+          <p className="m-eyebrow">لماذا نحن</p>
+          <h2 className="m-h2">
             الانضباط قبل <span className="text-gold-ink">الذكاء</span>
           </h2>
-          <p className="text-muted-foreground mt-4">
+          <p className="m-sub mt-4">
             أدوات كثيرة تُجيب بثقة حتى حين تكون مخطئة. في حساباتك، الامتناع في محلّه أثمن من إجابة سريعة.
           </p>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {points.map((p, i) => (
-            <div key={i} className="rounded-2xl border border-border bg-gray-50/60 p-6 hover:border-gold/40 transition-colors">
-              <div className="w-11 h-11 rounded-xl bg-navy text-gold flex items-center justify-center mb-4">{p.icon}</div>
+            <div key={i} className="m-card">
+              <div className="m-icon bg-navy text-gold mb-4">{p.icon}</div>
               <h3 className="font-bold text-navy mb-2">{p.title}</h3>
-              <p className="text-sm text-muted-foreground leading-7">{p.body}</p>
+              <p className="m-sub text-sm">{p.body}</p>
             </div>
           ))}
         </div>
@@ -1061,28 +1123,28 @@ function WhyUsSection() {
 // من نفس مصدر أسعار سارة، فلا يختلف ما يُقرأ عمّا يُقال.
 function DeliverablesSection() {
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 md:py-24">
       <div className="container">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-sm font-semibold text-gold-ink uppercase tracking-wider mb-2">مخرجات الخبير</p>
-          <h2 className="text-3xl md:text-4xl font-bold text-navy">
+        <div className="m-section-head mb-14">
+          <p className="m-eyebrow">مخرجات الخبير</p>
+          <h2 className="m-h2">
             تدفع مقابل ما <span className="text-gold-ink">تستلمه</span>
           </h2>
-          <p className="text-muted-foreground mt-4">
+          <p className="m-sub mt-4">
             أسعار ثابتة لكل مخرَج، تُطلب فوق الاشتراك. لا تسعير بالساعة — تستلم عملاً محدداً بسعر تعرفه مقدماً.
           </p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
           {DELIVERABLES.map(d => (
-            <div key={d.key} className="rounded-2xl border border-border bg-gray-50/60 p-5 flex flex-col hover:border-gold/40 transition-colors">
+            <div key={d.key} className="m-card flex flex-col">
               <h3 className="font-bold text-navy mb-1">{d.label}</h3>
-              <p className="text-sm text-muted-foreground leading-6 flex-1">{d.scope}</p>
+              <p className="m-sub text-sm flex-1">{d.scope}</p>
               {/* السعر لا يُعلن هنا: نطاق المخرَج يختلف بحجم النظام وحالته،
                   ورقمٌ ثابت على الصفحة إمّا أن يخيف من هو أصغر من النطاق أو
                   يُقيّدنا مع من هو أكبر منه. يُحدَّد بعد فهم الحالة. */}
-              <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
+              <div className="mt-4 pt-3 border-t border-navy/10 w-full flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-medium text-navy">السعر حسب نطاق عملك</span>
-                <span className="text-xs text-gold-ink font-medium">اطلب عرضاً</span>
+                <span className="text-xs text-gold-ink font-semibold">اطلب عرضاً</span>
               </div>
             </div>
           ))}
@@ -1104,26 +1166,31 @@ function ComplianceSection() {
     "الضريبة تُحتسب على المبلغ بعد الخصم لا قبله، وتُفصل عن الإيراد في الحسابات لأنها أمانة تُورَّد لا دخل.",
   ];
   return (
-    <section className="py-20 bg-gray-50">
+    <section className="py-20 md:py-24 m-band">
       <div className="container">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-sm font-semibold text-gold-ink uppercase tracking-wider mb-2">الالتزام الضريبي</p>
-          <h2 className="text-3xl md:text-4xl font-bold text-navy">
+        <div className="m-section-head mb-14">
+          <p className="m-eyebrow">الالتزام الضريبي</p>
+          <h2 className="m-h2">
             نمنع المستند الناقص <span className="text-gold-ink">قبل صدوره</span>
           </h2>
-          <p className="text-muted-foreground mt-4">
+          <p className="m-sub mt-4">
             الفاتورة الخاطئة تُكتشف عند الفحص لا عند إصدارها. النظام يوقفها عند الإنشاء ويطلب الناقص.
           </p>
         </div>
         <div className="max-w-3xl mx-auto">
-          <div className="rounded-2xl border-2 border-emerald-200 bg-white p-6 md:p-8">
-            <div className="flex items-center gap-2 mb-5">
-              <ShieldCheck className="w-6 h-6 text-emerald-600" />
+          <div className="m-card p-6 md:p-8">
+            {/* الصفّ عموديٌّ دون 768 بكسل عمداً: `.m-icon` تأخذ `margin-inline: auto`
+                على الجوال، وهي كعنصر flex تبتلع بها كلَّ الفراغ فتطفو الأيقونة في
+                منتصف السطر ويرتطم العنوان بالحافّة. والحدّ `md` لا `sm` لأنه حدّ
+                القاعدة نفسها (767px). */}
+            <div className="flex flex-col md:flex-row items-center gap-3 mb-5">
+              {/* الأخضر هنا حالة لا زينة: هذه القائمة هي ما يفرضه النظام فعلاً */}
+              <span className="m-icon m-icon--ok"><ShieldCheck className="w-5 h-5" /></span>
               <h3 className="font-bold text-navy">ما يفرضه النظام</h3>
             </div>
-            <ul className="space-y-3">
+            <ul className="m-featurelist space-y-3">
               {enforced.map((t, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm leading-7">
+                <li key={i} className="flex items-start gap-2.5 text-sm leading-7">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-1.5" aria-hidden />
                   <span className="text-foreground">{t}</span>
                 </li>

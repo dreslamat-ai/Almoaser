@@ -4,11 +4,10 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  Loader2, UserPlus, Eye, EyeOff, Globe, ArrowLeft, ArrowRight,
+  Loader2, Eye, EyeOff, Globe, ArrowLeft, ArrowRight,
   CheckCircle2, Sparkles, Gift,
 } from "lucide-react";
 import { planCapacityDetail } from "@shared/planDisplay";
@@ -113,24 +112,25 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 p-4" dir="rtl">
-      <Card className="w-full max-w-lg p-8 shadow-lg border-border/60">
+    <div className="auth-shell" dir="rtl">
+      <div className="auth-card max-w-lg">
         <div className="flex flex-col items-center gap-3 mb-6">
           <img
             src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
             alt="المعاصر AI"
-            className="w-14 h-14 rounded-2xl object-contain bg-white border border-border shadow-sm"
+            className="auth-logo"
           />
           <div className="text-center">
-            <h1 className="text-xl font-bold text-foreground">إنشاء حساب جديد</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h1 className="text-2xl font-bold text-navy tracking-tight">إنشاء حساب جديد</h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
               {step === 1 ? "اربط حسابك في نظام ERP الخاص بك" : "اختر الباقة المناسبة"}
             </p>
           </div>
-          {/* Step indicator */}
-          <div className="flex items-center gap-2 mt-1">
-            <div className={`w-8 h-1.5 rounded-full transition-colors ${step >= 1 ? "bg-primary" : "bg-muted"}`} />
-            <div className={`w-8 h-1.5 rounded-full transition-colors ${step >= 2 ? "bg-primary" : "bg-muted"}`} />
+          {/* مؤشّر الخطوة — كان شريطين مجرّدين لا يقولان أيّ خطوة من كم */}
+          <div className="flex items-center gap-2 mt-1" role="group" aria-label={`الخطوة ${step} من 2`}>
+            <span className={`w-10 h-1.5 rounded-full transition-colors ${step >= 1 ? "bg-navy" : "bg-navy/15"}`} />
+            <span className={`w-10 h-1.5 rounded-full transition-colors ${step >= 2 ? "bg-navy" : "bg-navy/15"}`} />
+            <span className="text-xs text-muted-foreground tabular-nums">{step} / 2</span>
           </div>
         </div>
 
@@ -206,7 +206,7 @@ export default function Signup() {
                 <p className="text-[11px] text-muted-foreground mt-1">سنطلب تأكيده لاحقاً لتأمين حسابك</p>
               </div>
             </div>
-            <Button type="submit" className="w-full h-11 gap-2" disabled={testCredsMutation.isPending}>
+            <Button type="submit" className="w-full h-12 gap-2 font-semibold" disabled={testCredsMutation.isPending}>
               {testCredsMutation.isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق من حسابك...</>
                 : <>التالي: اختيار الباقة <ArrowLeft className="w-4 h-4" /></>}
@@ -233,26 +233,27 @@ export default function Signup() {
             <div className="space-y-2">
               {visiblePlans.map(plan => (
                 <button key={plan.id} type="button" onClick={() => setPlanId(plan.id)}
-                  className={`w-full flex items-center gap-3 rounded-xl border p-4 text-right transition-all ${
+                  aria-pressed={planId === plan.id}
+                  className={`w-full flex items-center gap-3 rounded-xl border p-4 text-start transition-colors ${
                     planId === plan.id
-                      ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                      : "border-border hover:border-primary/40 hover:bg-muted/30"
+                      ? "border-navy bg-navy/[0.04] ring-2 ring-navy/20"
+                      : "border-navy/10 hover:border-navy/30 hover:bg-navy/[0.02]"
                   }`}>
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                    planId === plan.id ? "border-primary bg-primary" : "border-muted-foreground/40"
+                  <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    planId === plan.id ? "border-navy bg-navy" : "border-navy/25"
                   }`}>
                     {planId === plan.id && <CheckCircle2 className="w-4 h-4 text-white" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-bold text-foreground">{plan.nameAr}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                  </span>
+                  <span className="flex-1">
+                    <span className="block font-bold text-navy">{plan.nameAr}</span>
+                    <span className="block text-xs text-muted-foreground mt-0.5">
                       {planCapacityDetail(plan)}
-                    </p>
-                  </div>
-                  <div className="text-left shrink-0">
-                    <p className="font-bold text-primary text-lg">{Number(plan.price).toLocaleString()} <span className="text-xs">{plan.currency}</span></p>
-                    <p className="text-xs text-muted-foreground">{plan.billingCycle === "monthly" ? "شهرياً" : "سنوياً"}</p>
-                  </div>
+                    </span>
+                  </span>
+                  <span className="text-left shrink-0">
+                    <span className="block font-bold text-navy text-lg tracking-tight">{Number(plan.price).toLocaleString()} <span className="text-xs font-normal">{plan.currency}</span></span>
+                    <span className="block text-xs text-muted-foreground">{plan.billingCycle === "monthly" ? "شهرياً" : "سنوياً"}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -267,10 +268,10 @@ export default function Signup() {
             <p className="text-[11px] text-muted-foreground text-center">الأسعار لا تشمل ضريبة القيمة المضافة (15%) · خصم 15% عند الدفع السنوي</p>
 
             <div className="flex gap-2">
-              <Button variant="outline" className="h-11 gap-2" onClick={() => setStep(1)} disabled={signupMutation.isPending}>
+              <Button variant="outline" className="h-12 gap-2 border-navy/25 text-navy" onClick={() => setStep(1)} disabled={signupMutation.isPending}>
                 <ArrowRight className="w-4 h-4" /> رجوع
               </Button>
-              <Button className="flex-1 h-11 gap-2" onClick={submit} disabled={signupMutation.isPending || !planId}>
+              <Button className="flex-1 h-12 gap-2 font-semibold" onClick={submit} disabled={signupMutation.isPending || !planId}>
                 {signupMutation.isPending
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق من نظامك وإنشاء الحساب...</>
                   : <><Sparkles className="w-4 h-4" /> ابدأ التجربة المجانية</>}
@@ -279,11 +280,16 @@ export default function Signup() {
           </div>
         )}
 
-        <p className="text-sm text-muted-foreground text-center mt-6">
+        <p className="text-sm text-muted-foreground text-center mt-6 pt-5 border-t border-navy/10">
           لديك حساب بالفعل؟{" "}
-          <Link href="/login" className="text-primary font-medium hover:underline">سجّل الدخول</Link>
+          <Link href="/login" className="text-navy font-semibold hover:text-gold-ink transition-colors">سجّل الدخول</Link>
         </p>
-      </Card>
+        <p className="text-center mt-3">
+          <Link href="/" className="inline-flex items-center min-h-11 text-sm text-muted-foreground hover:text-navy transition-colors">
+            العودة إلى الصفحة الرئيسية
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

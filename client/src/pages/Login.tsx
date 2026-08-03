@@ -4,7 +4,6 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, LogIn, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
@@ -80,17 +79,19 @@ export default function Login() {
   const restart = () => { setOtp(null); setCode(""); setPassword(""); };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 p-4" dir="rtl">
-      <Card className="w-full max-w-md p-8 shadow-lg border-border/60">
+    <div className="auth-shell" dir="rtl">
+      <div className="auth-card max-w-md">
         <div className="flex flex-col items-center gap-3 mb-8">
           <img
             src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
             alt="المعاصر AI"
-            className="w-16 h-16 rounded-2xl object-contain bg-white border border-border shadow-sm"
+            className="auth-logo"
           />
           <div className="text-center">
-            <h1 className="text-xl font-bold text-foreground">Almoaser AI ERP</h1>
-            <p className="text-sm text-muted-foreground mt-1">سجّل الدخول بحسابك في نظام ERP</p>
+            <h1 className="text-2xl font-bold text-navy tracking-tight">
+              Almoaser <span className="text-gold-ink font-light text-base">AI ERP</span>
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1.5">سجّل الدخول بحسابك في نظام ERP</p>
           </div>
         </div>
 
@@ -113,7 +114,7 @@ export default function Login() {
                 className="text-center text-2xl tracking-[0.5em] font-mono h-14"
               />
             </div>
-            <Button type="submit" className="w-full h-11 gap-2" disabled={isPending || code.length < 4}>
+            <Button type="submit" className="w-full h-12 gap-2 font-semibold" disabled={isPending || code.length < 4}>
               {isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق...</>
                 : <><ShieldCheck className="w-4 h-4" /> تأكيد الدخول</>}
@@ -168,7 +169,7 @@ export default function Login() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full h-11 gap-2" disabled={isPending}>
+          <Button type="submit" className="w-full h-12 gap-2 font-semibold" disabled={isPending}>
             {isPending
               ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق من حسابك...</>
               : <><LogIn className="w-4 h-4" /> تسجيل الدخول</>}
@@ -176,16 +177,21 @@ export default function Login() {
         </form>
         )}
 
-        <p className="text-sm text-muted-foreground text-center mt-5">
+        <p className="text-sm text-muted-foreground text-center mt-6 pt-5 border-t border-navy/10">
           ليس لديك حساب؟{" "}
-          <Link href="/signup" className="text-primary font-medium hover:underline">أنشئ حساباً جديداً — تجربة مجانية 3 أيام</Link>
+          <Link href="/signup" className="text-navy font-semibold hover:text-gold-ink transition-colors">أنشئ حساباً جديداً — تجربة مجانية 3 أيام</Link>
         </p>
 
-        <p className="text-xs text-muted-foreground text-center mt-6 leading-relaxed">
+        <p className="text-xs text-muted-foreground text-center mt-4 leading-relaxed">
           يتم التحقق من بياناتك مباشرة على نظام ERPNext أو Odoo الخاص بك — نفس حسابك هناك يعمل هنا،
           ولا تُخزَّن كلمة مرورك في هذا التطبيق.
         </p>
-      </Card>
+        <p className="text-center mt-5">
+          <Link href="/" className="inline-flex items-center min-h-11 text-sm text-muted-foreground hover:text-navy transition-colors">
+            العودة إلى الصفحة الرئيسية
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

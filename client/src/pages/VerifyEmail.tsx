@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 export default function VerifyEmail() {
@@ -34,35 +33,35 @@ export default function VerifyEmail() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 p-4" dir="rtl">
-      <Card className="w-full max-w-md p-8 text-center shadow-lg border-border/60">
+    <div className="auth-shell" dir="rtl">
+      <div className="auth-card max-w-md text-center">
         {state === "verifying" && (
           <>
-            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-            <h1 className="text-lg font-bold mt-4 text-foreground">جارٍ تأكيد بريدك الإلكتروني...</h1>
+            <div className="m-icon m-icon--lg mx-auto"><Loader2 className="w-7 h-7 animate-spin" /></div>
+            <h1 className="text-xl font-bold mt-5 text-navy">جارٍ تأكيد بريدك الإلكتروني...</h1>
           </>
         )}
         {state === "done" && (
           <>
-            <CheckCircle2 className="w-14 h-14 mx-auto text-emerald-500" />
-            <h1 className="text-xl font-bold mt-4 text-foreground">تم التأكيد بنجاح 🎉</h1>
+            <div className="m-icon m-icon--ok m-icon--lg mx-auto"><CheckCircle2 className="w-7 h-7" /></div>
+            <h1 className="text-xl font-bold mt-5 text-navy">تم التأكيد بنجاح 🎉</h1>
             <p className="text-sm text-muted-foreground mt-2">{message}</p>
             <p className="text-xs text-muted-foreground mt-1">ستصلك الآن الإشعارات والتذكيرات وفواتير الدفع على بريدك.</p>
           </>
         )}
         {state === "error" && (
           <>
-            <XCircle className="w-14 h-14 mx-auto text-red-500" />
-            <h1 className="text-xl font-bold mt-4 text-foreground">تعذّر تأكيد البريد</h1>
+            <div className="m-icon m-icon--danger m-icon--lg mx-auto"><XCircle className="w-7 h-7" /></div>
+            <h1 className="text-xl font-bold mt-5 text-navy">تعذّر تأكيد البريد</h1>
             <p className="text-sm text-muted-foreground mt-2">{message}</p>
             <p className="text-xs text-muted-foreground mt-1">يمكنك طلب رابط جديد من صفحة إعدادات الحساب.</p>
           </>
         )}
-        <div className="flex gap-2 justify-center mt-6">
-          <Link href="/settings"><Button variant="outline">إعدادات الحساب</Button></Link>
-          <Link href="/erp"><Button>الذهاب للنظام</Button></Link>
+        <div className="flex flex-col sm:flex-row gap-2 justify-center mt-7">
+          <Link href="/settings" className="flex-1"><Button variant="outline" className="w-full h-12 border-navy/25 text-navy">إعدادات الحساب</Button></Link>
+          <Link href="/erp" className="flex-1"><Button className="w-full h-12 font-semibold">الذهاب للنظام</Button></Link>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }
