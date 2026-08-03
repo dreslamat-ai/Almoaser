@@ -18,14 +18,12 @@ export default function ErpCustomers() {
 
   // طلبُ عميل: أن يعرض عدد فواتير كل عميل، وأن يفتح الضغطُ عليه فواتيره.
   // العدد بلا رابط يجعله يقرأ رقماً ثم يبحث عنه بنفسه في قائمة أخرى.
-  const { data: invData } = trpc.erpnext.getSalesInvoices.useQuery({ limit: 500 }, { staleTime: 60 * 1000 });
-  const perCustomer = new Map<string, { count: number; due: number }>();
-  for (const inv of (invData?.data ?? []) as Array<{ customer: string; outstanding_amount: number }>) {
-    const e = perCustomer.get(inv.customer) ?? { count: 0, due: 0 };
-    e.count += 1;
-    e.due += Number(inv.outstanding_amount ?? 0);
-    perCustomer.set(inv.customer, e);
-  }
+  //
+  // **والعدّ من الخادم بلا صفحات:** عدُّ صفحةٍ مقتطعة في المتصفّح يُنقص العدد
+  // لكل عميل بلا خطأ ولا إشارة، وهذا هو الرقم المطلوب أن يكون مرجعاً.
+  const { data: countsData } = trpc.erpnext.getInvoiceCountsByCustomer.useQuery(undefined, { staleTime: 60 * 1000 });
+  const counts = countsData?.counts ?? {};
+  const countsError = countsData?.error ?? null;
 
   const customers = ((data?.data ?? []) as Array<{
     name: string; customer_name: string; customer_type: string; mobile_no?: string; email_id?: string;
@@ -101,7 +99,8 @@ export default function ErpCustomers() {
                         <td className="p-3 text-xs" dir="ltr">{c.email_id || "—"}</td>
                         <td className="p-3">
                           {(() => {
-                            const e = perCustomer.get(c.name);
+                            if (countsError) return <span className="text-xs text-muted-foreground" title={countsError}>تعذّر</span>;
+                            const e = counts[c.name];
                             if (!e?.count) return <span className="text-xs text-muted-foreground">—</span>;
                             return (
                               <button

@@ -36,6 +36,24 @@ import {
 
 // ─── ERPNext Per-User Fetch ───────────────────────────────────────────────────
 // كل مستخدم يتصل بنظامه الخاص (من إعداداته) أو باتصال النظام الافتراضي
+// الترحيل هو ما يغيّر حالة الفاتورة فعلاً: سند قبض مسودّة لا يُنقص المستحقّ،
+// فتبقى الفاتورة «غير مدفوعة» بعد تحصيلٍ ظاهره النجاح. فشلُه يُبلَّغ ولا
+// يُبتلع، ويُسمّى فيه السندُ الباقي كي يُعرف ما في الدفاتر.
+async function submitOrExplain(
+  executeTool: (n: string, a: Record<string, unknown>, c: { userId: number }) => Promise<unknown>,
+  name: string,
+  userId: number,
+): Promise<void> {
+  try {
+    await executeTool("submit_document", { doctype: "Payment Entry", document_name: name }, { userId });
+  } catch (e) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `سند القبض ${name} محفوظ كمسودّة لكن تعذّر ترحيله، فحالة الفاتورة لم تتغيّر: ${e instanceof Error ? e.message : String(e)}. أعد المحاولة بعد معالجة السبب — لن يُنشأ سند ثانٍ.`,
+    });
+  }
+}
+
 async function erpFetch(path: string, userId: number): Promise<unknown> {
   const config = await getErpConfigForUser(userId);
   const sid = await getErpSession(config);
@@ -1663,15 +1681,50 @@ export const appRouter = router({
       }),
 
     getSalesInvoices: protectedProcedure
-      .input(z.object({ limit: z.number().optional().default(20) }))
+      // **الترشيح على الخادم لا في المتصفّح:** القادم من صفحة العملاء يريد
+      // فواتير عميلٍ بعينه، وترشيحُ صفحةٍ مقتطعة يُظهر بعضها ويُخفي بعضها
+      // بلا أن يقول إنه فعل.
+      .input(z.object({ limit: z.number().optional().default(20), customer: z.string().trim().optional() }))
       .query(async ({ input, ctx }) => {
         try {
-          const data = await erpFetch(`/api/resource/Sales%20Invoice?limit=${input.limit}&fields=%5B%22name%22%2C%22customer%22%2C%22posting_date%22%2C%22grand_total%22%2C%22outstanding_amount%22%2C%22status%22%2C%22currency%22%5D&order_by=posting_date%20desc`, ctx.user.id) as { data: unknown[] };
+          const filters = input.customer
+            ? `&filters=${encodeURIComponent(JSON.stringify([["customer", "=", input.customer]]))}`
+            : "";
+          const data = await erpFetch(`/api/resource/Sales%20Invoice?limit=${input.limit}&fields=%5B%22name%22%2C%22customer%22%2C%22posting_date%22%2C%22grand_total%22%2C%22outstanding_amount%22%2C%22status%22%2C%22currency%22%5D&order_by=posting_date%20desc${filters}`, ctx.user.id) as { data: unknown[] };
           return { data: data?.data ?? [], error: null };
         } catch (err) {
           return { data: [], error: err instanceof Error ? err.message : String(err) };
         }
       }),
+
+    // ─── عدد فواتير كل عميل ──────────────────────────────────────────────
+    // العدّ من صفحةٍ مقتطعة يكذب بلا أن يعلن: تجاوزُ الحدّ يُنقص العدد لكل
+    // عميل بلا خطأ ولا إشارة — وهو العدد نفسه الذي طُلب أن يكون مرجعاً.
+    //
+    // **ولا تجميع في ERPNext:** جرّبتُ group_by مع count فردّ صفّاً واحداً
+    // يحمل مجموع الفواتير كلها منسوباً إلى عميلٍ عشوائي — تجميعٌ مُتجاهَل
+    // يبدو ناجحاً. فتُجلب الفواتير بحقلين اثنين بلا صفحات ويُعدّ هنا:
+    // عمودان لبضعة آلاف صفّ أرخص من رقمٍ خاطئ.
+    getInvoiceCountsByCustomer: protectedProcedure.query(async ({ ctx }) => {
+      try {
+        const fields = encodeURIComponent(JSON.stringify(["customer", "outstanding_amount"]));
+        const data = await erpFetch(
+          `/api/resource/Sales%20Invoice?fields=${fields}&limit_page_length=0`,
+          ctx.user.id,
+        ) as { data: Array<{ customer: string; outstanding_amount: number }> };
+        const counts: Record<string, { count: number; due: number }> = {};
+        for (const row of data?.data ?? []) {
+          const e = counts[row.customer] ?? { count: 0, due: 0 };
+          e.count += 1;
+          e.due += Number(row.outstanding_amount ?? 0);
+          counts[row.customer] = e;
+        }
+        return { counts, error: null };
+      } catch (err) {
+        // يُقال «تعذّر» ولا يُعرض صفر — الصفر يُقرأ اطمئناناً
+        return { counts: {} as Record<string, { count: number; due: number }>, error: err instanceof Error ? err.message : String(err) };
+      }
+    }),
 
     // ─── تحصيل فاتورة ────────────────────────────────────────────────────
     // طلبُ عميل: «الفواتير لما يتحصل فاتورة نقوله إيه علشان يحصّلها… وبعدها
@@ -1694,6 +1747,24 @@ export const appRouter = router({
         const { executeTool } = await import("./agent/executeTool");
 
         return runWithErpConfig(ctx.user.id, async () => {
+          // ─── لا سند ثانٍ عند إعادة المحاولة ──────────────────────────
+          // إن فشل الترحيل بقي سندٌ مسودّة، وأوّل ما يفعله من رأى الخطأ أن
+          // يضغط «تحصيل» ثانيةً — فيصير في دفاتره سندان لفاتورة واحدة. لذا
+          // يُبحث أوّلاً عن مسودّةٍ قائمة لهذه الفاتورة فتُرحَّل هي.
+          const { erpGET } = await import("./agent/erpClient");
+          const draftFilter = encodeURIComponent(JSON.stringify([
+            ["Payment Entry Reference", "reference_name", "=", input.invoiceName],
+            ["docstatus", "=", 0],
+          ]));
+          const existing = await erpGET(
+            `/api/resource/Payment%20Entry?filters=${draftFilter}&fields=%5B%22name%22%2C%22paid_amount%22%5D`,
+          ).catch(() => null) as { data?: Array<{ name: string; paid_amount: number }> } | null;
+          const draft = existing?.data?.[0];
+          if (draft) {
+            await submitOrExplain(executeTool, draft.name, ctx.user.id);
+            return { name: draft.name, reused: true };
+          }
+
           const r = await executeTool("create_payment_entry", {
             payment_type: "Receive",
             party: input.customer,
@@ -1715,19 +1786,8 @@ export const appRouter = router({
 
           const name = (res as { name?: string })?.name;
           if (!name) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "لم يُنشَأ سند القبض" });
-
-          // الترحيل هو ما يغيّر الحالة فعلاً: سند قبض مسودّة لا يُنقص المستحق،
-          // فتبقى الفاتورة «غير مدفوعة» بعد تحصيلٍ ظاهره النجاح. لذا يُبلَّغ
-          // فشلُ الترحيل ولا يُبتلع، مع ذكر أن السند محفوظ كمسودّة.
-          try {
-            await executeTool("submit_document", { doctype: "Payment Entry", document_name: name }, { userId: ctx.user.id });
-          } catch (e) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: `حُفظ سند القبض ${name} كمسودّة لكن تعذّر ترحيله، فحالة الفاتورة لم تتغيّر: ${e instanceof Error ? e.message : String(e)}`,
-            });
-          }
-          return { name };
+          await submitOrExplain(executeTool, name, ctx.user.id);
+          return { name, reused: false };
         });
       }),
 
