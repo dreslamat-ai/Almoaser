@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Streamdown } from "streamdown";
 import { toast } from "sonner";
 import NotificationBell from "@/components/NotificationBell";
+import { SaraAvatar } from "@/components/SaraAvatar";
 import {
   Bot, Send, User, Sparkles, Loader2, Trash2,
   FileText, BarChart3, Users, Package, MessageSquare,
@@ -1644,11 +1645,13 @@ export default function AgentChat() {
             {/* Messages */}
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-violet-100 text-violet-600"
-                }`}>
-                  {msg.role === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                </div>
+                {msg.role === "user" ? (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-primary text-primary-foreground">
+                    <User className="w-4 h-4" />
+                  </div>
+                ) : (
+                  <SaraAvatar className="w-8 h-8" />
+                )}
                 <div className={`flex-1 ${msg.role === "user" ? "flex justify-end" : ""}`}>
                   <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
                     msg.role === "user"
@@ -1706,9 +1709,7 @@ export default function AgentChat() {
             {/* Loading */}
             {chatMutation.isPending && (
               <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
-                  <Bot className="w-4 h-4 text-violet-600" />
-                </div>
+                <SaraAvatar className="w-8 h-8" />
                 <div className="bg-muted/60 border border-border rounded-2xl rounded-tl-sm px-4 py-3 min-w-[15rem]">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin text-violet-600 shrink-0" />
