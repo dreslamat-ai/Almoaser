@@ -20,7 +20,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Bot, Settings, FileText, BarChart3, Users, Download, X, Home as HomeIcon } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Bot, FileText, BarChart3, Users, Download, X, PlugZap, Home as HomeIcon } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -28,14 +28,17 @@ import { Button } from "./ui/button";
 import FloatingChatButton from "./FloatingChatButton";
 import { ConnectionBanner, ConnectionLamp } from "./ConnectionStatus";
 
+// قائمة واحدة مسطّحة: كل ما يفتحه المستخدم هنا، ولا شاشةٌ تُخفي خلفها قائمةً
+// أخرى. و**الربط أولاً** — كان مدفوناً في «إعدادات القنوات» آخر القائمة، ومن
+// لم يربط نظامه لا يعمل عنده شيء، فأولى ما يُرى أولى ما يُضبط.
 const menuItems = [
+  { icon: PlugZap, label: "ربط نظامك", path: "/channels" },
   { icon: HomeIcon, label: "ملخص الحساب", path: "/dashboard" },
-  { icon: LayoutDashboard, label: "الداشبورد", path: "/erp" },
   { icon: Bot, label: "المحادثة الذكية", path: "/agent" },
+  { icon: LayoutDashboard, label: "لوحة نظامك", path: "/erp" },
   { icon: FileText, label: "الفواتير", path: "/erp/invoices" },
   { icon: Users, label: "العملاء", path: "/erp/customers" },
   { icon: BarChart3, label: "التقارير", path: "/erp/reports" },
-  { icon: Settings, label: "إعدادات القنوات", path: "/channels" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -257,6 +260,8 @@ function DashboardLayoutContent({
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
                       />
                       <span>{item.label}</span>
+                      {/* اللمبة على بند الربط نفسه: الحالة عند الزرّ الذي يصلحها */}
+                      {item.path === "/channels" && <ConnectionLamp className="mr-auto" />}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
