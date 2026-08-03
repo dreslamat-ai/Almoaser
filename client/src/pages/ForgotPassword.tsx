@@ -5,7 +5,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, ShieldCheck, Mail, KeyRound, ArrowRight, Eye, EyeOff, Database } from "lucide-react";
 
@@ -78,17 +77,17 @@ export default function ForgotPassword() {
   const isMember = user?.orgRole === "member";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 p-4" dir="rtl">
-      <Card className="w-full max-w-md p-8 shadow-lg border-border/60">
+    <div className="auth-shell" dir="rtl">
+      <div className="auth-card max-w-md">
         <div className="flex flex-col items-center gap-3 mb-7">
           <img
             src="/manus-storage/almoaser-icon-192_bc4dbf5e.png"
             alt="المعاصر AI"
-            className="w-16 h-16 rounded-2xl object-contain bg-white border border-border shadow-sm"
+            className="auth-logo"
           />
           <div className="text-center">
-            <h1 className="text-xl font-bold text-foreground">استعادة الدخول</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h1 className="text-2xl font-bold text-navy tracking-tight">استعادة الدخول</h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
               {step.name === "email" && "نسيت كلمة المرور؟ ادخل برمز يُرسل إلى بريدك"}
               {step.name === "code" && "أدخل الرمز الذي وصلك"}
               {step.name === "done" && "تم تسجيل دخولك"}
@@ -107,7 +106,7 @@ export default function ForgotPassword() {
                 onChange={e => setEmail(e.target.value)} disabled={isPending} className="text-left"
               />
             </div>
-            <Button type="submit" className="w-full h-11 gap-2" disabled={isPending}>
+            <Button type="submit" className="w-full h-12 gap-2 font-semibold" disabled={isPending}>
               {isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ الإرسال...</>
                 : <><Mail className="w-4 h-4" /> أرسل لي رمز الدخول</>}
@@ -138,7 +137,7 @@ export default function ForgotPassword() {
                 className="text-center text-2xl tracking-[0.5em] font-mono h-14"
               />
             </div>
-            <Button type="submit" className="w-full h-11 gap-2" disabled={isPending || code.length < 4}>
+            <Button type="submit" className="w-full h-12 gap-2 font-semibold" disabled={isPending || code.length < 4}>
               {isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ التحقق...</>
                 : <><KeyRound className="w-4 h-4" /> دخول</>}
@@ -178,7 +177,7 @@ export default function ForgotPassword() {
                   </button>
                 </div>
               </div>
-              <Button type="submit" className="w-full h-11 gap-2" disabled={isPending || newPassword.length < 8}>
+              <Button type="submit" className="w-full h-12 gap-2 font-semibold" disabled={isPending || newPassword.length < 8}>
                 {isPending
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> جارٍ الحفظ...</>
                   : <><KeyRound className="w-4 h-4" /> احفظ كلمة المرور</>}
@@ -206,10 +205,10 @@ export default function ForgotPassword() {
                   </div>
                 </div>
               </div>
-              <Button onClick={() => navigate("/channels")} variant="outline" className="w-full h-11 gap-2">
+              <Button onClick={() => navigate("/channels")} variant="outline" className="w-full h-12 gap-2 font-semibold">
                 <Database className="w-4 h-4" /> تحديث بيانات ربط ERP
               </Button>
-              <Button onClick={() => navigate("/dashboard")} className="w-full h-11 gap-2">
+              <Button onClick={() => navigate("/dashboard")} className="w-full h-12 gap-2 font-semibold">
                 <ArrowRight className="w-4 h-4" /> الذهاب للوحة التحكم
               </Button>
             </div>
@@ -217,12 +216,19 @@ export default function ForgotPassword() {
         )}
 
         {step.name !== "done" && (
-          <p className="text-sm text-muted-foreground text-center mt-5">
-            تذكّرت كلمة المرور؟{" "}
-            <Link href="/login" className="text-primary font-medium hover:underline">تسجيل الدخول</Link>
-          </p>
+          <>
+            <p className="text-sm text-muted-foreground text-center mt-6 pt-5 border-t border-navy/10">
+              تذكّرت كلمة المرور؟{" "}
+              <Link href="/login" className="text-navy font-semibold hover:text-gold-ink transition-colors">تسجيل الدخول</Link>
+            </p>
+            <p className="text-center mt-3">
+              <Link href="/" className="inline-flex items-center min-h-11 text-sm text-muted-foreground hover:text-navy transition-colors">
+                العودة إلى الصفحة الرئيسية
+              </Link>
+            </p>
+          </>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

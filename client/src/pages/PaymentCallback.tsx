@@ -38,18 +38,18 @@ export default function PaymentCallback() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 max-w-md w-full text-center">
+    <div className="auth-shell" dir="rtl">
+      <div className="auth-card max-w-md text-center">
         {state === "verifying" && (
           <>
-            <Loader2 className="w-12 h-12 text-navy animate-spin mx-auto mb-4" />
+            <div className="m-icon m-icon--lg mx-auto mb-5"><Loader2 className="w-7 h-7 animate-spin" /></div>
             <h1 className="text-xl font-bold text-navy mb-2">جارٍ التحقق من الدفع...</h1>
             <p className="text-muted-foreground text-sm">لحظات من فضلك، نتأكد من عملية الدفع مع بوابة MyFatoorah.</p>
           </>
         )}
         {state === "paid" && (
           <>
-            <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto mb-4" />
+            <div className="m-icon m-icon--ok m-icon--lg mx-auto mb-5"><CheckCircle2 className="w-7 h-7" /></div>
             <h1 className="text-xl font-bold text-navy mb-2">تم الدفع بنجاح!</h1>
             <p className="text-muted-foreground text-sm mb-6">
               {purpose === "topup"
@@ -57,17 +57,17 @@ export default function PaymentCallback() {
                 : "تم تفعيل اشتراكك وتعبئة رصيد نقاطك الشهري."}
             </p>
             <Link href="/subscription">
-              <Button className="bg-navy-gradient text-white w-full">العودة إلى اشتراكي</Button>
+              <Button className="w-full h-12 font-semibold">العودة إلى اشتراكي</Button>
             </Link>
           </>
         )}
         {state === "failed" && (
           <>
-            <XCircle className="w-14 h-14 text-red-500 mx-auto mb-4" />
+            <div className="m-icon m-icon--danger m-icon--lg mx-auto mb-5"><XCircle className="w-7 h-7" /></div>
             <h1 className="text-xl font-bold text-navy mb-2">لم تكتمل عملية الدفع</h1>
             <p className="text-muted-foreground text-sm mb-6">لم يتم خصم أي مبلغ، أو فشلت العملية في بوابة الدفع. يمكنك المحاولة مرة أخرى.</p>
             <Link href="/subscription">
-              <Button variant="outline" className="border-navy text-navy w-full">العودة إلى اشتراكي</Button>
+              <Button variant="outline" className="w-full h-12 border-navy/25 text-navy">العودة إلى اشتراكي</Button>
             </Link>
           </>
         )}
