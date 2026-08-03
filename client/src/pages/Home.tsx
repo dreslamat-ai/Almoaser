@@ -1146,7 +1146,10 @@ export default function Home() {
       <WhyUsSection />
       <ComplianceSection />
       <PricingSection onSelectPlan={setSelectedPlanId} />
-      <DeliverablesSection />
+      {/* «تدفع مقابل ما تستلمه» — مخفيّ بطلب صاحب المنتج.
+          يبقى المكوّن وبياناته في مكانهما ليُعاد بسطر واحد؛ حذفه يعني
+          إعادة كتابته. */}
+      {/* <DeliverablesSection /> */}
       <ContactSection initialPlanId={selectedPlanId} />
       <Footer />
       {/* شات المبيعات — للزوار قبل التسجيل */}
