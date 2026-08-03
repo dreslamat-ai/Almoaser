@@ -1673,6 +1673,78 @@ export const appRouter = router({
         }
       }),
 
+    // ─── تحصيل فاتورة ────────────────────────────────────────────────────
+    // طلبُ عميل: «الفواتير لما يتحصل فاتورة نقوله إيه علشان يحصّلها… وبعدها
+    // تتغيّر الحالة». التحصيل كان لا يتمّ إلا بمحادثة الوكيل، ومن يقف أمام
+    // قائمة فواتيره يريد زرّاً لا محادثة.
+    //
+    // **ولا منطق جديد:** يُستدعى `create_payment_entry` نفسه الذي يستعمله
+    // الوكيل — بحلّ اسم العميل وطريقة الدفع والحسابات الافتراضية وربط
+    // الدفعة بالفاتورة. نسخةٌ ثانية من هذا المنطق تنحرف عنه بصمت.
+    collectInvoicePayment: protectedProcedure
+      .input(z.object({
+        invoiceName: z.string().trim().min(1),
+        customer: z.string().trim().min(1),
+        amount: z.number().positive(),
+        mode: z.string().trim().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        requireMemberPermission(ctx.user, "managePayments");
+        const { runWithErpConfig } = await import("./agent/erpClient");
+        const { executeTool } = await import("./agent/executeTool");
+
+        return runWithErpConfig(ctx.user.id, async () => {
+          const r = await executeTool("create_payment_entry", {
+            payment_type: "Receive",
+            party: input.customer,
+            amount: input.amount,
+            reference_invoice: input.invoiceName,
+            ...(input.mode ? { mode_of_payment: input.mode } : {}),
+          }, { userId: ctx.user.id });
+
+          const res = r.result as Record<string, unknown>;
+          //الخطأ يُنقل كما ردّه النظام: «فشل» بلا سببٍ يجعل العميل يعيد
+          //المحاولة عمياً على شيء لن ينجح حتى يُضبط في نظامه
+          if (res?.error) throw new TRPCError({ code: "BAD_REQUEST", message: String(res.error) });
+          if (res?.needs_clarification) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `اختر طريقة دفع من المعرّفة في نظامك: ${(res.available_modes as string[] ?? []).join("، ")}`,
+            });
+          }
+
+          const name = (res as { name?: string })?.name;
+          if (!name) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "لم يُنشَأ سند القبض" });
+
+          // الترحيل هو ما يغيّر الحالة فعلاً: سند قبض مسودّة لا يُنقص المستحق،
+          // فتبقى الفاتورة «غير مدفوعة» بعد تحصيلٍ ظاهره النجاح. لذا يُبلَّغ
+          // فشلُ الترحيل ولا يُبتلع، مع ذكر أن السند محفوظ كمسودّة.
+          try {
+            await executeTool("submit_document", { doctype: "Payment Entry", document_name: name }, { userId: ctx.user.id });
+          } catch (e) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `حُفظ سند القبض ${name} كمسودّة لكن تعذّر ترحيله، فحالة الفاتورة لم تتغيّر: ${e instanceof Error ? e.message : String(e)}`,
+            });
+          }
+          return { name };
+        });
+      }),
+
+    // طرق الدفع المعرّفة في نظام العميل — تُعرض كخيارات بدل أن يكتبها بيده
+    // فيخطئ اسمها ويُردّ عليه بخطأ بعد الضغط
+    getPaymentModes: protectedProcedure.query(async ({ ctx }) => {
+      try {
+        const data = await erpFetch(
+          `/api/resource/Mode%20of%20Payment?limit=50&fields=%5B%22name%22%5D&filters=%5B%5B%22enabled%22%2C%22%3D%22%2C1%5D%5D`,
+          ctx.user.id,
+        ) as { data: Array<{ name: string }> };
+        return { modes: (data?.data ?? []).map(m => m.name) };
+      } catch {
+        return { modes: [] as string[] };
+      }
+    }),
+
     createSalesInvoice: protectedProcedure
       .input(z.object({
         customer: z.string(),

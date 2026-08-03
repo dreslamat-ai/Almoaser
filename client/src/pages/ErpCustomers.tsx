@@ -4,15 +4,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, RefreshCw, Search, Users } from "lucide-react";
+import { AlertCircle, FileText, RefreshCw, Search, Users } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
 
 export default function ErpCustomers() {
   const [search, setSearch] = useState("");
+  const [, navigate] = useLocation();
   const { data, isLoading, error, refetch } = trpc.erpnext.getCustomers.useQuery(
     { limit: 100 },
     { staleTime: 60 * 1000 },
   );
+
+  // طلبُ عميل: أن يعرض عدد فواتير كل عميل، وأن يفتح الضغطُ عليه فواتيره.
+  // العدد بلا رابط يجعله يقرأ رقماً ثم يبحث عنه بنفسه في قائمة أخرى.
+  const { data: invData } = trpc.erpnext.getSalesInvoices.useQuery({ limit: 500 }, { staleTime: 60 * 1000 });
+  const perCustomer = new Map<string, { count: number; due: number }>();
+  for (const inv of (invData?.data ?? []) as Array<{ customer: string; outstanding_amount: number }>) {
+    const e = perCustomer.get(inv.customer) ?? { count: 0, due: 0 };
+    e.count += 1;
+    e.due += Number(inv.outstanding_amount ?? 0);
+    perCustomer.set(inv.customer, e);
+  }
 
   const customers = ((data?.data ?? []) as Array<{
     name: string; customer_name: string; customer_type: string; mobile_no?: string; email_id?: string;
@@ -76,6 +89,7 @@ export default function ErpCustomers() {
                       <th className="text-right p-3 font-medium">النوع</th>
                       <th className="text-right p-3 font-medium">الجوال</th>
                       <th className="text-right p-3 font-medium">البريد</th>
+                      <th className="text-right p-3 font-medium">الفواتير</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -85,6 +99,25 @@ export default function ErpCustomers() {
                         <td className="p-3 text-xs text-muted-foreground">{c.customer_type === "Company" ? "شركة" : "فرد"}</td>
                         <td className="p-3 text-xs" dir="ltr">{c.mobile_no || "—"}</td>
                         <td className="p-3 text-xs" dir="ltr">{c.email_id || "—"}</td>
+                        <td className="p-3">
+                          {(() => {
+                            const e = perCustomer.get(c.name);
+                            if (!e?.count) return <span className="text-xs text-muted-foreground">—</span>;
+                            return (
+                              <button
+                                onClick={() => navigate(`/erp/invoices?customer=${encodeURIComponent(c.name)}`)}
+                                className="inline-flex items-center gap-1.5 text-xs font-medium text-navy hover:text-gold-ink hover:underline"
+                                title={`عرض فواتير ${c.customer_name}`}
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                {e.count} فاتورة
+                                {e.due > 0 && (
+                                  <span className="text-amber-700">· {e.due.toLocaleString("ar-SA")} متبقٍّ</span>
+                                )}
+                              </button>
+                            );
+                          })()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

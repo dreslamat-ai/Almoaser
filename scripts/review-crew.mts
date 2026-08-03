@@ -289,6 +289,37 @@ async function agentUi(): Promise<Result> {
     if (/>\s*متصل\s*</.test(chat)) f.push("شاشة الدردشة تكرّر حالة الاتصال الموجودة في الترويسة");
   }
 
+  // ٧) التوسيط على الجوال — الشاشة الضيّقة تجعل المحاذاة لليمين تبدو معلّقة
+  if (!/max-width: 767px/.test(css) || !/text-align: center/.test(css)) {
+    f.push("قواعد التوسيط على الجوال سقطت من index.css");
+  }
+
+  // ٨) لا نصّ أصغر من 12px — يُقرأ بالعدسة لا بالعين
+  for (const p of pages) {
+    const tiny = Array.from(read(p).matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g))
+      .map(m => Number(m[1])).filter(n => n < 11);
+    if (tiny.length) f.push(`${tiny.length} نصّ أصغر من 11px في ${p}`);
+  }
+
+  // ٩) لا لون مكتوب بالسداسي في المكوّنات — الهوية في المتغيّرات لا في الملفات
+  for (const p of pages) {
+    if (!/pages\/|components\//.test(p)) continue;
+    const hex = (read(p).match(/#[0-9a-fA-F]{6}\b/g) ?? []).length;
+    if (hex >= 3) f.push(`${hex} لوناً سداسياً مكتوباً في ${p} — الهوية في المتغيّرات`);
+  }
+
+  // ١٠) كل حقل إدخال له عنوان منطوق — النموذج بلا تسمية لا يُملأ بقارئ شاشة
+  for (const p of pages) {
+    const src = read(p);
+    const bare = Array.from(src.matchAll(/<Input(?![^>]*(?:aria-label|id=|placeholder))[^>]*\/>/g)).length;
+    if (bare >= 3) f.push(`${bare} حقل إدخال بلا تسمية في ${p}`);
+  }
+
+  // ١١) الحركة تحترم من يطلب تقليلها — الدوّار الدائم يُدوّخ بعض الناس
+  if (!/prefers-reduced-motion/.test(css)) {
+    f.push("لا احترام لـprefers-reduced-motion — الحركة الدائمة تُتعب من يطلب تقليلها");
+  }
+
   return { ok: f.length === 0, findings: f.slice(0, 12) };
 }
 

@@ -1,0 +1,58 @@
+// تحقّق حيّ من مسار التحصيل على نظام عميل حقيقي — **بلا كتابة أي سند**.
+// يقرأ طرق الدفع والفواتير وعدّ فواتير كل عميل (وهو ما تعرضه صفحة العملاء)،
+// ثم يجرّب عميلاً وهمياً ليثبت أن الإجراء يصل executeTool ويُرفض قبل أي POST.
+import "dotenv/config";
+import { eq } from "drizzle-orm";
+import { getDb } from "../server/db";
+import { users, erpnextConnections } from "../drizzle/schema";
+import { appRouter } from "../server/routers";
+import { resolveOrgOwnerId } from "../server/organizations";
+
+const db = await getDb();
+if (!db) throw new Error("لا اتصال بقاعدة البيانات");
+
+const conns = await db.select().from(erpnextConnections).limit(5);
+console.log("اتصالات ERP:", conns.map(c => `${c.userId}:${c.provider}`).join(" · ") || "(لا شيء)");
+
+for (const c of conns) {
+  const u = (await db.select().from(users).where(eq(users.id, c.userId)).limit(1))[0];
+  if (!u) continue;
+  const caller = appRouter.createCaller({
+    req: { headers: {} } as never,
+    res: undefined as never,
+    user: u,
+    effectiveUserId: await resolveOrgOwnerId(u),
+  } as never);
+
+  console.log(`\n── مستخدم ${u.id} (${u.email ?? "—"})`);
+  try {
+    const modes = await caller.erpnext.getPaymentModes();
+    const inv = await caller.erpnext.getSalesInvoices({ limit: 200 });
+    const cust = await caller.erpnext.getCustomers({ limit: 100 });
+    const rows = (inv.data ?? []) as Array<{ name: string; customer: string; outstanding_amount: number; status: string }>;
+    const due = rows.filter(r => (r.outstanding_amount ?? 0) > 0 && r.status !== "Draft" && r.status !== "Cancelled");
+    console.log("  طرق الدفع:", modes.modes.length ? modes.modes.join("، ") : "(غير معرّفة — سيُستخدم الحساب الافتراضي)");
+    console.log(`  فواتير: ${rows.length} — قابلة للتحصيل: ${due.length} — عملاء: ${((cust.data ?? []) as unknown[]).length}`);
+
+    const per = new Map<string, number>();
+    for (const r of rows) per.set(r.customer, (per.get(r.customer) ?? 0) + 1);
+    const top = [...per.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    console.log("  أعلى العملاء فواتيرَ:", top.map(([k, v]) => `${k}=${v}`).join(" · ") || "(لا شيء)");
+    if (due[0]) console.log(`  مرشّح للتحصيل: ${due[0].name} / ${due[0].customer} / ${due[0].outstanding_amount}`);
+  } catch (e) {
+    console.log("  ✗ تعذّرت القراءة:", (e as Error).message.slice(0, 120));
+    continue;
+  }
+
+  try {
+    await caller.erpnext.collectInvoicePayment({
+      invoiceName: "INV-فحص-غير-موجودة",
+      customer: "عميل-وهمي-للفحص-لا-يوجد-إطلاقاً",
+      amount: 1,
+    });
+    console.log("  ✗ لم يُرفض العميل الوهمي — راجع مسار الخطأ");
+  } catch (e) {
+    console.log("  ✓ رُفض العميل الوهمي:", (e as Error).message.slice(0, 100));
+  }
+}
+process.exit(0);
