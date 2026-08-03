@@ -13,6 +13,11 @@ import "./index.css";
 // نُخطر المستخدم بوجود تحديث جديد بدل الاعتماد على skipWaiting فقط —
 // بدونها ممكن يفضل يشوف نسخة قديمة من الواجهة لحد ما يعمل تحديث يدوي
 const updateSW = registerSW({
+  // تبويبةٌ تبقى مفتوحة يوماً كاملاً لن تسأل عن نسخةٍ جديدة إلا عند إعادة
+  // التحميل. فتُسأل كل ساعة، وإلّا لم يكن للزرّ ما يُظهره.
+  onRegisteredSW(_url, registration) {
+    if (registration) setInterval(() => void registration.update(), 60 * 60 * 1000);
+  },
   onNeedRefresh() {
     toast.info("تحديث جديد متاح", {
       description: "أعد تحميل الصفحة لرؤية آخر التحديثات",

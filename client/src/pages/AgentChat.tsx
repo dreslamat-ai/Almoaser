@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import DashboardLayout from "@/components/DashboardLayout";
+import { CHAT_ACCEPT, UPLOAD_LIMITS, checkUpload, formatBytes, uploadKindOf } from "@shared/uploadLimits";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -1194,13 +1195,14 @@ function ToolResultRenderer({ display, onDownload, onDownloadDoc }: { display: s
 }
 
 // ─── Suggestions ──────────────────────────────────────────────────────────────
+// **أربعة لا ستّة.** كان فيها «تقرير مبيعات هذا الشهر» و«هذه السنة» — نفس
+// الطلب بمدّة أخرى، وصفٌّ ثالث من البطاقات يدفع حقلَ الكتابة خارج الشاشة على
+// الجوال. الاقتراح بابٌ للبدء لا فهرسٌ لما تقدر عليه.
 const SUGGESTIONS = [
   { icon: FileText, text: "اعرض آخر 10 فواتير" },
   { icon: Users, text: "اعرض قائمة العملاء" },
   { icon: BarChart3, text: "تقرير مبيعات هذا الشهر" },
   { icon: Package, text: "ما هي الأصناف المتاحة؟" },
-  { icon: FileText, text: "أنشئ فاتورة لعميل" },
-  { icon: BarChart3, text: "تقرير مبيعات هذه السنة" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1464,13 +1466,20 @@ export default function AgentChat() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) { toast.error("يرجى اختيار صورة (JPG أو PNG)"); return; }
-    if (file.size > 10 * 1024 * 1024) { toast.error("الصورة كبيرة جداً — الحد الأقصى 10 ميجابايت"); return; }
+    // الفحص هنا وفي الخادم من جدولٍ واحد: الرفض بعد رفع الملفّ كاملاً يُضيّع
+    // انتظاراً كان يمكن توفيره، والرقمان حين ينفصلان ينحرفان.
+    const rejection = checkUpload(file.type, file.size);
+    if (rejection) { toast.error(rejection); return; }
+    const isPdf = uploadKindOf(file.type) === "pdf";
     setExtracting(true);
-    setMessages(prev => [...prev, { role: "user", content: "📷 رفعتُ صورة مستند مالي — اقرأها واستخرج بياناتها", ts: Date.now() }]);
+    setMessages(prev => [...prev, {
+      role: "user",
+      content: isPdf ? `رفعتُ ملف ${file.name} — اقرأه واستخرج بياناته` : "رفعتُ صورة مستند مالي — اقرأها واستخرج بياناتها",
+      ts: Date.now(),
+    }]);
     try {
       const base64 = await blobToBase64(file);
-      const { extracted } = await extractMutation.mutateAsync({ imageBase64: base64, mimeType: file.type });
+      const { extracted } = await extractMutation.mutateAsync({ imageBase64: base64, mimeType: file.type, fileName: file.name });
       const label = DOC_TYPE_LABEL[extracted.doc_type] ?? extracted.doc_type;
       const itemsText = extracted.items.length
         ? extracted.items.map(it => `  - ${it.description} × ${it.qty} بسعر ${it.rate} = ${it.amount}`).join("\n")
@@ -1491,7 +1500,7 @@ export default function AgentChat() {
       ].filter(Boolean).join("\n");
       setMessages(prev => [...prev, { role: "assistant", content: summary, ts: Date.now() }]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "تعذّر قراءة الصورة";
+      const msg = err instanceof Error ? err.message : "تعذّرت قراءة الملف";
       setMessages(prev => [...prev, { role: "assistant", content: `⚠️ ${msg}`, ts: Date.now() }]);
     } finally {
       setExtracting(false);
@@ -1510,7 +1519,9 @@ export default function AgentChat() {
          {/* الاسم وحالة الاتصال في ترويسة التخطيط أعلاه — تكرارهما هنا كان
              يعرض «المحاسب الذكي» مرّتين و«متصل» مرّتين في شاشة واحدة. يبقى
              السطر الذي يقول ما لا تقوله الترويسة: أن الأوامر تُنفَّذ فعلاً. */}
-         <div className="flex items-center gap-3 min-w-0">
+         {/* يُخفى على الجوال: الترحيب أسفله يقول الشيء نفسه بوجهٍ أكبر،
+             وشاشةٌ ضيّقة لا تحتمل السطر مرّتين */}
+         <div className="hidden sm:flex items-center gap-3 min-w-0">
            <SaraAvatar className="w-10 h-10" />
            <p className="text-sm text-muted-foreground min-w-0">
              ينفّذ طلباتك مباشرة على نظامك
@@ -1612,20 +1623,20 @@ export default function AgentChat() {
         {/* Chat area */}
         <Card className="flex-1 overflow-hidden shadow-sm flex flex-col">
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Welcome */}
+            {/* الترحيب — **الوجه مرّة واحدة والسطر مرّة واحدة.** كانت صورتها
+                في الترويسة وفي الترحيب، و«المحاسب الذكي» مكتوباً ثلاث مرّات في
+                شاشةٍ واحدة: في شريط التخطيط، وفي عين البطاقة، وفي ذيل حقل
+                الكتابة. التكرار هو الزحام. */}
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full gap-6 py-8">
-                {/* وجهها لا بريقٌ بنفسجي غريبٌ عن هوية كحلية وذهبية —
-                    ومن سيحدّثك أولى بالصدارة من أيقونة */}
-                <SaraAvatar className="w-20 h-20 ring-4 ring-gold/25" bordered={false} />
+              <div className="flex flex-col items-center justify-center h-full gap-4 py-6">
+                <SaraAvatar className="w-16 h-16 ring-2 ring-gold/30" bordered={false} />
                 <div className="text-center">
-                  <span className="m-eyebrow">المحاسب الذكي</span>
                   <h2 className="m-title mb-1">مرحباً! أنا سارة</h2>
-                  <p className="m-sub max-w-sm mx-auto">
-                    أنفّذ طلباتك مباشرة على Almoaser AI ERP — أنشئ الفواتير والعملاء والأصناف، اجلب التقارير، وأعالج أي نقص تلقائياً.
+                  <p className="m-sub max-w-xs mx-auto">
+                    اطلب ما تريد على نظامك، أو ارفع فاتورة لأقرأها.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 w-full max-w-lg">
+                <div className="grid grid-cols-2 gap-2 w-full max-w-md">
                   {SUGGESTIONS.map((s, i) => (
                     <button key={i} onClick={() => void send(s.text)}
                       className="m-card m-card--action flex items-center gap-2 !p-3 text-right text-sm text-navy group">
@@ -1740,7 +1751,7 @@ export default function AgentChat() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={CHAT_ACCEPT}
               className="hidden"
               onChange={e => void handleImageSelected(e)}
             />
@@ -1750,8 +1761,8 @@ export default function AgentChat() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={chatMutation.isPending || extracting || recording}
-                title="ارفع صورة فاتورة أو سند قبض"
-                aria-label="ارفع صورة فاتورة أو سند قبض"
+                title="ارفع فاتورة: صورة أو ملف PDF"
+                aria-label="ارفع فاتورة: صورة أو ملف PDF"
                 className="inline-flex items-center justify-center h-11 w-11 shrink-0 rounded-full text-muted-foreground hover:text-navy hover:bg-muted transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 {extracting ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
@@ -1777,7 +1788,7 @@ export default function AgentChat() {
                 maxLength={MAX_MESSAGE_CHARS}
                 onKeyDown={handleKey}
                 aria-label="اكتب رسالتك للمحاسب الذكي"
-                placeholder={recording ? "جارٍ التسجيل… اضغط الإيقاف عند الانتهاء" : transcribing ? "جارٍ تحويل الصوت إلى نص…" : "اكتب أمرك، أو تحدّث بالصوت، أو ارفع صورة فاتورة…"}
+                placeholder={recording ? "جارٍ التسجيل… اضغط الإيقاف" : transcribing ? "جارٍ تحويل الصوت…" : "اكتب أمرك…"}
                 // الحقل بلا إطار: الإطار على السطح الحاوي كلّه، وإطارٌ داخل إطار
                 // هو ما كان يجعل الشكل قديماً
                 className="flex-1 min-h-[44px] max-h-32 resize-none text-sm border-0 bg-transparent shadow-none focus-visible:ring-0 px-1 py-2.5"
@@ -1794,9 +1805,12 @@ export default function AgentChat() {
               </button>
             </div>
 
-            {/* سطرٌ واحد قصير بدل جملةٍ فيها رمزان تعبيريان واسم المنتج كاملاً */}
+            {/* **ما يُقال تحت الحقل يقلّ كلّما وضحت الأيقونات.** كان سطراً
+                طويلاً فيه رمزان تعبيريان واسم المنتج كاملاً يشرح أزراراً
+                ظاهرةً فوقه — شرحٌ لِما لا يحتاج شرحاً يزيد الزحام ولا يزيد
+                الفهم. بقي ما لا تقوله أيقونة: الحدود، وأن Enter يُرسل. */}
             <p className="text-[11px] text-muted-foreground mt-2 text-center">
-              Enter للإرسال · Shift+Enter لسطر جديد
+              Enter للإرسال · صورة حتى {formatBytes(UPLOAD_LIMITS.image.maxBytes)} أو PDF حتى {formatBytes(UPLOAD_LIMITS.pdf.maxBytes)}
             </p>
             {/* التكلفة تُعرض قبل الإرسال لا بعده — لا يُفاجأ العميل بخصم نقطتين */}
             {input.length > LONG_MESSAGE_CHARS && (
