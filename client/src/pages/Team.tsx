@@ -1,7 +1,7 @@
 import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -220,23 +220,21 @@ export default function Team() {
 
   if (user?.orgRole !== "owner") {
     return (
-      <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
-        <Sidebar active="/team" />
-        <main className="flex-1 p-4 md:p-8 flex items-center justify-center">
+      <DashboardLayout>
+      <div className="space-y-4 flex items-center justify-center">
           <div className="text-center">
             <Shield className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-navy">لمالك الحساب فقط</h2>
             <p className="text-muted-foreground">إدارة الفريق متاحة لمالك الحساب فقط</p>
           </div>
-        </main>
-      </div>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
-      <Sidebar active="/team" />
-      <main className="flex-1 p-4 md:p-8">
+    <DashboardLayout>
+      <div className="space-y-4">
         <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
@@ -255,7 +253,7 @@ export default function Team() {
             <div className="p-10 text-center text-muted-foreground text-sm">لا يوجد أعضاء بعد</div>
           )}
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

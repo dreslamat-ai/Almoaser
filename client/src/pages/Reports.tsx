@@ -1,7 +1,7 @@
 import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -49,9 +49,8 @@ export default function Reports() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
-      <Sidebar active="/reports" />
-      <main className="flex-1 p-4 md:p-8">
+    <DashboardLayout>
+      <div className="space-y-4">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-navy">التقارير</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -141,7 +140,7 @@ export default function Reports() {
             )}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

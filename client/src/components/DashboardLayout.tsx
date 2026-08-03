@@ -20,7 +20,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Bot, FileText, BarChart3, Users, Download, X, PlugZap, Home as HomeIcon } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Bot, FileText, BarChart3, Users, Download, X, PlugZap, ClipboardList, CheckCircle2, CreditCard, Receipt, UsersRound, UserCog, Home as HomeIcon } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -28,17 +28,32 @@ import { Button } from "./ui/button";
 import FloatingChatButton from "./FloatingChatButton";
 import { ConnectionBanner, ConnectionLamp } from "./ConnectionStatus";
 
-// قائمة واحدة مسطّحة: كل ما يفتحه المستخدم هنا، ولا شاشةٌ تُخفي خلفها قائمةً
-// أخرى. و**الربط أولاً** — كان مدفوناً في «إعدادات القنوات» آخر القائمة، ومن
-// لم يربط نظامه لا يعمل عنده شيء، فأولى ما يُرى أولى ما يُضبط.
+// ─── قائمة واحدة، كل الأزرار تحتها ─────────────────────────────────────────
+//
+// كان للمنصة **قِشرتان** بقائمتين: تخطيطٌ بشريط جانبي لصفحات النظام، وشريطٌ
+// آخر داخل `Dashboard` لصفحات الحساب. فمن يضغط «نظام ERP» ينتقل إلى قائمة
+// أخرى بمسارات أخرى — و‏/invoices ليست ‏/erp/invoices، و‏/reports ليست
+// ‏/erp/reports. شكا العميل منها بحقّ.
+//
+// **والتسمية تفصل ما تشابه:** «الفواتير» كانت اسماً لشيئين — فواتير اشتراكه
+// عندنا، وفواتير عملائه في نظامه. الاسم الواحد لشيئين يجعل الاختيار تخميناً.
 const menuItems = [
   { icon: PlugZap, label: "ربط نظامك", path: "/channels" },
   { icon: HomeIcon, label: "ملخص الحساب", path: "/dashboard" },
-  { icon: Bot, label: "المحادثة الذكية", path: "/agent" },
+  { icon: Bot, label: "المحاسب الذكي", path: "/agent" },
+
   { icon: LayoutDashboard, label: "لوحة نظامك", path: "/erp" },
-  { icon: FileText, label: "الفواتير", path: "/erp/invoices" },
-  { icon: Users, label: "العملاء", path: "/erp/customers" },
-  { icon: BarChart3, label: "التقارير", path: "/erp/reports" },
+  { icon: FileText, label: "فواتير عملائك", path: "/erp/invoices" },
+  { icon: Users, label: "عملاؤك", path: "/erp/customers" },
+  { icon: BarChart3, label: "تقارير نظامك", path: "/erp/reports" },
+
+  { icon: ClipboardList, label: "تقارير الخبير", path: "/reports" },
+  { icon: CheckCircle2, label: "المهام", path: "/tasks" },
+
+  { icon: CreditCard, label: "اشتراكك", path: "/subscription" },
+  { icon: Receipt, label: "فواتير اشتراكك", path: "/invoices" },
+  { icon: UsersRound, label: "فريقك", path: "/team" },
+  { icon: UserCog, label: "حسابك", path: "/settings" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

@@ -345,25 +345,8 @@ export default function ERPNextDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { icon: Bot, label: "المحاسب الذكي", desc: "محادثة وإنشاء فواتير", path: "/agent", bg: "bg-violet-50 hover:bg-violet-100", iconBg: "bg-violet-500", text: "text-violet-700" },
-            { icon: FileText, label: "الفواتير", desc: "عرض وإدارة الفواتير", path: "/erp/invoices", bg: "bg-blue-50 hover:bg-blue-100", iconBg: "bg-blue-500", text: "text-blue-700" },
-            { icon: ShoppingCart, label: "التقارير", desc: "مبيعات ومشتريات", path: "/erp/reports", bg: "bg-emerald-50 hover:bg-emerald-100", iconBg: "bg-emerald-500", text: "text-emerald-700" },
-            { icon: Settings, label: "إعدادات القنوات", desc: "واتساب وتيليجرام", path: "/channels", bg: "bg-amber-50 hover:bg-amber-100", iconBg: "bg-amber-500", text: "text-amber-700" },
-          ].map((a, i) => (
-            <button key={i} onClick={() => setLocation(a.path)}
-              className={`flex items-center gap-3 p-3.5 rounded-xl border border-transparent ${a.bg} transition-all text-right group`}>
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${a.iconBg} group-hover:scale-105 transition-transform`}>
-                <a.icon className="w-4.5 h-4.5 text-white" />
-              </div>
-              <div className="min-w-0">
-                <p className={`text-sm font-semibold ${a.text}`}>{a.label}</p>
-                <p className="text-xs text-muted-foreground truncate">{a.desc}</p>
-              </div>
-            </button>
-          ))}
-        </div>
+        {/* بطاقات الاختصار حُذفت — القائمة الجانبية وحدها تُوصل، ومكانان
+          للوصول إلى الشيء نفسه يجعلان المستخدم يختار بدل أن يضغط */}
 
       </div>
     </DashboardLayout>

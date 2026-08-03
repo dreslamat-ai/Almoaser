@@ -1,7 +1,7 @@
 import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,9 +92,8 @@ export default function Tasks() {
   const filtered = filter === "all" ? tasks : tasks?.filter(t => t.status === filter);
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
-      <Sidebar active="/tasks" />
-      <main className="flex-1 p-4 md:p-8">
+    <DashboardLayout>
+      <div className="space-y-4">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-navy">المهام المحاسبية</h1>
@@ -187,7 +186,7 @@ export default function Tasks() {
             ))}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

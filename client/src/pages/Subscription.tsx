@@ -1,7 +1,7 @@
 import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CheckCircle2, Zap, Bot, BookOpen, Crown, Coins, Plus, History, BarChart3 } from "lucide-react";
@@ -91,9 +91,8 @@ export default function Subscription() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
-      <Sidebar active="/subscription" />
-      <main className="flex-1 p-4 md:p-8">
+    <DashboardLayout>
+      <div className="space-y-4">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">إدارة الاشتراك</h1>
           <p className="text-muted-foreground mt-1">اختر الباقة المناسبة لعملك وتابع رصيد نقاطك — الأسعار لا تشمل ضريبة القيمة المضافة (15%)</p>
@@ -429,7 +428,7 @@ export default function Subscription() {
             );
           })}
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

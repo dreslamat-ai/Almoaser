@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import PhoneVerification from "@/components/PhoneVerification";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,9 +99,8 @@ export default function AccountSettings() {
   if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
-      <Sidebar active="/settings" />
-      <main className="flex-1 p-4 md:p-8 max-w-4xl">
+    <DashboardLayout>
+      <div className="space-y-4 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">إعدادات الحساب</h1>
           <p className="text-muted-foreground mt-1">إدارة بياناتك الشخصية وبيانات شركتك</p>
@@ -231,8 +230,8 @@ export default function AccountSettings() {
             </Link>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
 

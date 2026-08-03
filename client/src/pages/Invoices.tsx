@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
+import DashboardLayout from "@/components/DashboardLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Sidebar } from "./Dashboard";
 import { Button } from "@/components/ui/button";
 import { FileText, Download } from "lucide-react";
 
@@ -15,9 +15,8 @@ export default function Invoices() {
   if (!isAuthenticated) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => { window.location.href = "/login"; }} className="bg-navy-gradient text-white">تسجيل الدخول</Button></div>;
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50">
-      <Sidebar active="/invoices" />
-      <main className="flex-1 p-4 md:p-8">
+    <DashboardLayout>
+      <div className="space-y-4">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-navy">فواتير الخدمة</h1>
           <p className="text-muted-foreground mt-1">سجل فواتير اشتراكك الشهري</p>
@@ -55,7 +54,7 @@ export default function Invoices() {
             </table>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
