@@ -20,7 +20,8 @@
  *   npx tsx scripts/review-crew.mts --only=نص  وكيل واحد
  */
 import "dotenv/config";
-import { readFileSync, writeFileSync, existsSync, appendFileSync, readdirSync, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, appendFileSync, readdirSync, statSync, lstatSync, realpathSync, accessSync, constants } from "fs";
+import { execSync } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { sql } from "drizzle-orm";
@@ -372,6 +373,156 @@ async function agentUi(): Promise<Result> {
   return { ok: f.length === 0, findings: f.slice(0, 12) };
 }
 
+/**
+ * مهندس البنية التحتية (DevOps) — الآلة التي يعمل عليها كل ما سبق.
+ *
+ * بقيةُ الفريق تقرأ الشيفرة. وهذا يقرأ **الخادم**: هل النسخة الاحتياطية
+ * حديثة وخارج هذه الآلة، وهل الشهادة قاربت، وهل بقي قرص، وهل ما يعمل الآن
+ * هو ما في المستودع، وهل انكشف في جذر الويب ما لا يُنشر.
+ *
+ * كل بندٍ هنا وقع فعلاً في أحد المشروعين، لا احتياطاً نظرياً:
+ * ملفٌّ مضغوط فيه `.env` كان يُنزَّل من الإنترنت، ورفعُ النسخ الخارجي يفشل
+ * منذ أيام وهو مكتوبٌ في سجلٍّ لا يقرؤه أحد، وحالةُ التشغيل كانت تُكتب في
+ * مسارٍ لا يملك التطبيق الكتابة فيه فتفشل بصمت.
+ */
+async function agentDevops(): Promise<Result> {
+  const f: string[] = [];
+  const sh = (cmd: string): string => {
+    try { return execSync(cmd, { encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"] }).trim(); }
+    catch { return ""; }
+  };
+  const HOURS = 3600_000;
+  let checked = 0;
+
+  // ١) نسخة احتياطية حديثة. النسخُ الذي يتوقّف لا يُعلن عن نفسه — يُكتشف
+  //    يوم يُحتاج إليه، وذلك أسوأ يوم لاكتشافه.
+  const backupDir = process.env.BACKUP_DIR ?? "/home/eipsys/backups/almoaser";
+  checked++;
+  if (!existsSync(backupDir)) {
+    f.push(`مجلّد النسخ ${backupDir} غير موجود`);
+  } else {
+    const dumps = readdirSync(backupDir).filter(n => n.endsWith(".sql.gz"));
+    if (!dumps.length) f.push("لا نسخة قاعدة بيانات واحدة في مجلّد النسخ");
+    else {
+      const newest = Math.max(...dumps.map(n => statSync(join(backupDir, n)).mtimeMs));
+      const ageH = (Date.now() - newest) / HOURS;
+      // النسخ يومي الساعة ٣:٢٠ — فستّ وثلاثون ساعة تعني أن ليلةً سقطت
+      if (ageH > 36) f.push(`أحدث نسخة احتياطية عمرها ${Math.round(ageH)} ساعة — النسخ اليومي متوقّف`);
+      const tiny = dumps.filter(n => statSync(join(backupDir, n)).size < 10 * 1024).length;
+      if (tiny) f.push(`${tiny} نسخة أصغر من 10ك — نسخةٌ فارغة تُطمئن ولا تُستعاد`);
+    }
+    // ٢) نسخةٌ على الآلة نفسها ليست نسخة: من فقد الخادم فقدها معه.
+    checked++;
+    const log = join(backupDir, "backup.log");
+    if (existsSync(log)) {
+      const tail = readFileSync(log, "utf8").split("\n").slice(-40).join("\n");
+      if (/تعذّر الرفع الخارجي/.test(tail)) f.push("الرفع الخارجي للنسخ يفشل — النسخ كلّها على الخادم نفسه");
+    }
+  }
+
+  // ٣) الشهادة. انتهاؤها يُسقط الموقع كلَّه دفعةً واحدة، والتجديد التلقائي
+  //    قد يتعطّل بصمت — فيُنظر إلى ما تقوله الشهادة الحيّة لا إلى الإعداد.
+  checked++;
+  const host = process.env.PUBLIC_HOST ?? "erpsys.cloud";
+  const notAfter = sh(`echo | openssl s_client -connect ${host}:443 -servername ${host} 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2`);
+  if (notAfter) {
+    const days = (new Date(notAfter).getTime() - Date.now()) / (24 * HOURS);
+    if (days < 21) f.push(`شهادة ${host} تنتهي بعد ${Math.round(days)} يوماً — التجديد التلقائي لم يعمل`);
+  } else {
+    f.push(`تعذّرت قراءة شهادة ${host}`);
+  }
+
+  // ٤) القرص. الامتلاء يوقف الكتابة في القاعدة والسجلّات معاً، ويبدأ عادةً
+  //    من سجلٍّ ينمو بلا تدوير.
+  checked++;
+  const usedPct = Number(sh("df --output=pcent / | tail -1").replace(/[^0-9]/g, ""));
+  if (usedPct >= 85) f.push(`القرص ممتلئ ${usedPct}٪`);
+
+  // ٥) ما يعمل الآن هو ما في المستودع. تعديلٌ يدوي على الإنتاج يضيع بأوّل
+  //    نشر، أو أسوأ: يبقى ولا يعرف أحد أنه هناك.
+  checked++;
+  const dirty = sh("git -C . status --porcelain 2>/dev/null | grep -v '^??' | head -20");
+  if (dirty) f.push(`${dirty.split("\n").length} ملفاً معدَّلاً وغير مُودَع على الإنتاج`);
+  const branch = sh("git -C . rev-parse --abbrev-ref HEAD 2>/dev/null");
+  if (branch && branch !== "main") f.push(`الإنتاج على فرع ${branch} لا main`);
+
+  // ٦) التراجع ممكن: رابطٌ حيّ يشير إلى إصدارٍ موجود، وإصداراتٌ محفوظة.
+  checked++;
+  const live = join(ROOT, "dist", "public");
+  if (existsSync(live)) {
+    try {
+      if (lstatSync(live).isSymbolicLink() && !existsSync(realpathSync(live))) {
+        f.push("dist/public يشير إلى إصدار محذوف — الموقع يخدم من العدم");
+      }
+    } catch { f.push("dist/public رابطٌ مكسور"); }
+  }
+  const rel = join(ROOT, "dist", "releases");
+  if (existsSync(rel) && readdirSync(rel).length < 2) f.push("إصدار واحد محفوظ — لا تراجع فوري عند فشل نشر");
+
+  // ٧) ما لا يُنشر لا يكون في جذر النشر. ملفٌّ مضغوط للموقع كاملاً وفيه
+  //    `.env` كان قابلاً للتنزيل من الإنترنت في المشروع الآخر.
+  checked++;
+  if (existsSync(live)) {
+    try {
+      const leaked = readdirSync(realpathSync(live))
+        .filter(n => /\.(env|sql|zip|tar|gz|bak|pem|key)$/i.test(n) || n === ".env" || n === ".git");
+      if (leaked.length) f.push(`مكشوف في جذر النشر: ${leaked.slice(0, 5).join("، ")}`);
+    } catch { /* الرابط مكسور — أُبلغ عنه أعلاه */ }
+  }
+
+  // ٨) صلاحيات الأسرار: `.env` فيه كلمة قاعدة البيانات ومفاتيح المزوّدين.
+  checked++;
+  const envPath = join(ROOT, ".env");
+  if (existsSync(envPath)) {
+    const mode = statSync(envPath).mode & 0o777;
+    if (mode & 0o004) f.push(`.env مقروء للجميع (${mode.toString(8)})`);
+  } else {
+    f.push(".env مفقود — التطبيق يعمل بإعدادات ناقصة");
+  }
+
+  // ٩) حالة التشغيل قابلة للكتابة. كانت في بيت مستخدمٍ آخر فظلّت كل كتابة
+  //    تفشل بصمت، وبقي تكرار التنبيهات الذي «أُصلح» قائماً.
+  checked++;
+  const stateDir = process.env.STATE_DIR ?? join(ROOT, ".runtime-state");
+  try { accessSync(stateDir, constants.W_OK); }
+  catch { f.push(`مجلّد الحالة ${stateDir} غير قابل للكتابة — التنبيهات تتكرّر والتذكيرات تضيع`); }
+
+  // ١٠) المهامّ المجدولة موجودة فعلاً في cron لا في النيّة وحدها.
+  checked++;
+  const cron = sh("crontab -l 2>/dev/null");
+  if (cron) {
+    if (!/backup-db\.sh/.test(cron)) f.push("النسخ الاحتياطي غير مجدول في cron");
+    if (!/review-crew-ai/.test(cron)) f.push("فريق المراجعة غير مجدول في cron");
+  }
+
+  // ١١) هل التطبيق حيّ؟
+  //
+  // **لا يُسأل pm2 مباشرةً.** الفريق يعمل بمستخدم غير الذي يشغّل التطبيق،
+  // ولكلّ مستخدمٍ عفريتُ pm2 خاصّ به — فـ`pm2 jlist` هنا يعرض قائمةً أخرى
+  // لا يظهر فيها التطبيق، فأنذر أوّل تشغيلة بأن العملية «غير موجودة» وهي
+  // تعمل منذ أربع وأربعين دقيقة. مقياسٌ يصرخ على سليم يُفقد الثقة في صراخه.
+  //
+  // فيُسأل ما يهمّ فعلاً: هل يردّ الموقع؟ وهل يقول جدولُ صاحبه إنه online؟
+  checked++;
+  const code = sh(`curl -s -o /dev/null -w '%{http_code}' --max-time 12 https://${host}/`);
+  if (code && !/^(2|3)/.test(code)) f.push(`${host} يردّ ${code}`);
+  else if (!code) f.push(`${host} لا يردّ إطلاقاً`);
+
+  checked++;
+  const list = sh("timeout 25 almoaser list 2>/dev/null | grep almoaser-ai");
+  // الغياب هنا لا يعني التعطّل: قد لا يملك المُشغِّل هذا الأمر أصلاً
+  if (list && !/online/.test(list)) f.push("جدول pm2 لا يقول إن almoaser-ai online");
+
+  // ١٢) لا سرّ مكتوب في الشيفرة. المفتاح في ملفٍّ يُدار، وفي الشيفرة يُنشر.
+  checked++;
+  const SECRET = /(sk-[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)/;
+  for (const src of sources("server").concat(sources("client/src")).concat(sources("scripts"))) {
+    if (SECRET.test(read(src))) f.push(`سرٌّ مكتوب في الشيفرة: ${src}`);
+  }
+
+  return { ok: f.length === 0, findings: f.slice(0, 12), note: `${checked} فحصاً للبنية` };
+}
+
 // ─── التشغيل ────────────────────────────────────────────────────────────────
 
 const CREW: Record<string, () => Promise<Result>> = {
@@ -381,6 +532,7 @@ const CREW: Record<string, () => Promise<Result>> = {
   "مهندس التشغيل": agentOps,
   "مدير المنتج": agentProduct,
   "خبير الواجهات": agentUi,
+  "مهندس البنية التحتية": agentDevops,
 };
 
 const quiet = process.argv.includes("--quiet");
@@ -424,7 +576,7 @@ if (quiet && !alerts.length) process.exit(0);
 console.log(`\nفريق مراجعة المعاصر AI — ${new Date().toLocaleString("ar-EG")}\n`);
 for (const [name, r] of Object.entries(run)) {
   const note = [r.note, r.known ? `(${r.known} معروف)` : ""].filter(Boolean).join("  ");
-  console.log(`  ${name.padEnd(14)} ${r.new!.length ? "✗" : "✓"}  ${String(r.ms).padStart(6)}ms  ${note}`);
+  console.log(`  ${name.padEnd(18)} ${r.new!.length ? "✗" : "✓"}  ${String(r.ms).padStart(6)}ms  ${note}`);
   for (const x of r.new!) console.log(`        · ${x}`);
 }
 
