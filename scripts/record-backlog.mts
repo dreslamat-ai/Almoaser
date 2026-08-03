@@ -61,6 +61,21 @@ const BACKLOG: Item[] = [
     description: "الرصيد يُعرض الآن «تعذّر» بدل صفر، ولن يُقرأ حتى يُضبط المفتاح الإداري.",
     priority: "low",
   },
+  {
+    title: "[AlmoaserPos] جدولان عريضان في Modules/Project بلا id",
+    description: "invoice/partials/invoice_line_table.blade.php و reports/partials/project_timelog.blade.php — سبعة أعمدة بلا معرّف، فلا يسكرولان داخل إطارهما. خارج ما يفحصه المعاين لأن صفحاته العشر لا تُرندر وحدة Project.",
+    priority: "low",
+  },
+  {
+    title: "[شهد] حادثة «اضغط… حذف» غير محسومة",
+    description: "بلاغٌ قديم من مراقب شهد لم يُثبت ولا يُنفَ: ردّ النموذج مقصوص عند 110 حرفاً في السجلّ، وثلاثة استجوابات لاحقة لم تُعده. يبقى مفتوحاً حتى يتكرّر أو يُطوَّل السجلّ.",
+    priority: "low",
+  },
+  {
+    title: "[المعاين] سطح الكشف أصغر بعد التحويل إلى قياس المُرنْدَر",
+    description: "المعاين صار يقيس عشر صفحات مُرنْدَرة بدل مسح كل القوالب نصّياً — أدقّ اليوم (صفر جدول عريض) لكن قالبٌ جديد لا تفتحه الصفحات العشر لن يُرى.",
+    priority: "low",
+  },
 ];
 
 const email = process.env.TELEGRAM_OWNER_EMAIL?.trim();
