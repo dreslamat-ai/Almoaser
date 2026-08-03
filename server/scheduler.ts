@@ -63,7 +63,7 @@ function startUnbilledWatch(): void {
 
       const lines = fresh.map(a => `• ${a.app}: $${a.costUsd.toFixed(4)} · ${a.calls} استدعاء`);
       const r = await sendTelegram(
-        `ℹ️ تطبيق ينفق من مفتاح النماذج وهو **خارج** المقارنة المالية\n\n${lines.join("\n")}\n\n` +
+        `ℹ️ تطبيق ينفق من مفتاح النماذج وهو <b>خارج</b> المقارنة المالية\n\n${lines.join("\n")}\n\n` +
         `المحسوب على إيراد المنصة: ${BILLED_APPS.join("، ")}\n` +
         `تفاصيله في لوحة الأدمن ← تفاصيل النماذج. لضمّه للمقارنة أضِفه إلى BILLED_APPS.`,
         { disablePreview: true },
