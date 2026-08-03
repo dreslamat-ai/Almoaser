@@ -3,6 +3,7 @@
 // ولا تحتاج بنية تحتية إضافية (worker/queue منفصل)
 import { checkExpiringSubscriptions } from "./notifications";
 import { sendLeadDigest } from "./leadFollowUp";
+import { alertIfLowBalance } from "./providerBalance";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
 
@@ -16,6 +17,25 @@ export function startScheduledJobs(): void {
   setTimeout(run, 60 * 1000);
   setInterval(run, CHECK_INTERVAL_MS);
   startLeadDigest();
+  startBalanceWatch();
+}
+
+// ─── مراقبة رصيد المزوّدين ───────────────────────────────────────────────────
+// **كل ساعة لا كل ست:** نفاد الرصيد يوقف سارة وشهد معاً في اللحظة نفسها، ولا
+// يسبقه تحذير من المزوّد. ستّ ساعاتٍ بين فحصين تعني أن يقف المنتجان ستّ ساعات
+// قبل أن يعلم أحد. والدالة نفسها لا تُرسل أكثر من إنذار في الساعة لكل مزوّد،
+// فالتكرار هنا لا يُغرق أحداً.
+const BALANCE_CHECK_MS = 60 * 60 * 1000;
+
+function startBalanceWatch(): void {
+  const tick = () => {
+    alertIfLowBalance()
+      .then(sent => { if (sent.length) console.log(`[scheduler] أُنذر عن رصيد: ${sent.join("، ")}`); })
+      .catch(e => console.warn("[scheduler] فحص الرصيد فشل:", e instanceof Error ? e.message : e));
+  };
+  //بعد دقيقتين من الإقلاع: بعد استقرار الشبكة، وقبل أن يمضي وقت طويل
+  setTimeout(tick, 2 * 60 * 1000);
+  setInterval(tick, BALANCE_CHECK_MS);
 }
 
 // ─── تذكير العملاء المحتملين ─────────────────────────────────────────────────
