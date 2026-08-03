@@ -10,6 +10,7 @@ import { invokeLLM } from "../_core/llm";
 import { invokeAgentLLM } from "../llmProvider";
 import { logLlmUsage } from "../llmUsage";
 import { storagePut, storageGetSignedUrl } from "../storage";
+import { checkUpload, uploadKindOf, UPLOAD_LIMITS } from "@shared/uploadLimits";
 import { transcribeAudio } from "../_core/voiceTranscription";
 import { getErpConfigForUser, type ErpConfig } from "../erpConnection";
 import { notifyUser, notifyAdmins } from "../notifications";
@@ -612,7 +613,7 @@ ${modeRulesFor(agentMode)}`;
     }))
     .mutation(async ({ input, ctx }) => {
       const buffer = Buffer.from(input.audioBase64, "base64");
-      if (buffer.length > 15 * 1024 * 1024) {
+      if (buffer.length > UPLOAD_LIMITS.audio.maxBytes) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "التسجيل الصوتي كبير جداً — الحد الأقصى 15 ميجابايت" });
       }
       const ext = input.mimeType.includes("mp4") ? "m4a"
@@ -644,18 +645,29 @@ ${modeRulesFor(agentMode)}`;
       }
     }),
 
-  // ─── استخراج بيانات فاتورة/سند قبض من صورة (OCR بالذكاء الاصطناعي) ──────
+  // ─── استخراج بيانات مستند مالي من صورة أو PDF ───────────────────────────
+  //
+  // **وPDF لا يُمرَّر كصورة.** الفواتير تصل من الأنظمة ملفَّ PDF لا لقطةَ
+  // شاشة، وكان على صاحبها أن يصوّر شاشته ليقرأها الوكيل. لا مُحوِّل على هذا
+  // الخادم (لا poppler ولا مكتبة)، فيُمرَّر الملفّ إلى OpenRouter بمحلّل
+  // الملفّات: محرّك `pdf-text` يستخرج النصّ المكتوب بلا كلفة نموذج رؤية.
   extractDocument: protectedProcedure
     .input(z.object({
       imageBase64: z.string(),
       mimeType: z.string().default("image/jpeg"),
+      fileName: z.string().max(200).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const buffer = Buffer.from(input.imageBase64, "base64");
-      if (buffer.length > 10 * 1024 * 1024) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "الصورة كبيرة جداً — الحد الأقصى 10 ميجابايت" });
-      }
-      const ext = input.mimeType.includes("png") ? "png" : input.mimeType.includes("webp") ? "webp" : "jpg";
+      // **الحدّ من الجدول المشترك لا رقماً مكتوباً هنا:** رقمان في موضعين
+      // ينحرفان، وقد كان فحص الصوت في الخادم وحده بلا نظيرٍ في الواجهة.
+      const rejection = checkUpload(input.mimeType, buffer.length);
+      if (rejection) throw new TRPCError({ code: "BAD_REQUEST", message: rejection });
+
+      const isPdf = uploadKindOf(input.mimeType) === "pdf";
+      const ext = isPdf ? "pdf"
+        : input.mimeType.includes("png") ? "png"
+        : input.mimeType.includes("webp") ? "webp" : "jpg";
       const fileKey = `docs/${ctx.user.id}-${Date.now()}.${ext}`;
       const { key, url } = await storagePut(fileKey, buffer, input.mimeType);
       const signedUrl = await storageGetSignedUrl(key);
@@ -667,6 +679,16 @@ ${modeRulesFor(agentMode)}`;
         // OpenRouter وبقي هذا المسار وحده على الإعداد القديم، فتعطّلت قراءة
         // الصور وحدها بينما الدردشة تعمل. الموديل الأول في القائمة يقبل الصور.
         response = await invokeAgentLLM({
+          // **الأسرع أوّلاً في القراءة.** السلسلة الافتراضية تبدأ بموديلٍ
+          // كبير؛ قِيس على المستند نفسه: 4.4ث للسريع مقابل 9.9ث إلى ما يتجاوز
+          // 120ث للكبير، ومرّةً 339ث في المسار الكامل. القراءة استخراجُ حقول
+          // من نصٍّ ظاهر، لا استنتاجَ يحتاج أكبر ما عندنا — ومن ينتظر أمام
+          // دوّار يقيس بالثواني.
+          preferModels: ["deepseek/deepseek-v4-flash"],
+          // `pdf-text` يستخرج النصّ المكتوب في الملفّ بلا كلفة، ويكفي لفواتير
+          // الأنظمة. المستند الممسوح ضوئياً (صورةٌ داخل PDF) لا نصّ فيه —
+          // يُقال ذلك لصاحبه صراحةً بدل أن يُعاد إليه فراغ.
+          ...(isPdf ? { plugins: [{ id: "file-parser", pdf: { engine: "pdf-text" } }] } : {}),
           messages: [
             {
               role: "system",
@@ -676,7 +698,16 @@ ${modeRulesFor(agentMode)}`;
               role: "user",
               content: [
                 { type: "text", text: "استخرج بيانات هذا المستند المالي (فاتورة مبيعات، فاتورة مشتريات، أو سند قبض/صرف):" },
-                { type: "image_url", image_url: { url: signedUrl, detail: "high" } },
+                isPdf
+                  // الملفّ يُرسل مُضمَّناً لا برابط: الرابط الموقَّع يُحمَّل من
+                  // جهتنا للصور، أمّا محلّل الملفّات فيقرأ البيانات مباشرةً.
+                  //
+                  // والتحويل هنا مقصود: نوع `MessageContent` في `_core` يصف
+                  // مزوّداً مدمجاً يعرف `file_url` برابط، وهذه صيغة OpenRouter
+                  // وحده. تعديل النوع المشترك لأجل مزوّد واحد يوسّع عقداً
+                  // يستعمله غيرُنا، فيُضيَّق الاستثناء في موضعه.
+                  ? { type: "file", file: { filename: input.fileName ?? `${ctx.user.id}.pdf`, file_data: `data:application/pdf;base64,${input.imageBase64}` } } as unknown as { type: "text"; text: string }
+                  : { type: "image_url", image_url: { url: signedUrl, detail: "high" } },
               ],
             },
           ],

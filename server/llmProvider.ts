@@ -13,7 +13,12 @@
 import { invokeLLM } from "./_core/llm";
 
 // نستخدم نفس أنواع رسائل invokeLLM لضمان توافق نقطة الاستدعاء في agent.ts
-type InvokeParams = Parameters<typeof invokeLLM>[0];
+// إضافتان لا يعرفهما المزوّد المدمج: ترتيبُ موديلاتٍ لهذا النداء، وإضافات
+// OpenRouter (محلّل الملفّات). تُعرَّف هنا كي تُمرَّر بأنواعها لا بتحويل.
+type InvokeParams = Parameters<typeof invokeLLM>[0] & {
+  preferModels?: string[];
+  plugins?: unknown;
+};
 type InvokeResult = Awaited<ReturnType<typeof invokeLLM>>;
 
 /**
@@ -43,6 +48,9 @@ const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 export const OPENAI_MODEL = "gpt-4.1";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+/** مهلة النداء الواحد — بعدها تنتقل السلسلة إلى الموديل التالي */
+const MODEL_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS ?? 60_000);
+
 const DEFAULT_OPENROUTER_MODELS = [
   "qwen/qwen3.5-397b-a17b",
   "deepseek/deepseek-v4-flash",
@@ -91,6 +99,9 @@ export const buildOpenAiPayload = (
   if (typeof maxTokens === "number") payload.max_tokens = maxTokens;
   const rf = params.responseFormat ?? params.response_format;
   if (rf) payload.response_format = rf;
+  // إضافات OpenRouter (محلّل الملفّات لقراءة PDF). OpenAI يتجاهل ما لا يعرف،
+  // ولا تُرسل إلا حين تُطلب فلا تمسّ بقيّة النداءات.
+  if (params.plugins) payload.plugins = params.plugins;
   return payload;
 };
 
@@ -122,16 +133,33 @@ const invokeOpenAI = async (
 const invokeOpenRouterModel = async (
   params: InvokeParams,
   apiKey: string,
-  model: string
+  model: string,
+  timeoutMs = MODEL_TIMEOUT_MS,
 ): Promise<InvokeResult> => {
-  const response = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(buildOpenAiPayload(params, model)),
-  });
+  // **مهلةٌ على كل نداء.** بلا مهلة، موديلٌ بطيء يعلّق الطلب إلى ما لا نهاية
+  // ولا تصل النوبةُ إلى الموديل التالي في السلسلة. وقع ذلك في قراءة المستندات:
+  // نداءٌ واحد استغرق تسعاً وثلاثين وثلاثمئة ثانية والعميل أمام دوّار لا يقف.
+  // والانقطاع خطأٌ يُلتقط، فتنتقل السلسلة إلى ما بعده بدل أن تنتظر.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(buildOpenAiPayload(params, model)),
+    });
+  } catch (e) {
+    throw (e as Error)?.name === "AbortError"
+      ? new Error(`OpenRouter (${model}) تجاوز المهلة ${Math.round(timeoutMs / 1000)}ث`)
+      : e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
     throw new Error(
@@ -148,7 +176,12 @@ const invokeOpenRouter = async (
   params: InvokeParams,
   apiKey: string
 ): Promise<InvokeResult & { _model: string }> => {
-  const models = getOpenRouterModels();
+  // **الترتيب قد يخصّ النداء لا المنصّة كلّها.** بعض المهامّ لها موديلٌ أليق
+  // بها، وتغييرُ `LLM_MODEL` لأجلها يغيّره على كل شيء.
+  const preferred = params.preferModels;
+  const models = preferred?.length
+    ? [...preferred, ...getOpenRouterModels().filter(m => !preferred.includes(m))]
+    : getOpenRouterModels();
   let lastError: unknown;
   for (const model of models) {
     try {
