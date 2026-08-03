@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { TOOL_PERMISSIONS } from "./agent/toolPermissions";
 import {
   toolsForMode, modeRulesFor, identityLineFor,
   EXPERT_BLOCKED_TOOLS, GOVERNANCE_RULES, EXPERT_RULES, SCOPE_RULES, SYSTEM_REACH_RULES,
@@ -265,5 +266,43 @@ describe("قواعد الحذف والتكامل المرجعي", () => {
   it("تلزم بالفحص قبل الوعد بحذف مباشر", () => {
     expect(SYSTEM_REACH_RULES).toContain("افحص قبل أن تَعِد");
     expect(SYSTEM_REACH_RULES).toContain("بلا ترشيح على الحالة");
+  });
+});
+
+describe("فريق الأقسام وحدود الباقات", () => {
+  const review = { function: { name: "department_review" } };
+
+  // القراءة والتقييم صميمُ عمل الخبير، فمراجعة الدفاتر ليست تجاوزاً لباقته.
+  // والمحاسب يقرأ تقاريره أصلاً. فالأداة تخدم الاثنتين ولا توسّع أيّهما.
+  it("متاحة في وضع المحاسب والخبير معاً", () => {
+    expect(toolsForMode([review], "accounting")).toHaveLength(1);
+    expect(toolsForMode([review], "expert")).toHaveLength(1);
+  });
+
+  it("متاحة لمن اشترك في الخبير وحده — لا حركة محاسبية فيها", () => {
+    const only = toolsForSubscriptions([review], { hasAccounting: false, hasExpert: true });
+    expect(only).toHaveLength(1);
+  });
+
+  it("ليست ضمن ما يُحجب عن الخبير", () => {
+    expect(EXPERT_BLOCKED_TOOLS.has("department_review")).toBe(false);
+  });
+
+  // لو صارت يوماً تكتب، وجب حجبها عن الخبير. هذا الاختبار يربط الأمرين
+  // فلا يُغيَّر أحدهما وحده بسهو.
+  it("كل أداة محجوبة عن الخبير هي أداة كتابة", () => {
+    for (const name of EXPERT_BLOCKED_TOOLS) {
+      expect(/^(create|update|delete|cancel|submit|setup)_/.test(name)).toBe(true);
+    }
+  });
+
+  it("تتبع صلاحية قراءة الفواتير كبقية التقارير", () => {
+    expect(TOOL_PERMISSIONS.department_review).toBe("viewInvoices");
+    expect(TOOL_PERMISSIONS.department_review).toBe(TOOL_PERMISSIONS.get_sales_report);
+  });
+
+  it("الحوكمة تنصّ على أن القسم يُبلِّغ ولا يعدّل", () => {
+    expect(GOVERNANCE_RULES).toContain("department_review");
+    expect(GOVERNANCE_RULES).toContain("ولا تُصلح شيئاً منها");
   });
 });

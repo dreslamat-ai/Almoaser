@@ -19,6 +19,8 @@ export const TOOL_PERMISSIONS: Record<string, keyof MemberPermissions | null> = 
   create_custom_field: "manageErpSettings",
   create_print_format: "manageErpSettings",
   get_sales_report: "viewInvoices",
+  // المراجعة تقرأ ما تقرأه التقارير، فتتبع صلاحيتها نفسها
+  department_review: "viewInvoices",
   get_purchase_invoices: "viewInvoices", create_purchase_invoice: "createInvoices",
   get_payments: "viewInvoices", create_payment_entry: "managePayments",
   get_accounts: null, get_journal_entries: "viewInvoices", create_journal_entry: "manageJournalEntries",

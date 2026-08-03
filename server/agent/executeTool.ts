@@ -2,6 +2,7 @@
 // الموزّع الذي يترجم قرار النموذج إلى عملية فعلية على نظام العميل. هو أخطر ما
 // في الوكيل: هنا تُنشأ المستندات وتُرحَّل. فصله عن الراوتر يجعل تعديل أداة
 // واحدة لا يمرّ بملف يحمل معه منطق الطلب والاشتراكات والنقاط.
+import { reviewDepartments, type Department } from "./departments";
 import { erpGET, erpPOST, erpPUT, erpDELETE, erpBaseUrl, cancelDoc, currentErpConfig, getSession } from "./erpClient";
 import {
   normalizeArabic, isSimilar, findSimilarCustomers, findSimilarItems, findSimilarSuppliers, translateErpError,
@@ -200,6 +201,18 @@ export async function executeTool(name: string, args: Record<string, unknown>, t
         display: `__INVOICE_CREATED__${JSON.stringify({ name: invoiceName, customer: resolvedCustomer, items: resolvedItems, grand_total: data?.data?.grand_total, net_total: data?.data?.net_total, total_taxes: data?.data?.total_taxes_and_charges, tax_template: taxTemplate })}`,
       };
     }
+    case "department_review": {
+      // القراءة فقط: القسم يُبلِّغ ولا يعدّل، والنصّ يُعاد كما عُدّ لتصوغه
+      // سارة — لا لتُعيد حسابه.
+      const dep = (args.department as Department | "all") ?? "all";
+      const report = await reviewDepartments(dep);
+      const guidance =
+        `${report}\n\nاعرض الملاحظات كما هي بلا زيادة ولا نقص، مرتّبةً بالأهمّ،` +
+        ` سطرٌ واحد لكل ملاحظة: ما هي وأين تُعالَج.` +
+        ` ولا تُصلح شيئاً ولا تعرض إصلاحه — القسم يُبلِّغ فقط.`;
+      return { result: report, display: guidance };
+    }
+
     case "get_sales_report": {
       const now = new Date();
       let fromDate: string, toDate: string;

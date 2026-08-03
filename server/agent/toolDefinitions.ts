@@ -115,6 +115,26 @@ export const TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "department_review",
+      description:
+        "مراجعة فريق الأقسام لدفاتر النشاط. المحاسب يفحص تطابق الفواتير مع بنودها والمسودّات القديمة والفواتير الضريبية بلا رقم ضريبي، وأمين المخزن يفحص الأرصدة السالبة وحدود إعادة الطلب والأصناف التي تُباع دون تكلفتها، ومدقّق الائتمان يفحص المتأخرات وتجاوز حدود الائتمان، ومدير المبيعات يفحص العملاء المتوقّفين. تُستدعى حين يسأل «راجع حساباتي» أو «فيه مشاكل عندي؟» أو «كل حاجة تمام؟»",
+      parameters: {
+        type: "object",
+        properties: {
+          department: {
+            type: "string",
+            enum: ["all", "accounting", "inventory", "credit", "sales"],
+            description: "القسم المطلوب، أو all للجميع",
+          },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "create_customer",
       description: "إنشاء عميل جديد. لا تستخدمها أبداً قبل البحث بـ get_customers والتأكد من عدم وجود العميل — الأداة نفسها ترفض الإنشاء إذا وُجد عميل مطابق أو مشابه وتعيد قائمة المرشحين",
       parameters: {

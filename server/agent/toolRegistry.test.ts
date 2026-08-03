@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { TOOLS } from "./toolDefinitions";
 
-// شبكة أمان للتفكيك: خمس وثلاثون أداة ولا اختبار يستدعي المنفّذ، فالمترجم وحده
+// شبكة أمان للتفكيك: ستّ وثلاثون أداة ولا اختبار يستدعي المنفّذ، فالمترجم وحده
 // هو الحارس — وهو لا يلاحظ أداةً سقطت من التسجيل. هذا الاختبار يلاحظ.
 // إضافة أداة تتطلب تحديث القائمة عمداً؛ اختفاء أداة يكسر البناء فوراً.
 const EXPECTED = [
@@ -19,6 +19,7 @@ const EXPECTED = [
   "create_workflow",
   "delete_document",
   "delete_with_dependencies",
+  "department_review",
   "get_accounts",
   "get_customers",
   "get_invoice_detail",
