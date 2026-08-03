@@ -18,9 +18,10 @@
  *   npx tsx scripts/review-crew.mts --quiet    لا يطبع إلا عند الانحدار
  *   npx tsx scripts/review-crew.mts --accept   يعتمد الحال الراهن أساساً
  *   npx tsx scripts/review-crew.mts --only=نص  وكيل واحد
+ *   npx tsx scripts/review-crew.mts --self-test يفسد المصدر عمداً ويتأكّد أن كلاً يُنذر
  */
 import "dotenv/config";
-import { readFileSync, writeFileSync, existsSync, appendFileSync, readdirSync, statSync, lstatSync, realpathSync, accessSync, constants } from "fs";
+import { readFileSync, writeFileSync, existsSync, appendFileSync, readdirSync, statSync, lstatSync, realpathSync, accessSync, constants, rmSync } from "fs";
 import { execSync } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -33,7 +34,14 @@ const LOG = "/home/eipsys/review-crew-ai.jsonl";
 
 type Result = { ok: boolean; findings: string[]; note?: string; ms?: number; new?: string[]; known?: number };
 
-const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
+// **الحقن للاختبار الذاتي.** الوكلاء يقرأون المصدر عبر هذه الدالة وحدها،
+// فيكفي أن نُفسد ما تُرجعه لملفٍّ بعينه لنرى: هل يُنذر الوكيل فعلاً؟ ولا
+// يُمسّ ملفٌّ على القرص إطلاقاً.
+let INJECT: ((path: string, src: string) => string) | null = null;
+const read = (p: string) => {
+  const src = readFileSync(join(ROOT, p), "utf8");
+  return INJECT ? INJECT(p, src) : src;
+};
 const exists = (p: string) => existsSync(join(ROOT, p));
 
 /** كل ملفات المصدر — للفحوص البنيوية */
@@ -47,6 +55,46 @@ function sources(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+
+// ─── أحكامٌ خالصة ───────────────────────────────────────────────────────────
+// الفحص السلوكي يجمع من المصدر الحيّ (يستورد الأدوات، يسأل القاعدة)، وذلك
+// أقوى من مطابقة النصّ — لكنه لا يُختبر بإفساد ملفّ. ففُصل **الحكم** عن
+// **الجمع**: الجمع يبقى حيّاً، والحكم دالةٌ خالصة تُعطى مدخلاً مصطنعاً
+// فيُرى أتُنذر أم لا. وبهذا لا يبقى فحصٌ عاجزٌ عن إثبات أنه يعمل.
+
+/** أسماء أدوات لا يجوز أن يملكها وكيل الإدارة على بيانات عملاء حقيقيين */
+export function judgeAdminTools(names: string[]): string[] {
+  const f: string[] = [];
+  if (!names.length) f.push("وكيل الإدارة بلا أدوات إطلاقاً");
+  for (const n of names) {
+    if (/delete|remove|destroy|drop|purge|truncate/.test(n)) f.push(`وكيل الإدارة يملك أداة حذف: ${n}`);
+  }
+  if (names.includes("create_invoice")) f.push("وكيل الإدارة يُنشئ فواتير عملاء — ذلك عمل وكيل آخر");
+  return f;
+}
+
+/**
+ * كل أداة يُعلنها الوكيل للنموذج لها `case` ينفّذها.
+ *
+ * الأداة المعلنة بلا تنفيذ تجعل النموذج يعد المالك بفعلٍ ثم يردّ «لا أداة
+ * باسم…» — وهو يظنّ أنه طلب المستحيل وقد طلب ما أُعلن له.
+ */
+export function judgeToolsImplemented(declared: string[], implemented: string[]): string[] {
+  const have = new Set(implemented);
+  return declared.filter(n => !have.has(n)).map(n => `أداة معلنة بلا تنفيذ: ${n}`);
+}
+
+/** قائمة التطبيقات التي يجوز أن تدخل المقارنة المالية للمنصّة */
+export function judgeBilledApps(apps: readonly string[]): string[] {
+  const f: string[] = [];
+  if (!Array.isArray(apps) || !apps.length) f.push("قائمة التطبيقات المحسوبة فارغة — كل استهلاك سيدخل المقارنة");
+  else {
+    if (!apps.includes("sara")) f.push("sara خارج التطبيقات المحسوبة — إيراد المنصة بلا تكلفته");
+    if (apps.includes("shahd")) f.push("شهد داخل المقارنة المالية — لا إيراد لها هنا");
+  }
+  return f;
+}
+
 // ─── الوكلاء ────────────────────────────────────────────────────────────────
 
 /**
@@ -55,24 +103,38 @@ function sources(dir: string, out: string[] = []): string[] {
 async function agentArchitect(): Promise<Result> {
   const f: string[] = [];
 
-  // ١) حواجز وكيل الإدارة: ينفّذ على بيانات عملاء حقيقيين
-  if (exists("server/adminAgent.ts")) {
-    const src = read("server/adminAgent.ts");
-    const names = Array.from(src.matchAll(/name: "([a-z_]+)"/g)).map(m => m[1]);
-    for (const n of names) {
-      if (/delete|remove|destroy|drop|purge|truncate/.test(n)) f.push(`وكيل الإدارة يملك أداة حذف: ${n}`);
-    }
-    if (src.includes("create_invoice")) f.push("وكيل الإدارة يُنشئ فواتير عملاء — ذلك عمل وكيل آخر");
-    if (!src.includes("createCaller") && !src.includes("caller")) f.push("وكيل الإدارة لا يمرّ بالمستدعي — قد يلتفّ على الصلاحيات");
-  } else {
-    f.push("server/adminAgent.ts مفقود");
+  // ١) حواجز وكيل الإدارة — **من المصفوفة نفسها لا من نصّ الملفّ.**
+  //
+  // كان الفحص يبحث عن `name: "..."` بتعبير منتظم، فيمرّ على اسمٍ في تعليق
+  // ويسقط عند إعادة تنسيق السطر. الأدوات مُصدَّرة، فتُقرأ كما يقرؤها النموذج.
+  try {
+    const { ADMIN_TOOLS } = await import("../server/adminAgent");
+    const names = ADMIN_TOOLS.map(t => t.function.name);
+    f.push(...judgeAdminTools(names));
+
+    // **مقارنةُ قائمتين لا استدعاءُ كلٍّ منها.** جرّبتُ نداء كل أداة بمستدعٍ
+    // فارغ لأرى أيّها يردّ «لا أداة باسم…»؛ استغرق ثماني عشرة ثانية ودفع
+    // بعضَها إلى الشبكة قبل أن يتعثّر. المُعلَن يُقرأ من المصفوفة الحيّة،
+    // والمُنفَّذ من `case`ات المُبدِّل، ويُطرح أحدهما من الآخر.
+    const impl = Array.from(read("server/adminAgent.ts").matchAll(/case "([a-z_]+)":/g)).map(m => m[1]);
+    f.push(...judgeToolsImplemented(names, impl));
+  } catch (e) {
+    f.push(`تعذّر فحص وكيل الإدارة: ${e instanceof Error ? e.message.slice(0, 80) : "خطأ"}`);
   }
 
-  // ٢) الفصل المالي: تكلفة شهد لا تُحمَّل على هامش هذه المنصة
-  if (exists("server/llmUsage.ts")) {
-    const src = read("server/llmUsage.ts");
-    if (!src.includes("BILLED_APPS")) f.push("سقط فصل التطبيقات المحسوبة — تكلفة شهد ستعود إلى هامش المنصة");
-    if (!/getLlmCostSummary\([^)]*apps/.test(src)) f.push("getLlmCostSummary لا يقبل ترشيح التطبيقات");
+  // ٢) الفصل المالي — **القيمة نفسها لا نصّها.** كان الفحص يطابق
+  //    `BILLED_APPS = ["sara"]` حرفياً، فتكسره فاصلةٌ أو سطرٌ جديد.
+  try {
+    const { BILLED_APPS, getLlmCostSummary } = await import("../server/llmUsage");
+    f.push(...judgeBilledApps(BILLED_APPS as readonly string[]));
+    // **بالنتيجة لا بعدد الوسائط:** `fn.length` تُرجع صفراً حين يكون للوسيط
+    // قيمةٌ افتراضية، فأنذر الفحصُ على دالةٍ تقبل الترشيح فعلاً. يُطلب هنا
+    // تطبيقٌ لا وجود له: من يحترم الترشيح يردّ أصفاراً، ومن يتجاهله يردّ
+    // إجمالي المنصّة. والاستعلام قراءةٌ محضة.
+    const filtered = await getLlmCostSummary(["__لا_تطبيق_بهذا_الاسم__"]).catch(() => null);
+    if (filtered && filtered.allTime !== 0) f.push("getLlmCostSummary تتجاهل ترشيح التطبيقات — أرقام المقارنة تشمل ما ليس منها");
+  } catch (e) {
+    f.push(`تعذّر فحص الفصل المالي: ${e instanceof Error ? e.message.slice(0, 80) : "خطأ"}`);
   }
 
   // ٣) نقطة تبليغ الاستهلاك لا تُفتح بلا سرّ
@@ -84,14 +146,28 @@ async function agentArchitect(): Promise<Result> {
 
   // ٤) لا مفتاح ولا سرّ متتبَّع في git
   const tracked = read(".gitignore");
-  if (!/^\.env$/m.test(tracked) && !/(^|\n)\.env/.test(tracked)) f.push(".env غير مستثنى في .gitignore");
+  if (!/(^|\n)\.env/.test(tracked)) f.push(".env غير مستثنى في .gitignore");
 
-  // ٥) لا سرّ مكتوب في المصدر
+  // ٥) الحارس الذي مُنع به سندُ قبض ثانٍ عند إعادة المحاولة.
+  //
+  // فشلُ الترحيل يترك مسودّة، وأوّل ما يفعله من رأى الخطأ أن يضغط «تحصيل»
+  // ثانيةً. إن سقط البحث عن المسودّة صار في دفاتر العميل سندان لفاتورة واحدة،
+  // ولن يشتكي أحد قبل أن يُقفل الشهر.
+  if (exists("server/routers.ts")) {
+    const src = read("server/routers.ts");
+    const proc = src.slice(src.indexOf("collectInvoicePayment:"), src.indexOf("getPaymentModes:"));
+    if (!proc) f.push("إجراء تحصيل الفاتورة اختفى");
+    else {
+      if (!/Payment%20Entry\?filters=/.test(proc)) f.push("تحصيل الفاتورة لا يبحث عن مسودّة قائمة — إعادة المحاولة تُنشئ سنداً ثانياً");
+      if (!/docstatus.{0,12}0/.test(proc)) f.push("بحث المسودّة لا يقيّد بـdocstatus=0");
+      if (!/submitOrExplain|submit_document/.test(proc)) f.push("التحصيل لا يُرحّل السند — الحالة لن تتغيّر");
+    }
+  }
+
+  // ٦) لا سرّ مكتوب في المصدر
   for (const p of sources("server")) {
-    const src = read(p);
-    if (/sk-[A-Za-z0-9]{20,}|(?:password|secret)\s*=\s*["'][^"']{8,}["']/.test(src)
-        && !/process\.env/.test(src.slice(Math.max(0, src.search(/sk-|password\s*=|secret\s*=/)) - 120, src.search(/sk-|password\s*=|secret\s*=/) + 120))) {
-      f.push(`سرٌّ محتمل مكتوب في المصدر: ${p}`);
+    if (/sk-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(read(p))) {
+      f.push(`سرٌّ مكتوب في المصدر: ${p}`);
     }
   }
 
@@ -152,6 +228,7 @@ async function agentOps(): Promise<Result> {
   const f: string[] = [];
   if (!exists("server/scheduler.ts")) return { ok: false, findings: ["scheduler.ts مفقود"] };
   const sched = read("server/scheduler.ts");
+  let checkedOps = 0;
 
   const wired: Array<[string, string]> = [
     ["alertIfLowBalance", "تنبيه الرصيد"],
@@ -160,8 +237,11 @@ async function agentOps(): Promise<Result> {
     ["getUnbilledApps", "تنبيه تطبيق غير محسوب"],
     ["sendLeadDigest", "تذكير العملاء المحتملين"],
   ];
+  // **بحدّ الكلمة لا بالاحتواء.** كان `includes(fn)` يمرّ على
+  // `maybeSendDailyReportX` — اسمٌ مُعاد تسميته أو مكتوبٌ بخطأ مطبعي —
+  // لأن الأصل جزءٌ منه. أمسكه الاختبار الذاتي.
   for (const [fn, label] of wired) {
-    if (!sched.includes(fn)) f.push(`${label} غير موصول بالجدولة (${fn})`);
+    if (!new RegExp(`\\b${fn}\\b(?!\\w)`).test(sched)) f.push(`${label} غير موصول بالجدولة (${fn})`);
   }
 
   // كل مؤقّت داخلي له بداية: دالةٌ تُكتب ولا يناديها أحد لا تعمل.
@@ -173,7 +253,47 @@ async function agentOps(): Promise<Result> {
   const called = (sched.match(/\n\s+start[A-Za-z]+\(\);/g) ?? []).length;
   if (internal > called) f.push(`${internal - called} مهمة دورية معرّفة ولا تُستدعى`);
 
-  return { ok: f.length === 0, findings: f, note: `${wired.length} مهمة مفحوصة` };
+  // ─── التذكيرات: تُستدعى لا تُقرأ ─────────────────────────────────────────
+  //
+  // «ذكّرني كل ٣ ساعات» طلبٌ صريح، وحلقتُه ثلاث وصلات: يُكتب التذكير، ويلتقطه
+  // الجدول عند استحقاقه، ويُهرَّب نصّه قبل الإرسال. أيّها انقطعت صمت التذكير
+  // ولم يشتكِ شيء. فتُشغَّل الحلقة هنا على مجلّد حالة مؤقّت — ولا تُمَسّ
+  // تذكيرات المالك ولا يُرسل شيء.
+  checkedOps++;
+  const prevState = process.env.STATE_DIR;
+  try {
+    const tmp = join(ROOT, ".runtime-state", `crew-selfcheck-${process.pid}`);
+    process.env.STATE_DIR = tmp;
+    const rem = await import(`../server/reminders?crew=${Date.now()}`) as typeof import("../server/reminders");
+    const r = rem.addReminder("فحصُ الفريق", 3);
+    if ("error" in r) f.push(`تعذّر جدولة تذكير: ${r.error}`);
+    else {
+      if (rem.takeDueReminders().length) f.push("تذكيرٌ غير مستحقّ يُلتقط قبل موعده");
+      const due = rem.takeDueReminders(new Date(Date.now() + 4 * 3600_000));
+      if (due.length !== 1) f.push("التذكير المستحقّ لا يُلتقط — «ذكّرني كل ٣ ساعات» لن يصل");
+      const next = rem.listReminders()[0];
+      if (!next) f.push("التذكير المتكرّر يُحذف بعد أوّل إرسال");
+      else if (new Date(next.nextAt).getTime() < Date.now() + 3 * 3600_000 - 60_000) {
+        f.push("الموعد التالي محسوب من الفائت — انقطاعٌ طويل يُنتج دفعة تذكيرات");
+      }
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  } catch (e) {
+    f.push(`منطق التذكيرات لا يعمل: ${e instanceof Error ? e.message.slice(0, 90) : "خطأ"}`);
+  } finally {
+    if (prevState === undefined) delete process.env.STATE_DIR; else process.env.STATE_DIR = prevState;
+  }
+
+  // نصّ التذكير يمرّ بالتهريب: تليجرام يقرأ HTML، واسمٌ فيه & أو < يُفشل
+  // الإرسال كلَّه — والتذكير مرّةً واحدة يكون قد حُذف قبله فيضيع بلا رجعة.
+  checkedOps++;
+  if (!/tg\(r\.text\)/.test(sched)) f.push("نصّ التذكير يُرسل بلا تهريب HTML — اسمٌ فيه & أو < يُسقط الرسالة");
+
+  // والحالة التي تحمل التذكيرات والتنبيهات يُتحقّق من صلاحيتها عند الإقلاع
+  checkedOps++;
+  if (!/assertStateWritable/.test(sched)) f.push("لا تحقّق من كتابة مجلّد الحالة عند الإقلاع — الفشل سيكون صامتاً");
+
+  return { ok: f.length === 0, findings: f, note: `${wired.length + checkedOps} فحصاً للتشغيل` };
 }
 
 /**
@@ -196,8 +316,9 @@ async function agentProduct(): Promise<Result> {
   // الشريط في التخطيط لا في صفحة واحدة
   if (exists("client/src/components/DashboardLayout.tsx")) {
     const src = read("client/src/components/DashboardLayout.tsx");
-    if (!src.includes("ConnectionBanner")) f.push("شريط الانقطاع غير مركّب في التخطيط");
-    if (!src.includes("ConnectionLamp")) f.push("لمبة الاتصال غير ظاهرة في القائمة");
+    // بحدّ الكلمة: `ConnectionBannerX` كان يمرّ لأن الاسم جزءٌ منه
+    if (!/\bConnectionBanner\b(?!\w)/.test(src)) f.push("شريط الانقطاع غير مركّب في التخطيط");
+    if (!/\bConnectionLamp\b(?!\w)/.test(src)) f.push("لمبة الاتصال غير ظاهرة في القائمة");
     //«وكيل AI» مصطلحٌ من جانبنا لا من جانب صاحب المحل
     if (/وكيل AI|وكيل الذكاء الاصطناعي/.test(src)) f.push("لا يزال يُسمّى «وكيل AI» بدل «المحاسب الذكي»");
   }
@@ -291,8 +412,13 @@ async function agentUi(): Promise<Result> {
   }
 
   // ٧) التوسيط على الجوال — الشاشة الضيّقة تجعل المحاذاة لليمين تبدو معلّقة
-  if (!/max-width: 767px/.test(css) || !/text-align: center/.test(css)) {
-    f.push("قواعد التوسيط على الجوال سقطت من index.css");
+  // **داخل الاستعلام لا في أيّ مكان.** كان يكفي وجود السطرين منفصلين في
+  // الملفّ، فمرّ حين عُطّل الاستعلام نفسه — والتوسيط كلّه ساقط. الاختبار
+  // الذاتي أمسكها.
+  const mobileQuery = css.match(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\n  \}/g) ?? [];
+  if (!mobileQuery.length) f.push("لا استعلام جوال (max-width: 767px) في index.css");
+  else if (!mobileQuery.some(q => /text-align:\s*center/.test(q))) {
+    f.push("استعلام الجوال بلا توسيط — المحتوى يعود معلّقاً على الحافة");
   }
 
   // ٨) لا نصّ أصغر من 11px — يُقرأ بالعدسة لا بالعين.
@@ -535,9 +661,122 @@ const CREW: Record<string, () => Promise<Result>> = {
   "مهندس البنية التحتية": agentDevops,
 };
 
+
+// ─── الاختبار الذاتي ────────────────────────────────────────────────────────
+//
+// **فحصٌ لا يستطيع أن يفشل ليس خبرةً بل زينة.** تعبيرٌ منتظم كُتب خطأً فلا
+// يطابق شيئاً أبداً يبدو في التقرير كفحصٍ نظيف تماماً — والفرق بينهما لا
+// يظهر إلا يوم يقع العطل الذي كان يفترض أن يمسكه.
+//
+// السابقة في هذا المشروع: `MIN_TESTS` في `deploy.sh` وُضع لأن كسراً في إعداد
+// vitest كان سيجعل صفر اختبار يمرّ «بنجاح» وتُفتح البوّابة.
+//
+// هنا يُفسَد المصدرُ في الذاكرة — لا على القرص — ويُسأل الوكيل: هل أنذرت؟
+// ومن لا يُختبَر يُقال فيه لماذا صراحةً، فلا تُعدّ التغطية أوسع مما هي.
+
+type Case = { agent: string; label: string; file: string; from: string | RegExp; to: string };
+
+/** حالاتٌ تُعطى للحكم الخالص مدخلاً مصطنعاً — لا مصدرَ يُفسَد */
+const JUDGE_TESTS: Array<{ label: string; run: () => string[] }> = [
+  { label: "أداة حذف في وكيل الإدارة", run: () => judgeAdminTools(["list_tasks", "delete_user"]) },
+  { label: "وكيل الإدارة يُنشئ فواتير عملاء", run: () => judgeAdminTools(["create_invoice"]) },
+  { label: "وكيل الإدارة بلا أدوات", run: () => judgeAdminTools([]) },
+  { label: "أداة معلنة بلا تنفيذ", run: () => judgeToolsImplemented(["list_tasks", "ghost_tool"], ["list_tasks"]) },
+  { label: "شهد داخل المقارنة المالية", run: () => judgeBilledApps(["sara", "shahd"]) },
+  { label: "sara خارج المقارنة", run: () => judgeBilledApps(["other"]) },
+  { label: "قائمة محسوبين فارغة", run: () => judgeBilledApps([]) },
+  // والعكس: حكمٌ يُنذر على السليم لا يقلّ ضرراً
+  { label: "لا إنذار على الحال السليم", run: () => {
+      const bad = [...judgeAdminTools(["list_tasks", "create_task", "llm_usage"]), ...judgeBilledApps(["sara"]),
+                   ...judgeToolsImplemented(["a", "b"], ["a", "b", "c"])];
+      return bad.length ? [] : ["__سليم__"];
+    } },
+];
+
+const SELF_TESTS: Case[] = [
+  // مهندس البنية — من الأدوات والقيم لا من النصّ، فيُفسَد ما يقرؤه فعلاً
+  { agent: "مهندس البنية", label: "سقوط حارس السند المكرّر",
+    file: "server/routers.ts", from: /Payment%20Entry\?filters=/g, to: "Payment%20Entry?nofilters=" },
+
+  // مهندس التشغيل
+  { agent: "مهندس التشغيل", label: "مهمّة دورية غير موصولة",
+    file: "server/scheduler.ts", from: /maybeSendDailyReport/g, to: "maybeSendDailyReportX" },
+  { agent: "مهندس التشغيل", label: "نصّ التذكير بلا تهريب",
+    file: "server/scheduler.ts", from: /tg\(r\.text\)/g, to: "r.text" },
+
+  // مدير المنتج
+  { agent: "مدير المنتج", label: "شريط الانقطاع خارج التخطيط",
+    file: "client/src/components/DashboardLayout.tsx", from: /ConnectionBanner/g, to: "ConnectionBannerX" },
+
+  // خبير الواجهات
+  { agent: "خبير الواجهات", label: "لون خارج الهوية",
+    file: "client/src/pages/ErpInvoices.tsx", from: "text-amber-700", to: "text-violet-700" },
+  { agent: "خبير الواجهات", label: "نصّ أصغر من ١١ بكسل",
+    file: "client/src/pages/ErpInvoices.tsx", from: "text-[11px]", to: "text-[9px]" },
+  { agent: "خبير الواجهات", label: "سقوط التوسيط على الجوال",
+    file: "client/src/index.css", from: /text-align:\s*center/g, to: "text-align: start" },
+];
+
+// من لا يُفسَد مصدرُه: يقيس العالم لا الملفّات، ويُقال ذلك ولا يُسكت عنه
+const NOT_INJECTABLE: Record<string, string> = {
+  "المدقّق المالي": "يسأل قاعدة البيانات الحيّة — إفساد صفوفها لاختبار الفحص أسوأ من عدم اختباره",
+  "مراقب العملاء": "يفتح اتصالاً حقيقياً بأنظمة العملاء",
+  "مهندس البنية التحتية": "يقرأ الخادم نفسه: القرص والشهادة والنسخ",
+};
+
+async function selfTest(): Promise<number> {
+  console.log("\nاختبار الفريق الذاتي — هل يُنذر كلُّ وكيل حين يجب؟\n");
+  let failed = 0;
+
+  // الأحكام الخالصة أوّلاً: تُعطى مدخلاً مصطنعاً بلا مساسٍ بملفّ
+  for (const t of JUDGE_TESTS) {
+    const out = t.run();
+    if (out.length) console.log(`  ${"حكمٌ خالص".padEnd(18)} ✓  «${t.label}»`);
+    else { console.log(`  ${"حكمٌ خالص".padEnd(18)} ✗  «${t.label}»: لم يُنذر`); failed++; }
+  }
+
+  const byAgent = new Map<string, Case[]>();
+  for (const c of SELF_TESTS) byAgent.set(c.agent, [...(byAgent.get(c.agent) ?? []), c]);
+
+  for (const [name, fn] of Object.entries(CREW)) {
+    const cases = byAgent.get(name) ?? [];
+    if (!cases.length) {
+      const why = NOT_INJECTABLE[name];
+      console.log(`  ${name.padEnd(18)} —  ${why ?? "✗ بلا اختبار ذاتي ولا سبب مذكور"}`);
+      if (!why) failed++;
+      continue;
+    }
+    // يجب أن يكون نظيفاً قبل الإفساد، وإلّا لم يثبت شيء
+    INJECT = null;
+    const before = await fn();
+    for (const c of cases) {
+      let touched = false;
+      INJECT = (path, src) => {
+        if (path !== c.file) return src;
+        const out = typeof c.from === "string" ? src.replace(c.from, c.to) : src.replace(c.from, c.to);
+        touched = out !== src;
+        return out;
+      };
+      let fired = false;
+      try {
+        const after = await fn();
+        fired = after.findings.length > before.findings.length;
+      } catch { fired = true; /* التعثّر إنذارٌ أيضاً */ }
+      INJECT = null;
+      if (!touched) { console.log(`  ${name.padEnd(18)} ✗  «${c.label}»: نصّ الإفساد لم يوجد في ${c.file}`); failed++; }
+      else if (!fired) { console.log(`  ${name.padEnd(18)} ✗  «${c.label}»: أُفسد ولم يُنذر`); failed++; }
+      else console.log(`  ${name.padEnd(18)} ✓  «${c.label}»`);
+    }
+  }
+  console.log(failed ? `\n✗ ${failed} فحصاً لا يُمسك ما وُضع له` : `\n✓ كل ما اختُبر يُنذر حين يجب (${SELF_TESTS.length + JUDGE_TESTS.length} حالة)`);
+  return failed;
+}
+
 const quiet = process.argv.includes("--quiet");
 const accept = process.argv.includes("--accept");
 const only = process.argv.find(a => a.startsWith("--only="))?.slice(7);
+
+if (process.argv.includes("--self-test")) process.exit((await selfTest()) ? 1 : 0);
 
 const run: Record<string, Result> = {};
 for (const [name, fn] of Object.entries(CREW)) {
