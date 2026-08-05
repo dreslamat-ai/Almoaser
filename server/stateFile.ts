@@ -14,10 +14,16 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from "fs";
 import { join, dirname } from "path";
 
-const DIR = process.env.STATE_DIR ?? join(process.cwd(), ".runtime-state");
+// **يُقرأ عند كل نداء لا عند التحميل.** كان ثابتاً يُحسب مرّةً وقت استيراد
+// هذا الملفّ، فمن يضبط `STATE_DIR` ثم يستورد وحدةً تستورد هذه لا يغيّر شيئاً:
+// الوحدة محمّلة سلفاً في ذاكرة العملية. وقع هذا فعلاً — فحصُ فريق المراجعة
+// كان يضبط مجلّداً مؤقّتاً ظنّاً أنه يعزل نفسه، فكتب تذكيراته في قائمة
+// المالك الحقيقية: عشرة تذكيرات «فحصُ الفريق» تتكرّر كل ثلاث ساعات، تنمو
+// واحداً كل تشغيلة. الحساب هنا يجعل العزل يعمل كما وُصف.
+const dir = (): string => process.env.STATE_DIR ?? join(process.cwd(), ".runtime-state");
 
 export function statePath(name: string): string {
-  return join(DIR, name);
+  return join(dir(), name);
 }
 
 // **الصلاحية 2775 لا الافتراضية:** المجلّد قد يُنشئه شخصٌ من فريق التطوير
@@ -37,7 +43,7 @@ const ensureDir = (d: string) => mkdirSync(d, { recursive: true, mode: 0o2775 })
 export function assertStateWritable(): void {
   if (!writeState(".write-probe", Date.now())) {
     console.error(
-      `[stateFile] ✗ مجلّد الحالة ${DIR} غير قابل للكتابة.\n` +
+      `[stateFile] ✗ مجلّد الحالة ${dir()} غير قابل للكتابة.\n` +
       "           التنبيهات ستتكرّر والتذكيرات ستضيع. اضبط STATE_DIR على مسارٍ يملكه مستخدم التطبيق.",
     );
   }
