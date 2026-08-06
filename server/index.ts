@@ -23,7 +23,9 @@ async function startServer() {
     res.sendFile(path.join(staticPath, "index.html"));
   });
 
-  const port = process.env.PORT || 3000;
+  //**رقمٌ لا `string | number`** — تحميلُ `listen(port, host, cb)` الزائد يشترط
+  //رقماً، وسابقُه `listen(port, cb)` كان يقبل الاتّنين فمرّ النوعُ المختلط.
+  const port = parseInt(process.env.PORT || "3000", 10);
 
   /**
    * **loopback افتراضاً — كما في `_core/index.ts`.**
