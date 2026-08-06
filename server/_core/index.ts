@@ -52,23 +52,49 @@ function installGracefulShutdown(server: import("http").Server): void {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
+/**
+ * العنوان الذي نسمع عليه — **loopback افتراضاً**.
+ *
+ * كان `server.listen(port)` بلا عنوان، ومعناه في node الربطُ على `0.0.0.0`:
+ * أي أن التطبيق كان **مفتوحاً للإنترنت مباشرةً على `http://<IP>:3000`** —
+ * `/login` يرد ٢٠٠ بلا شهادة ولا تشفير، فكلمةُ سرّ من يدخل من هناك تمشي نصّاً
+ * صريحاً. قِيس فعلاً في ٧ أغسطس ٢٠٢٦ من العنوان العامّ.
+ *
+ * ولا حاجة لذلك أصلاً: nginx وحده من يكلّم التطبيق، وتمبليت `nodeapp3000`
+ * يكتب `proxy_pass http://127.0.0.1:3000` في نسختَي HTTP وHTTPS كلتيهما.
+ * فالربطُ على loopback **لا ينقص شيئاً من `erpsys.cloud`** ويُغلق البابَ الخلفيّ.
+ *
+ * **والافتراضُ هنا في الشيفرة لا في `ecosystem.config.cjs`** — pm2 لا يعيد
+ * قراءة ذلك الملفّ عند `restart` (تعليقه نفسه يقول ذلك)، فمتغيّرٌ يوضع هناك
+ * إصلاحٌ **يبدو مطبَّقاً وليس كذلك**. و`HOST` يبقى بابَ التجاوز لمن يحتاجه.
+ */
+const HOST = process.env.HOST ?? "127.0.0.1";
 
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
+/**
+ * **والمنفذ ثابتٌ أو نتوقّف — لا يُبحث عن بديل.**
+ *
+ * كان هنا `findAvailablePort` يجرّب ٢٠ منفذاً بعد المطلوب. وnginx يكتب
+ * `127.0.0.1:3000` نصّاً، فأيُّ بديلٍ يعني أن **pm2 يقول `online` والسجلّ يقول
+ * «استُعمل 3001» وnginx يردّ 502 للعملاء** — عطلٌ تامّ بلا سطرِ خطأٍ واحد،
+ * وكلُّ مؤشّرٍ أخضر. سقوطٌ صريحٌ عند البدء خيرٌ من عملٍ يبدو ناجحاً ولا يُخدَم.
+ *
+ * وكان الفحصُ سيصير **كاذباً** بعد تثبيت العنوان على أي حال: يجرّب الربط على
+ * `0.0.0.0` بينما الخادمُ سيربط على loopback — فيقيس غيرَ ما سيقع.
+ */
+function assertPortFree(port: number, host: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", (err: NodeJS.ErrnoException) => {
+      reject(
+        new Error(
+          `المنفذ ${host}:${port} مشغول (${err.code}). ` +
+            `nginx يوصّل إلى 127.0.0.1:3000 نصّاً، فلا بديلَ يُخدَم — ` +
+            `أوقف ما يشغله بدل تشغيلنا على منفذٍ لا يصل إليه أحد.`
+        )
+      );
+    });
+    probe.listen(port, host, () => probe.close(() => resolve()));
+  });
 }
 
 async function startServer() {
@@ -98,15 +124,11 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const port = parseInt(process.env.PORT || "3000");
+  await assertPortFree(port, HOST);
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  server.listen(port, HOST, () => {
+    console.log(`Server running on http://${HOST}:${port}/`);
   });
   installGracefulShutdown(server);
   startScheduledJobs();
